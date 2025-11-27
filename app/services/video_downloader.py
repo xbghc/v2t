@@ -52,6 +52,7 @@ async def download_file(
     url: str,
     video_url: str,
     title: str,
+    output_dir: Path | None = None,
 ) -> VideoResult:
     """
     使用 aria2c 多线程下载视频文件
@@ -60,12 +61,13 @@ async def download_file(
         url: 原始视频页面链接（用于获取 referer）
         video_url: 直接下载链接
         title: 视频标题
+        output_dir: 输出目录（默认使用临时目录）
 
     Returns:
         VideoResult: 下载结果
     """
     settings = get_settings()
-    download_dir = settings.download_path
+    download_dir = output_dir or settings.temp_path
 
     save_name = f"{sanitize_filename(title)}.mp4" if title else "video.mp4"
     save_path = download_dir / save_name
@@ -129,12 +131,13 @@ async def download_file(
         )
 
 
-async def download_video(url: str) -> VideoResult:
+async def download_video(url: str, output_dir: Path | None = None) -> VideoResult:
     """
     下载视频
 
     Args:
         url: 视频页面链接
+        output_dir: 输出目录（默认使用临时目录）
 
     Returns:
         VideoResult: 下载结果
@@ -154,4 +157,5 @@ async def download_video(url: str) -> VideoResult:
         url=url,
         video_url=video_info.video_url,
         title=video_info.title,
+        output_dir=output_dir,
     )

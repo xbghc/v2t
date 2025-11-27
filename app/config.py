@@ -24,12 +24,13 @@ class Settings:
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
 
     # 用户可配置
-    download_dir: str = "./downloads"
     max_video_duration: int = 7200  # 秒，默认 2 小时
+    temp_dir: str = "/tmp/v2t"  # 临时文件目录
 
     @property
-    def download_path(self) -> Path:
-        path = Path(self.download_dir)
+    def temp_path(self) -> Path:
+        """临时文件目录"""
+        path = Path(self.temp_dir)
         path.mkdir(parents=True, exist_ok=True)
         return path
 

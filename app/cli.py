@@ -30,6 +30,15 @@ def get_output_name(title: str) -> str:
     return name
 
 
+def cleanup_file(path: Path):
+    """安全删除文件"""
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError:
+        pass  # 忽略删除失败
+
+
 def process_video(
     url: str,
     summary: bool = False,
@@ -39,31 +48,58 @@ def process_video(
 ):
     """处理视频的核心逻辑"""
     settings = get_settings()
+    current_dir = Path.cwd()
 
+    # --video: 直接下载到当前目录
+    if video_only:
+        console.print("[bold]下载视频...[/bold]")
+        try:
+            video_result = run_async(download_video(url, output_dir=current_dir))
+            console.print(f"[green]✓[/green] {video_result.title}")
+            console.print(f"[green]✓[/green] 视频已保存: {video_result.path}")
+        except DownloadError as e:
+            console.print(f"[red]✗[/red] 下载失败: {e}")
+            raise typer.Exit(1)
+        return
+
+    # --audio: 下载到临时目录，提取音频到当前目录
+    if audio_only:
+        console.print("[bold]下载视频...[/bold]")
+        try:
+            video_result = run_async(download_video(url))  # 下载到临时目录
+            console.print(f"[green]✓[/green] {video_result.title}")
+        except DownloadError as e:
+            console.print(f"[red]✗[/red] 下载失败: {e}")
+            raise typer.Exit(1)
+
+        console.print("[bold]提取音频...[/bold]")
+        output_name = get_output_name(video_result.title)
+        audio_path = current_dir / f"{output_name}.mp3"
+        try:
+            extract_audio(video_result.path, audio_path)
+            cleanup_file(video_result.path)  # 删除临时视频
+            console.print(f"[green]✓[/green] 音频已保存: {audio_path}")
+        except TranscribeError as e:
+            cleanup_file(video_result.path)
+            console.print(f"[red]✗[/red] 提取失败: {e}")
+            raise typer.Exit(1)
+        return
+
+    # 正常流程：下载到临时目录，逐步清理
     # 1. 下载视频
     console.print("[bold]下载视频...[/bold]")
     try:
-        video_result = run_async(download_video(url))
+        video_result = run_async(download_video(url))  # 下载到临时目录
         console.print(f"[green]✓[/green] {video_result.title}")
     except DownloadError as e:
         console.print(f"[red]✗[/red] 下载失败: {e}")
         raise typer.Exit(1)
 
-    # 仅下载视频
-    if video_only:
-        console.print(f"[green]✓[/green] 视频已保存: {video_result.path}")
-        return
-
-    # 仅提取音频
-    if audio_only:
-        audio_path = extract_audio(video_result.path)
-        console.print(f"[green]✓[/green] 音频已保存: {audio_path}")
-        return
-
     # 检查视频时长
     if video_result.duration and video_result.duration > settings.max_video_duration:
         max_min = settings.max_video_duration // 60
         video_min = video_result.duration // 60
+        cleanup_file(video_result.path)
         console.print(
             f"[red]✗[/red] 视频时长 {video_min} 分钟，超过限制 {max_min} 分钟\n"
             f"可在配置文件中修改 max_video_duration: {CONFIG_PATH}"
@@ -72,16 +108,18 @@ def process_video(
 
     output_name = get_output_name(video_result.title)
 
-    # 2. 转录
+    # 2. 转录（转录成功后删除视频）
     console.print("[bold]转录音频...[/bold]")
     try:
         transcript = run_async(transcribe_video(video_result.path))
+        cleanup_file(video_result.path)  # 删除临时视频
         console.print("[green]✓[/green] 转录完成")
     except TranscribeError as e:
+        cleanup_file(video_result.path)
         console.print(f"[red]✗[/red] 转录失败: {e}")
         raise typer.Exit(1)
 
-    # 3. 根据选项处理
+    # 3. 根据选项处理，保存到当前目录
     if raw:
         output_path = Path(f"{output_name}.txt")
         output_path.write_text(transcript, encoding="utf-8")
