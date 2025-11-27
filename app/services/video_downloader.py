@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 from dataclasses import dataclass
 import re
 
+from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn
+
 from app.config import get_settings
 from app.services.xiazaitool import parse_video_url, XiazaitoolError
 
@@ -48,6 +50,32 @@ def get_referer(url: str) -> str:
     return ""
 
 
+def parse_aria2c_progress(line: str) -> tuple[int, int] | None:
+    """
+    解析 aria2c 进度输出
+
+    Args:
+        line: aria2c 输出行
+
+    Returns:
+        (downloaded_bytes, total_bytes) 或 None
+    """
+    # 匹配格式: [#xxx 1.2MiB/10MiB(12%) ...]
+    match = re.search(r'\[#\w+ ([\d.]+)(\w+)/([\d.]+)(\w+)', line)
+    if not match:
+        return None
+
+    def to_bytes(value: str, unit: str) -> int:
+        value = float(value)
+        unit = unit.upper()
+        multipliers = {"B": 1, "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3}
+        return int(value * multipliers.get(unit, 1))
+
+    downloaded = to_bytes(match.group(1), match.group(2))
+    total = to_bytes(match.group(3), match.group(4))
+    return downloaded, total
+
+
 async def download_file(
     url: str,
     video_url: str,
@@ -87,8 +115,7 @@ async def download_file(
         "--continue=true",  # 断点续传
         "--auto-file-renaming=false",  # 不自动重命名
         "--allow-overwrite=false",  # 不覆盖
-        "--console-log-level=warn",  # 减少输出
-        "--summary-interval=0",  # 不显示摘要
+        "--summary-interval=1",  # 每秒更新进度
     ]
 
     # 添加 referer
@@ -105,17 +132,43 @@ async def download_file(
     # 添加下载链接
     cmd.append(video_url)
 
-    # 运行 aria2c
+    # 运行 aria2c 并显示进度
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
-        stdout, _ = await process.communicate()
+
+        error_output = []
+        with Progress(
+            "[progress.description]{task.description}",
+            BarColumn(),
+            DownloadColumn(),
+            TransferSpeedColumn(),
+            transient=True,
+        ) as progress:
+            task = progress.add_task("下载中", total=None)
+
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                line_str = line.decode(errors="ignore")
+                error_output.append(line_str)
+
+                # 解析进度
+                result = parse_aria2c_progress(line_str)
+                if result:
+                    downloaded, total = result
+                    if progress.tasks[task].total is None:
+                        progress.update(task, total=total)
+                    progress.update(task, completed=downloaded)
+
+        await process.wait()
 
         if process.returncode != 0:
-            error_msg = stdout.decode() if stdout else "未知错误"
+            error_msg = "".join(error_output[-10:])  # 只取最后几行
             raise DownloadError(f"aria2c 下载失败: {error_msg}")
 
         if not save_path.exists():
