@@ -149,27 +149,20 @@ async def transcribe_audio(
 async def transcribe_video(
     video_path: Path,
     language: str | None = None,
-    keep_audio: bool = False,
-) -> str:
+) -> tuple[str, Path]:
     """
     转写视频文件
 
     Args:
         video_path: 视频文件路径
         language: 语言代码
-        keep_audio: 是否保留提取的音频文件
 
     Returns:
-        str: 转写文本
+        tuple[str, Path]: (转写文本, 音频文件路径)
     """
-    # 提取音频（带进度条）
+    # 提取音频（带进度条，已存在则跳过）
     audio_path = await extract_audio_async(video_path)
 
-    try:
-        # 转写
-        result = await transcribe_audio(audio_path, language)
-        return result
-    finally:
-        # 清理音频文件
-        if not keep_audio and audio_path.exists():
-            audio_path.unlink()
+    # 转写
+    result = await transcribe_audio(audio_path, language)
+    return result, audio_path

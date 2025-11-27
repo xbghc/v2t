@@ -85,11 +85,14 @@ def process_video(
             raise typer.Exit(1)
         return
 
-    # 正常流程：下载到临时目录，逐步清理
-    # 1. 下载视频
+    # 正常流程：下载到临时目录，失败时保留临时文件
+    temp_files = []  # 记录需要清理的临时文件
+
+    # 1. 下载视频（已存在则跳过）
     console.print("[bold]下载视频...[/bold]")
     try:
         video_result = run_async(download_video(url))  # 下载到临时目录
+        temp_files.append(video_result.path)
         console.print(f"[green]✓[/green] {video_result.title}")
     except DownloadError as e:
         console.print(f"[red]✗[/red] 下载失败: {e}")
@@ -99,7 +102,6 @@ def process_video(
     if video_result.duration and video_result.duration > settings.max_video_duration:
         max_min = settings.max_video_duration // 60
         video_min = video_result.duration // 60
-        cleanup_file(video_result.path)
         console.print(
             f"[red]✗[/red] 视频时长 {video_min} 分钟，超过限制 {max_min} 分钟\n"
             f"可在配置文件中修改 max_video_duration: {CONFIG_PATH}"
@@ -108,14 +110,13 @@ def process_video(
 
     output_name = get_output_name(video_result.title)
 
-    # 2. 转录（转录成功后删除视频）
+    # 2. 转录（提取音频 + 转写，已存在则跳过提取）
     console.print("[bold]转录音频...[/bold]")
     try:
-        transcript = run_async(transcribe_video(video_result.path))
-        cleanup_file(video_result.path)  # 删除临时视频
+        transcript, audio_path = run_async(transcribe_video(video_result.path))
+        temp_files.append(audio_path)
         console.print("[green]✓[/green] 转录完成")
     except TranscribeError as e:
-        cleanup_file(video_result.path)
         console.print(f"[red]✗[/red] 转录失败: {e}")
         raise typer.Exit(1)
 
@@ -146,6 +147,10 @@ def process_video(
         except GitCodeAIError as e:
             console.print(f"[red]✗[/red] 生成失败: {e}")
             raise typer.Exit(1)
+
+    # 4. 成功后清理临时文件
+    for f in temp_files:
+        cleanup_file(f)
 
 
 # 主应用
