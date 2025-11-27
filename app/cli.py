@@ -127,9 +127,35 @@ app = typer.Typer(
 )
 
 
+def check_dependencies():
+    """检查系统依赖"""
+    import shutil
+
+    deps = [
+        ("ffmpeg", "音频提取"),
+        ("aria2c", "视频下载"),
+    ]
+
+    missing = []
+    for cmd, desc in deps:
+        if not shutil.which(cmd):
+            missing.append((cmd, desc))
+
+    if missing:
+        console.print("[yellow]⚠ 缺少系统依赖:[/yellow]")
+        for cmd, desc in missing:
+            console.print(f"  • {cmd} ({desc})")
+        console.print()
+        console.print("安装方法:")
+        console.print("  macOS: brew install ffmpeg aria2")
+        console.print("  Ubuntu: sudo apt install ffmpeg aria2")
+        console.print()
+
+
 @app.command("config")
 def config_cmd():
     """交互式配置 API KEY"""
+    check_dependencies()
     console.print("[bold]配置 API KEY[/bold]\n")
 
     config = load_config()
