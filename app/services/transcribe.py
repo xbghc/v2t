@@ -1,11 +1,11 @@
 """音频转写服务 - 使用 Groq Whisper API"""
 
 import asyncio
-import subprocess
 from pathlib import Path
 
 import openai
 from openai import AsyncOpenAI
+from better_ffmpeg_progress import FfmpegProcess
 
 from app.config import get_settings
 
@@ -15,9 +15,35 @@ class TranscribeError(Exception):
     pass
 
 
-def extract_audio(video_path: Path, audio_path: Path | None = None) -> Path:
+def _run_ffmpeg(video_path: Path, audio_path: Path) -> None:
+    """运行 ffmpeg 提取音频（带进度条）"""
+    cmd = [
+        "ffmpeg",
+        "-i", str(video_path),
+        "-vn",
+        "-acodec", "libmp3lame",
+        "-ar", "16000",
+        "-ac", "1",
+        "-q:a", "4",
+        "-y",
+        str(audio_path),
+    ]
+
+    try:
+        process = FfmpegProcess(cmd, ffmpeg_log_level="error")
+        process.run()
+        if process.return_code != 0:
+            raise TranscribeError(f"音频提取失败，退出码: {process.return_code}")
+    except FileNotFoundError:
+        raise TranscribeError("ffmpeg 未安装，请先安装 ffmpeg")
+
+
+async def extract_audio_async(
+    video_path: Path,
+    audio_path: Path | None = None,
+) -> Path:
     """
-    从视频中提取音频
+    从视频中提取音频（异步，带进度条）
 
     Args:
         video_path: 视频文件路径
@@ -32,26 +58,13 @@ def extract_audio(video_path: Path, audio_path: Path | None = None) -> Path:
     if audio_path.exists():
         return audio_path
 
-    try:
-        subprocess.run(
-            [
-                "ffmpeg", "-i", str(video_path),
-                "-vn",  # 不处理视频
-                "-acodec", "libmp3lame",
-                "-ar", "16000",  # Whisper 推荐采样率
-                "-ac", "1",  # 单声道
-                "-q:a", "4",  # 质量
-                "-y",  # 覆盖输出
-                str(audio_path),
-            ],
-            check=True,
-            capture_output=True,
-        )
-        return audio_path
-    except subprocess.CalledProcessError as e:
-        raise TranscribeError(f"音频提取失败: {e.stderr.decode()}") from e
-    except FileNotFoundError:
-        raise TranscribeError("ffmpeg 未安装，请先安装 ffmpeg")
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_ffmpeg, video_path, audio_path)
+
+    if not audio_path.exists():
+        raise TranscribeError("音频提取失败：输出文件不存在")
+
+    return audio_path
 
 
 def get_groq_client() -> AsyncOpenAI:
@@ -149,9 +162,8 @@ async def transcribe_video(
     Returns:
         str: 转写文本
     """
-    # 提取音频
-    loop = asyncio.get_event_loop()
-    audio_path = await loop.run_in_executor(None, extract_audio, video_path)
+    # 提取音频（带进度条）
+    audio_path = await extract_audio_async(video_path)
 
     try:
         # 转写

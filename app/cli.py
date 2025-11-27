@@ -11,7 +11,7 @@ from rich.prompt import Prompt
 
 from app.config import load_config, save_config, get_settings, CONFIG_PATH
 from app.services.video_downloader import download_video, DownloadError
-from app.services.transcribe import transcribe_video, extract_audio, TranscribeError
+from app.services.transcribe import transcribe_video, extract_audio_async, TranscribeError
 from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
 
 console = Console()
@@ -76,7 +76,7 @@ def process_video(
         output_name = get_output_name(video_result.title)
         audio_path = current_dir / f"{output_name}.mp3"
         try:
-            extract_audio(video_result.path, audio_path)
+            run_async(extract_audio_async(video_result.path, audio_path))
             cleanup_file(video_result.path)  # 删除临时视频
             console.print(f"[green]✓[/green] 音频已保存: {audio_path}")
         except TranscribeError as e:

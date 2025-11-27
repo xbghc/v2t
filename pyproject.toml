@@ -9,6 +9,7 @@ dependencies = [
     "openai>=2.8.1",
     "typer>=0.20.0",
     "rich>=14.0.0",
+    "better-ffmpeg-progress>=4.0.0",
 ]
 
 [project.scripts]
