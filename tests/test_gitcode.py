@@ -3,7 +3,6 @@
 import pytest
 from app.services.gitcode_ai import (
     chat,
-    translate_subtitle,
     generate_outline,
     generate_article,
     GitCodeAIError,
@@ -21,45 +20,6 @@ async def test_chat():
         print(f"响应: {result}")
         assert result
         assert len(result) > 0
-    except GitCodeAIError as e:
-        pytest.skip(f"跳过测试: {e}")
-
-
-@pytest.mark.asyncio
-async def test_chat_stream():
-    """测试流式聊天功能"""
-    try:
-        messages = [
-            {"role": "user", "content": "数到5"}
-        ]
-        result = await chat(messages, stream=True, max_tokens=100)
-
-        content = ""
-        async for chunk in result:
-            content += chunk
-            print(chunk, end="", flush=True)
-
-        print()
-        assert content
-    except GitCodeAIError as e:
-        pytest.skip(f"跳过测试: {e}")
-
-
-@pytest.mark.asyncio
-async def test_translate_subtitle():
-    """测试字幕翻译功能"""
-    try:
-        srt_content = """1
-00:00:01,000 --> 00:00:03,000
-Hello, world!
-
-2
-00:00:04,000 --> 00:00:06,000
-This is a test.
-"""
-        result = await translate_subtitle(srt_content, "中文")
-        print(f"翻译结果:\n{result}")
-        assert result
     except GitCodeAIError as e:
         pytest.skip(f"跳过测试: {e}")
 

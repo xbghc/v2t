@@ -60,31 +60,6 @@ async def chat(
     return "".join(result)
 
 
-async def translate_subtitle(content: str, target_language: str) -> str:
-    """
-    翻译字幕内容
-
-    Args:
-        content: 字幕内容
-        target_language: 目标语言
-
-    Returns:
-        str: 翻译后的内容
-    """
-    messages = [
-        {
-            "role": "system",
-            "content": f"你是一个专业的字幕翻译专家。请将以下字幕内容翻译成{target_language}，保持原有的时间轴格式不变。"
-        },
-        {
-            "role": "user",
-            "content": content
-        }
-    ]
-
-    return await chat(messages)
-
-
 async def generate_outline(content: str) -> str:
     """
     根据字幕内容生成大纲和时间线

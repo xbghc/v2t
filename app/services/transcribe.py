@@ -1,12 +1,13 @@
 """音频转写服务 - 使用 Groq Whisper API"""
 
 import asyncio
-import os
+import re
+import subprocess
 from pathlib import Path
 
 import openai
 from openai import AsyncOpenAI
-from better_ffmpeg_progress import FfmpegProcess
+from rich.progress import Progress, BarColumn, TaskProgressColumn, TimeRemainingColumn
 
 from app.config import get_settings
 
@@ -16,28 +17,33 @@ class TranscribeError(Exception):
     pass
 
 
-def _run_ffmpeg(video_path: Path, audio_path: Path) -> None:
-    """运行 ffmpeg 提取音频（带进度条）"""
-    cmd = [
-        "ffmpeg",
-        "-nostdin",  # 禁用键盘输入
-        "-i", str(video_path),
-        "-vn",
-        "-acodec", "libmp3lame",
-        "-ar", "16000",
-        "-ac", "1",
-        "-q:a", "4",
-        "-y",
-        str(audio_path),
-    ]
-
+def _get_duration(video_path: Path) -> float | None:
+    """获取视频时长（秒）"""
     try:
-        process = FfmpegProcess(cmd, ffmpeg_log_level="error", ffmpeg_log_file=os.devnull)
-        process.run()
-        if process.return_code != 0:
-            raise TranscribeError(f"音频提取失败，退出码: {process.return_code}")
-    except FileNotFoundError:
-        raise TranscribeError("ffmpeg 未安装，请先安装 ffmpeg")
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except (ValueError, FileNotFoundError):
+        pass
+    return None
+
+
+def _parse_time(line: str) -> float | None:
+    """解析 ffmpeg 输出中的时间"""
+    match = re.search(r"time=(\d+):(\d+):(\d+\.?\d*)", line)
+    if match:
+        h, m, s = match.groups()
+        return int(h) * 3600 + int(m) * 60 + float(s)
+    return None
 
 
 async def extract_audio_async(
@@ -60,8 +66,57 @@ async def extract_audio_async(
     if audio_path.exists():
         return audio_path
 
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _run_ffmpeg, video_path, audio_path)
+    duration = _get_duration(video_path)
+
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-i", str(video_path),
+        "-vn",
+        "-acodec", "libmp3lame",
+        "-ar", "16000",
+        "-ac", "1",
+        "-q:a", "4",
+        "-y",
+        str(audio_path),
+    ]
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        if duration:
+            with Progress(
+                "[progress.description]{task.description}",
+                BarColumn(),
+                TaskProgressColumn(),
+                TimeRemainingColumn(),
+                transient=True,
+            ) as progress:
+                task = progress.add_task("提取音频", total=duration)
+
+                while True:
+                    line = await process.stderr.readline()
+                    if not line:
+                        break
+                    t = _parse_time(line.decode(errors="ignore"))
+                    if t is not None:
+                        progress.update(task, completed=min(t, duration))
+
+                progress.update(task, completed=duration)
+        else:
+            await process.communicate()
+
+        await process.wait()
+
+        if process.returncode != 0:
+            raise TranscribeError("音频提取失败")
+
+    except FileNotFoundError:
+        raise TranscribeError("ffmpeg 未安装，请先安装 ffmpeg")
 
     if not audio_path.exists():
         raise TranscribeError("音频提取失败：输出文件不存在")
