@@ -1,6 +1,7 @@
 """音频转写服务 - 使用 Groq Whisper API"""
 
 import asyncio
+import os
 from pathlib import Path
 
 import openai
@@ -19,6 +20,7 @@ def _run_ffmpeg(video_path: Path, audio_path: Path) -> None:
     """运行 ffmpeg 提取音频（带进度条）"""
     cmd = [
         "ffmpeg",
+        "-nostdin",  # 禁用键盘输入
         "-i", str(video_path),
         "-vn",
         "-acodec", "libmp3lame",
@@ -30,7 +32,7 @@ def _run_ffmpeg(video_path: Path, audio_path: Path) -> None:
     ]
 
     try:
-        process = FfmpegProcess(cmd, ffmpeg_log_level="error")
+        process = FfmpegProcess(cmd, ffmpeg_log_level="error", ffmpeg_log_file=os.devnull)
         process.run()
         if process.return_code != 0:
             raise TranscribeError(f"音频提取失败，退出码: {process.return_code}")
