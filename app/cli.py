@@ -164,6 +164,7 @@ app = typer.Typer(
   v2t <url> --video     仅下载视频
   v2t <url> --audio     仅提取音频
   v2t config            交互式配置 API KEY
+  v2t clean             清理临时文件目录
 """,
     add_completion=False,
     no_args_is_help=True,
@@ -235,6 +236,37 @@ def config_cmd():
     console.print(f"\n[green]✓[/green] 配置已保存到 {CONFIG_PATH}")
 
 
+@app.command("clean")
+def clean_cmd():
+    """清理临时文件目录"""
+    import shutil
+    settings = get_settings()
+    temp_path = settings.temp_path
+
+    if not temp_path.exists():
+        console.print(f"[yellow]临时目录不存在: {temp_path}[/yellow]")
+        return
+
+    # 统计文件数量和大小
+    files = list(temp_path.iterdir())
+    if not files:
+        console.print(f"[yellow]临时目录为空: {temp_path}[/yellow]")
+        return
+
+    total_size = sum(f.stat().st_size for f in files if f.is_file())
+    size_mb = total_size / (1024 * 1024)
+
+    # 删除目录内容
+    for item in files:
+        if item.is_file():
+            item.unlink()
+        elif item.is_dir():
+            shutil.rmtree(item)
+
+    console.print(f"[green]✓[/green] 已清理 {len(files)} 个文件 ({size_mb:.1f} MB)")
+    console.print(f"[dim]临时目录: {temp_path}[/dim]")
+
+
 @app.command("run", hidden=True)
 def run_cmd(
     url: Annotated[str, typer.Argument(help="视频链接")],
@@ -257,7 +289,7 @@ def main():
         return
 
     # 如果第一个参数是已知子命令，正常处理
-    if args[0] in ("config", "--help", "-h"):
+    if args[0] in ("config", "clean", "--help", "-h"):
         app()
         return
 
