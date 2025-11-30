@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.services.video_downloader import download_video, DownloadError
-from app.services.transcribe import transcribe_video, extract_audio_async, TranscribeError
+from app.services.transcribe import extract_audio_async, TranscribeError
 from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
 
 
@@ -119,16 +119,21 @@ async def process_video_task(task_id: str, url: str):
             video_min = video_result.duration // 60
             raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
 
-        # 2. 转录音频
+        # 2. 提取音频
         task.status = TaskStatus.TRANSCRIBING
+        task.progress = "正在提取音频..."
+
+        audio_path = await extract_audio_async(video_result.path)
+        task.audio_path = audio_path
         task.progress = "正在转录音频..."
 
-        transcript, audio_path = await transcribe_video(video_result.path)
-        task.audio_path = audio_path
+        # 3. 转录音频
+        from app.services.transcribe import transcribe_audio
+        transcript = await transcribe_audio(audio_path)
         task.transcript = transcript
         task.progress = "转录完成"
 
-        # 3. 生成 AI 内容
+        # 4. 生成 AI 内容
         task.status = TaskStatus.GENERATING
 
         # 生成大纲
