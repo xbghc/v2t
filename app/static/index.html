@@ -105,55 +105,6 @@
         </div>
     </div>
 
-    <!-- ========== 处理中状态页面 ========== -->
-    <div v-else-if="page === 'processing'" class="relative flex min-h-screen w-full flex-col">
-        <div class="layout-container flex h-full grow flex-col">
-            <div class="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
-                <div class="layout-content-container flex flex-col w-full max-w-[960px] flex-1">
-                    <!-- TopNavBar -->
-                    <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] px-6 py-4">
-                        <div class="flex items-center gap-4 text-gray-800 dark:text-white">
-                            <div class="size-6 text-primary">
-                                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                                    <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
-                        </div>
-                    </header>
-                    <main class="flex-grow flex flex-col items-center justify-center py-12 px-4 sm:px-6">
-                        <div class="w-full max-w-2xl space-y-8">
-                            <h1 class="text-gray-900 dark:text-white tracking-tight text-[32px] font-bold leading-tight px-4 text-center">正在处理您的视频</h1>
-                            <p class="text-gray-600 dark:text-[#9da6b9] text-base font-normal leading-normal px-4 text-center">预计需要 1-5 分钟，请勿关闭页面</p>
-                            <!-- Processing Card -->
-                            <div class="bg-white dark:bg-gray-800/20 border border-gray-200 dark:border-gray-700/50 rounded-xl shadow-sm p-6 sm:p-8 space-y-6">
-                                <div class="flex items-center justify-between gap-4 rounded-lg">
-                                    <div class="flex flex-col gap-1.5 flex-[2_2_0px]">
-                                        <p class="text-gray-900 dark:text-white text-base font-bold leading-tight">{{ progress.title || '加载中...' }}</p>
-                                        <p class="text-gray-500 dark:text-[#9da6b9] text-sm font-normal leading-normal">正在处理...</p>
-                                    </div>
-                                </div>
-                                <!-- ProgressBar -->
-                                <div class="flex flex-col gap-3 pt-4">
-                                    <div class="flex gap-6 justify-between">
-                                        <p class="text-gray-800 dark:text-white text-base font-medium leading-normal">{{ progress.step }}</p>
-                                    </div>
-                                    <div class="rounded-full bg-gray-200 dark:bg-[#3b4354] h-2">
-                                        <div class="h-2 rounded-full bg-primary transition-all duration-500" :style="{ width: progress.percent + '%' }"></div>
-                                    </div>
-                                    <p class="text-gray-600 dark:text-[#9da6b9] text-sm font-normal leading-normal">{{ progress.text }}</p>
-                                </div>
-                            </div>
-                        </div>
-                    </main>
-                    <footer class="text-center py-8 mt-auto border-t border-gray-200 dark:border-gray-800">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">V2T - 视频转文字工具</p>
-                    </footer>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- ========== 结果展示页面 ========== -->
     <div v-else-if="page === 'result'" class="relative flex min-h-screen w-full flex-col">
         <div class="layout-container flex h-full grow flex-col">
@@ -176,8 +127,29 @@
                     <!-- PageHeading -->
                     <div class="flex flex-wrap justify-between gap-3 p-4">
                         <div class="flex min-w-72 flex-col gap-2">
-                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">转换完成</p>
-                            <p class="text-gray-500 dark:text-[#9da6b9] text-base font-normal leading-normal">查看生成的内容，复制或下载原始媒体文件</p>
+                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">
+                                {{ isFailed ? '转换失败' : (isProcessing ? '正在处理' : '转换完成') }}
+                            </p>
+                            <p class="text-gray-500 dark:text-[#9da6b9] text-base font-normal leading-normal">
+                                {{ isFailed ? errorMessage : (isProcessing ? '请勿关闭页面，内容将逐步显示' : '查看生成的内容，复制或下载原始媒体文件') }}
+                            </p>
+                        </div>
+                        <div v-if="isFailed" class="flex items-center">
+                            <button @click="retryTask" class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+                                <span class="truncate">重新尝试</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Progress Bar (processing) -->
+                    <div v-if="isProcessing" class="px-4 pb-4">
+                        <div class="bg-white dark:bg-[#1c1f27] border border-gray-200 dark:border-[#282e39] rounded-lg p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ progress.step }}</span>
+                                <span class="text-sm text-gray-500 dark:text-gray-400">{{ progress.text }}</span>
+                            </div>
+                            <div class="w-full bg-gray-200 dark:bg-[#3b4354] rounded-full h-2">
+                                <div class="bg-primary h-2 rounded-full transition-all duration-500" :style="{ width: progress.percent + '%' }"></div>
+                            </div>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
@@ -188,14 +160,26 @@
                                     <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">{{ result.title || '视频标题' }}</p>
                                 </div>
                                 <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
+                                    <!-- 下载视频按钮 -->
                                     <a v-if="result.has_video" :href="'api/task/' + taskId + '/video'" class="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
                                         <span class="material-symbols-outlined text-lg">videocam</span>
                                         <span class="truncate">下载视频</span>
                                     </a>
+                                    <button v-else disabled class="flex w-full min-w-[84px] max-w-[480px] items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 dark:bg-[#1c1f27] text-gray-400 dark:text-gray-600 gap-2 text-sm font-medium leading-normal cursor-not-allowed">
+                                        <span class="material-symbols-outlined text-lg animate-pulse" v-if="isProcessing">hourglass_empty</span>
+                                        <span class="material-symbols-outlined text-lg" v-else>videocam_off</span>
+                                        <span class="truncate">{{ isProcessing ? '下载中...' : '视频不可用' }}</span>
+                                    </button>
+                                    <!-- 下载音频按钮 -->
                                     <a v-if="result.has_audio" :href="'api/task/' + taskId + '/audio'" class="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
                                         <span class="material-symbols-outlined text-lg">audiotrack</span>
                                         <span class="truncate">下载音频</span>
                                     </a>
+                                    <button v-else disabled class="flex w-full min-w-[84px] max-w-[480px] items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 dark:bg-[#1c1f27] text-gray-400 dark:text-gray-600 gap-2 text-sm font-medium leading-normal cursor-not-allowed">
+                                        <span class="material-symbols-outlined text-lg animate-pulse" v-if="isProcessing">hourglass_empty</span>
+                                        <span class="material-symbols-outlined text-lg" v-else>music_off</span>
+                                        <span class="truncate">{{ isProcessing ? '转录中...' : '音频不可用' }}</span>
+                                    </button>
                                 </div>
                             </div>
                         </aside>
@@ -220,7 +204,7 @@
                                     </div>
                                     <!-- Copy Button -->
                                     <div class="pt-4 sm:pt-0 w-full sm:w-auto flex justify-end">
-                                        <button @click="copyContent" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
+                                        <button @click="copyContent" :disabled="isContentLoading" :class="isContentLoading ? 'bg-gray-100 dark:bg-[#1c1f27] text-gray-400 dark:text-gray-600 cursor-not-allowed' : 'bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white cursor-pointer hover:bg-gray-300 dark:hover:bg-[#3b4354]'" class="flex min-w-[84px] max-w-[480px] items-center justify-center overflow-hidden rounded-lg h-10 px-4 gap-2 text-sm font-bold leading-normal tracking-[0.015em] transition-colors">
                                             <span class="material-symbols-outlined text-xl">content_copy</span>
                                             <span class="truncate">复制内容</span>
                                         </button>
@@ -228,7 +212,13 @@
                                 </div>
                                 <!-- Content Area -->
                                 <div class="p-6 text-gray-600 dark:text-[#c4c9d4] leading-relaxed text-base overflow-y-auto flex-1" style="max-height: 600px;">
-                                    <div class="prose prose-sm md:prose-base dark:prose-invert max-w-none" v-html="renderedContent"></div>
+                                    <!-- 加载中状态 -->
+                                    <div v-if="isContentLoading" class="flex flex-col items-center justify-center py-12 gap-4">
+                                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                                        <p class="text-gray-500 dark:text-gray-400 text-sm">{{ contentLoadingText }}</p>
+                                    </div>
+                                    <!-- 实际内容 -->
+                                    <div v-else class="prose prose-sm md:prose-base dark:prose-invert max-w-none" v-html="renderedContent"></div>
                                 </div>
                             </div>
                         </div>
@@ -238,43 +228,6 @@
         </div>
     </div>
 
-    <!-- ========== 错误状态页面 ========== -->
-    <div v-else-if="page === 'error'" class="relative flex min-h-screen w-full flex-col">
-        <div class="layout-container flex h-full grow flex-col">
-            <div class="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
-                <div class="layout-content-container flex flex-col w-full max-w-[960px] flex-1">
-                    <!-- TopNavBar -->
-                    <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] px-6 py-4 rounded-xl bg-white/50 dark:bg-black/20 backdrop-blur-sm">
-                        <div class="flex items-center gap-4 text-gray-800 dark:text-white">
-                            <div class="size-6 text-primary">
-                                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                                    <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
-                                </svg>
-                            </div>
-                            <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
-                        </div>
-                    </header>
-                    <main class="flex-grow flex items-center justify-center py-12 px-4">
-                        <div class="flex flex-col items-center gap-6 w-full max-w-lg text-center">
-                            <div class="flex items-center justify-center size-20 rounded-full bg-red-500/10 text-red-500">
-                                <span class="material-symbols-outlined !text-5xl">error</span>
-                            </div>
-                            <div class="flex flex-col items-center gap-2">
-                                <p class="text-gray-900 dark:text-white text-2xl font-bold leading-tight tracking-[-0.015em]">转换失败</p>
-                                <p class="text-gray-600 dark:text-[#9da6b9] text-base font-normal leading-normal max-w-md">{{ errorMessage }}</p>
-                            </div>
-                            <button @click="startNew" class="flex min-w-[84px] max-w-[480px] w-full sm:w-auto cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] transition-colors hover:bg-primary/90">
-                                <span class="truncate">重新尝试</span>
-                            </button>
-                        </div>
-                    </main>
-                    <footer class="flex justify-center pt-8 pb-4">
-                        <p class="text-gray-500 dark:text-[#9da6b9] text-sm font-normal leading-normal">V2T - 视频转文字工具</p>
-                    </footer>
-                </div>
-            </div>
-        </div>
-    </div>
 </div>
 
 <script>
@@ -286,6 +239,7 @@ createApp({
         const page = ref('initial')
         const url = ref('')
         const taskId = ref(null)
+        const taskStatus = ref('pending')
         const currentTab = ref('article')
         const errorMessage = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
 
@@ -306,25 +260,91 @@ createApp({
         })
 
         let pollInterval = null
+        let lastUrl = ''
 
         // 计算属性
+        const isProcessing = computed(() => {
+            return taskStatus.value !== 'completed' && taskStatus.value !== 'failed'
+        })
+
+        const isFailed = computed(() => {
+            return taskStatus.value === 'failed'
+        })
+
         const currentContent = computed(() => {
-            if (currentTab.value === 'article') return result.article || '(内容生成失败)'
-            if (currentTab.value === 'outline') return result.outline || '(大纲生成失败)'
-            return result.transcript || '(无转录内容)'
+            if (currentTab.value === 'article') return result.article || ''
+            if (currentTab.value === 'outline') return result.outline || ''
+            return result.transcript || ''
+        })
+
+        const isContentLoading = computed(() => {
+            if (!isProcessing.value && !isFailed.value) {
+                // 处理完成后，如果内容为空则显示提示
+                return false
+            }
+            // 处理中，根据当前tab判断内容是否已加载
+            if (currentTab.value === 'transcript') {
+                return !result.transcript
+            }
+            if (currentTab.value === 'outline') {
+                return !result.outline && isProcessing.value
+            }
+            if (currentTab.value === 'article') {
+                return !result.article && isProcessing.value
+            }
+            return false
+        })
+
+        const contentLoadingText = computed(() => {
+            if (currentTab.value === 'transcript') {
+                if (taskStatus.value === 'downloading') return '正在下载视频，转录内容稍后显示...'
+                if (taskStatus.value === 'transcribing') return '正在转录音频...'
+                return '准备中...'
+            }
+            if (currentTab.value === 'outline' || currentTab.value === 'article') {
+                if (taskStatus.value === 'downloading') return '正在下载视频...'
+                if (taskStatus.value === 'transcribing') return '正在转录音频...'
+                if (taskStatus.value === 'generating') return '正在生成内容...'
+                return '准备中...'
+            }
+            return '加载中...'
         })
 
         const renderedContent = computed(() => {
+            if (!currentContent.value) {
+                if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
+                if (!isProcessing.value) {
+                    if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
+                    if (currentTab.value === 'outline') return '<p class="text-gray-500">(大纲生成失败)</p>'
+                    return '<p class="text-gray-500">(无转录内容)</p>'
+                }
+                return ''
+            }
             return marked.parse(currentContent.value)
         })
 
         // 方法
-        const startNew = () => {
-            page.value = 'initial'
-            url.value = ''
+        const resetState = () => {
             taskId.value = null
+            taskStatus.value = 'pending'
             currentTab.value = 'article'
+            errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
+            Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
             Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+        }
+
+        const startNew = () => {
+            if (pollInterval) clearInterval(pollInterval)
+            resetState()
+            url.value = ''
+            page.value = 'initial'
+        }
+
+        const retryTask = () => {
+            if (pollInterval) clearInterval(pollInterval)
+            resetState()
+            url.value = lastUrl
+            submitUrl()
         }
 
         const submitUrl = async () => {
@@ -333,11 +353,9 @@ createApp({
                 return
             }
 
-            page.value = 'processing'
-            progress.text = '准备中...'
-            progress.percent = 10
-            progress.step = '步骤 1/3'
-            progress.title = ''
+            lastUrl = url.value
+            resetState()
+            page.value = 'result'
 
             try {
                 const response = await fetch('api/process', {
@@ -355,7 +373,7 @@ createApp({
                 startPolling()
             } catch (error) {
                 errorMessage.value = error.message
-                page.value = 'error'
+                taskStatus.value = 'failed'
             }
         }
 
@@ -372,13 +390,27 @@ createApp({
                 const response = await fetch(`api/task/${taskId.value}`)
                 const data = await response.json()
 
-                if (data.title) progress.title = data.title
+                // 更新任务状态
+                taskStatus.value = data.status
 
+                // 渐进更新数据
+                if (data.title) {
+                    progress.title = data.title
+                    result.title = data.title
+                }
+                if (data.has_video) result.has_video = true
+                if (data.has_audio) result.has_audio = true
+                if (data.transcript) result.transcript = data.transcript
+                if (data.outline) result.outline = data.outline
+                if (data.article) result.article = data.article
+
+                // 更新进度条
                 const statusMap = {
                     'pending': { text: '等待处理...', percent: 10, step: '步骤 1/3' },
                     'downloading': { text: '正在下载视频...', percent: 33, step: '步骤 1/3' },
                     'transcribing': { text: '正在转录音频...', percent: 55, step: '步骤 2/3' },
                     'generating': { text: '正在生成内容...', percent: 80, step: '步骤 3/3' },
+                    'completed': { text: '处理完成', percent: 100, step: '完成' },
                 }
 
                 if (statusMap[data.status]) {
@@ -388,22 +420,18 @@ createApp({
                     progress.step = s.step
                 }
 
+                // 自动切换到有内容的tab
+                if (result.transcript && !result.outline && !result.article && currentTab.value !== 'transcript') {
+                    currentTab.value = 'transcript'
+                }
+
                 if (data.status === 'completed') {
                     clearInterval(pollInterval)
-                    Object.assign(result, {
-                        title: data.title || '视频转换结果',
-                        has_video: data.has_video,
-                        has_audio: data.has_audio,
-                        article: data.article,
-                        outline: data.outline,
-                        transcript: data.transcript
-                    })
-                    currentTab.value = data.article ? 'article' : (data.outline ? 'outline' : 'transcript')
-                    page.value = 'result'
+                    // 切换到最佳内容tab
+                    currentTab.value = result.article ? 'article' : (result.outline ? 'outline' : 'transcript')
                 } else if (data.status === 'failed') {
                     clearInterval(pollInterval)
                     errorMessage.value = data.error || '处理失败'
-                    page.value = 'error'
                 }
             } catch (error) {
                 console.error('轮询失败:', error)
@@ -411,6 +439,7 @@ createApp({
         }
 
         const copyContent = () => {
+            if (!currentContent.value) return
             navigator.clipboard.writeText(currentContent.value).then(() => {
                 alert('已复制到剪贴板')
             }).catch(() => {
@@ -422,13 +451,19 @@ createApp({
             page,
             url,
             taskId,
+            taskStatus,
             currentTab,
             errorMessage,
             progress,
             result,
+            isProcessing,
+            isFailed,
             currentContent,
+            isContentLoading,
+            contentLoadingText,
             renderedContent,
             startNew,
+            retryTask,
             submitUrl,
             copyContent
         }
