@@ -130,23 +130,33 @@ def process_video(
         console.print("[bold]生成提纲...[/bold]")
         try:
             outline = run_async(generate_outline(transcript))
+            if not outline or len(outline.strip()) < 50:
+                raise GitCodeAIError("内容被拦截或生成失败")
             output_path = Path(f"{output_name}_提纲.md")
             output_path.write_text(outline, encoding="utf-8")
             console.print(f"[green]✓[/green] 已保存: {output_path}")
         except GitCodeAIError as e:
-            console.print(f"[red]✗[/red] 生成失败: {e}")
-            raise typer.Exit(1)
+            console.print(f"[yellow]⚠[/yellow] AI 生成失败: {e}")
+            console.print("[yellow]⚠[/yellow] 回退到原始转录")
+            output_path = Path(f"{output_name}.txt")
+            output_path.write_text(transcript, encoding="utf-8")
+            console.print(f"[green]✓[/green] 已保存: {output_path}")
 
     else:
         console.print("[bold]生成详细内容...[/bold]")
         try:
             article = run_async(generate_article(transcript))
+            if not article or len(article.strip()) < 50:
+                raise GitCodeAIError("内容被拦截或生成失败")
             output_path = Path(f"{output_name}.md")
             output_path.write_text(article, encoding="utf-8")
             console.print(f"[green]✓[/green] 已保存: {output_path}")
         except GitCodeAIError as e:
-            console.print(f"[red]✗[/red] 生成失败: {e}")
-            raise typer.Exit(1)
+            console.print(f"[yellow]⚠[/yellow] AI 生成失败: {e}")
+            console.print("[yellow]⚠[/yellow] 回退到原始转录")
+            output_path = Path(f"{output_name}.txt")
+            output_path.write_text(transcript, encoding="utf-8")
+            console.print(f"[green]✓[/green] 已保存: {output_path}")
 
     # 4. 成功后清理临时文件
     for f in temp_files:
