@@ -109,6 +109,85 @@ uv run v2t "视频链接" --audio
 | 视频 | `v2t <url> -v` | `标题.mp4` - 仅下载视频 |
 | 音频 | `v2t <url> -a` | `标题.mp3` - 仅提取音频 |
 
+## Web 版本
+
+v2t 支持 Web 界面，可以部署为网站使用。
+
+### 本地运行
+
+```bash
+# 启动 Web 服务（默认端口 8100）
+uv run v2t-web
+
+# 或使用 uvicorn 自定义配置
+uv run uvicorn app.web:app --host 0.0.0.0 --port 8100
+```
+
+然后在浏览器访问 http://localhost:8100
+
+### 部署到服务器
+
+#### 1. 安装依赖
+
+```bash
+# 安装系统依赖
+sudo apt install ffmpeg aria2
+
+# 克隆项目
+git clone https://github.com/user/v2t.git
+cd v2t
+
+# 安装 uv（如未安装）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 安装 Python 依赖
+uv sync
+```
+
+#### 2. 配置 API
+
+```bash
+uv run v2t config
+```
+
+#### 3. 使用 systemd 部署
+
+```bash
+# 编辑服务文件，修改路径和用户
+sudo cp deploy/v2t.service /etc/systemd/system/
+
+# 编辑配置
+sudo nano /etc/systemd/system/v2t.service
+# 修改:
+#   User=你的用户名
+#   WorkingDirectory=/你的项目路径
+#   ExecStart=/你的项目路径/.venv/bin/uvicorn app.web:app --host 0.0.0.0 --port 8100
+
+# 启动服务
+sudo systemctl daemon-reload
+sudo systemctl enable v2t
+sudo systemctl start v2t
+
+# 查看状态
+sudo systemctl status v2t
+```
+
+#### 4. 配置 Nginx 反向代理（可选）
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;  # 视频处理可能耗时较长
+    }
+}
+```
+
 ## License
 
 MIT

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>V2T - 视频转文字</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link href="https://fonts.googleapis.com" rel="preconnect"/>
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+
+<div id="app" v-cloak>
+    <!-- ========== 初始状态页面 ========== -->
+    <div v-if="page === 'initial'" class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <div class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-20 lg:px-40">
+                <div class="layout-content-container flex w-full flex-col max-w-[960px] flex-1">
+                    <!-- TopNavBar -->
+                    <header class="flex items-center justify-between whitespace-nowrap border-b border-gray-200 dark:border-b-[#282e39] px-4 sm:px-6 lg:px-10 py-3">
+                        <div class="flex items-center gap-4 text-gray-800 dark:text-white">
+                            <div class="size-5 text-primary">
+                                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                                    <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-lg font-bold leading-tight tracking-[-0.015em] text-gray-900 dark:text-white">V2T 视频转文字</h2>
+                        </div>
+                    </header>
+                    <main class="flex-grow">
+                        <!-- HeroSection -->
+                        <div class="@container pt-16 sm:pt-24 pb-12 sm:pb-16">
+                            <div class="flex min-h-[400px] flex-col gap-6 items-center justify-center p-4 text-center">
+                                <div class="flex flex-col gap-2">
+                                    <h1 class="text-4xl font-black leading-tight tracking-[-0.033em] text-gray-900 dark:text-white @[480px]:text-5xl">一键提取视频精华</h1>
+                                    <h2 class="text-sm font-normal leading-normal text-gray-600 dark:text-gray-300 @[480px]:text-base">粘贴视频链接，自动生成文字版内容、大纲和原始转录</h2>
+                                </div>
+                                <label class="flex flex-col min-w-40 h-14 w-full max-w-[480px] @[480px]:h-16">
+                                    <div class="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm">
+                                        <div class="text-gray-400 dark:text-[#9da6b9] flex border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] items-center justify-center pl-4 rounded-l-lg border-r-0">
+                                            <span class="material-symbols-outlined text-xl">link</span>
+                                        </div>
+                                        <input v-model="url" @keypress.enter="submitUrl" class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] h-full placeholder:text-gray-400 dark:placeholder:text-[#9da6b9] px-[15px] border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base" placeholder="https://www.bilibili.com/video/..."/>
+                                        <div class="flex items-center justify-center rounded-r-lg border-l-0 border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] pr-2">
+                                            <button @click="submitUrl" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md h-10 px-4 @[480px]:h-12 @[480px]:px-5 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 focus:ring-0 focus:outline-none @[480px]:text-base">
+                                                <span class="truncate">开始转换</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <!-- SectionHeader -->
+                        <div class="py-8">
+                            <h4 class="text-sm font-bold leading-normal tracking-[0.015em] px-4 py-2 text-center text-gray-500 dark:text-[#9da6b9]">支持主流视频平台</h4>
+                        </div>
+                        <!-- Platform Icons -->
+                        <div class="flex flex-wrap gap-8 px-4 items-center justify-center opacity-60">
+                            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">哔哩哔哩</span>
+                            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">抖音</span>
+                            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">小红书</span>
+                            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">YouTube</span>
+                        </div>
+                    </main>
+                    <!-- Footer -->
+                    <footer class="flex flex-col gap-6 px-5 py-10 text-center mt-16 border-t border-gray-200 dark:border-[#282e39]">
+                        <p class="text-base font-normal leading-normal text-gray-500 dark:text-[#9da6b9]">V2T - 视频转文字工具</p>
+                    </footer>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 处理中状态页面 ========== -->
+    <div v-else-if="page === 'processing'" class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <div class="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
+                <div class="layout-content-container flex flex-col w-full max-w-[960px] flex-1">
+                    <!-- TopNavBar -->
+                    <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] px-6 py-4">
+                        <div class="flex items-center gap-4 text-gray-800 dark:text-white">
+                            <div class="size-6 text-primary">
+                                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                                    <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
+                        </div>
+                    </header>
+                    <main class="flex-grow flex flex-col items-center justify-center py-12 px-4 sm:px-6">
+                        <div class="w-full max-w-2xl space-y-8">
+                            <h1 class="text-gray-900 dark:text-white tracking-tight text-[32px] font-bold leading-tight px-4 text-center">正在处理您的视频</h1>
+                            <p class="text-gray-600 dark:text-[#9da6b9] text-base font-normal leading-normal px-4 text-center">预计需要 1-5 分钟，请勿关闭页面</p>
+                            <!-- Processing Card -->
+                            <div class="bg-white dark:bg-gray-800/20 border border-gray-200 dark:border-gray-700/50 rounded-xl shadow-sm p-6 sm:p-8 space-y-6">
+                                <div class="flex items-center justify-between gap-4 rounded-lg">
+                                    <div class="flex flex-col gap-1.5 flex-[2_2_0px]">
+                                        <p class="text-gray-900 dark:text-white text-base font-bold leading-tight">{{ progress.title || '加载中...' }}</p>
+                                        <p class="text-gray-500 dark:text-[#9da6b9] text-sm font-normal leading-normal">正在处理...</p>
+                                    </div>
+                                </div>
+                                <!-- ProgressBar -->
+                                <div class="flex flex-col gap-3 pt-4">
+                                    <div class="flex gap-6 justify-between">
+                                        <p class="text-gray-800 dark:text-white text-base font-medium leading-normal">{{ progress.step }}</p>
+                                    </div>
+                                    <div class="rounded-full bg-gray-200 dark:bg-[#3b4354] h-2">
+                                        <div class="h-2 rounded-full bg-primary transition-all duration-500" :style="{ width: progress.percent + '%' }"></div>
+                                    </div>
+                                    <p class="text-gray-600 dark:text-[#9da6b9] text-sm font-normal leading-normal">{{ progress.text }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                    <footer class="text-center py-8 mt-auto border-t border-gray-200 dark:border-gray-800">
+                        <p class="text-sm text-gray-500 dark:text-gray-400">V2T - 视频转文字工具</p>
+                    </footer>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 结果展示页面 ========== -->
+    <div v-else-if="page === 'result'" class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <!-- TopNavBar -->
+            <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] px-6 sm:px-10 lg:px-20 py-3 bg-white dark:bg-[#111318]">
+                <div class="flex items-center gap-4 text-gray-800 dark:text-white">
+                    <div class="size-6 text-primary">
+                        <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                            <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
+                        </svg>
+                    </div>
+                    <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
+                </div>
+                <button @click="startNew" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+                    <span class="truncate">新建转换</span>
+                </button>
+            </header>
+            <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
+                <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
+                    <!-- PageHeading -->
+                    <div class="flex flex-wrap justify-between gap-3 p-4">
+                        <div class="flex min-w-72 flex-col gap-2">
+                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">转换完成</p>
+                            <p class="text-gray-500 dark:text-[#9da6b9] text-base font-normal leading-normal">查看生成的内容，复制或下载原始媒体文件</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
+                        <!-- Left Column: Video Info -->
+                        <aside class="lg:col-span-1 flex flex-col gap-6">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-col gap-1">
+                                    <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">{{ result.title || '视频标题' }}</p>
+                                </div>
+                                <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
+                                    <a v-if="result.has_video" :href="'api/task/' + taskId + '/video'" class="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
+                                        <span class="material-symbols-outlined text-lg">videocam</span>
+                                        <span class="truncate">下载视频</span>
+                                    </a>
+                                    <a v-if="result.has_audio" :href="'api/task/' + taskId + '/audio'" class="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
+                                        <span class="material-symbols-outlined text-lg">audiotrack</span>
+                                        <span class="truncate">下载音频</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </aside>
+                        <!-- Right Column: Content -->
+                        <div class="lg:col-span-2 flex flex-col bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39]">
+                            <div class="flex flex-col flex-1">
+                                <!-- Tabs & Copy Button Wrapper -->
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-200 dark:border-[#282e39]">
+                                    <!-- Tabs -->
+                                    <div class="flex border-b border-transparent sm:border-b-0 -mb-px">
+                                        <div class="flex gap-4 sm:gap-8">
+                                            <a href="#" @click.prevent="currentTab = 'article'" class="flex flex-col items-center justify-center border-b-[3px] pb-[13px] pt-2 transition-colors" :class="currentTab === 'article' ? 'border-b-primary' : 'border-b-transparent'">
+                                                <p class="text-sm font-bold leading-normal tracking-[0.015em]" :class="currentTab === 'article' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#9da6b9]'">详细内容</p>
+                                            </a>
+                                            <a href="#" @click.prevent="currentTab = 'outline'" class="flex flex-col items-center justify-center border-b-[3px] pb-[13px] pt-2 transition-colors" :class="currentTab === 'outline' ? 'border-b-primary' : 'border-b-transparent'">
+                                                <p class="text-sm font-bold leading-normal tracking-[0.015em]" :class="currentTab === 'outline' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#9da6b9]'">大纲</p>
+                                            </a>
+                                            <a href="#" @click.prevent="currentTab = 'transcript'" class="flex flex-col items-center justify-center border-b-[3px] pb-[13px] pt-2 transition-colors" :class="currentTab === 'transcript' ? 'border-b-primary' : 'border-b-transparent'">
+                                                <p class="text-sm font-bold leading-normal tracking-[0.015em]" :class="currentTab === 'transcript' ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-[#9da6b9]'">原始转录</p>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <!-- Copy Button -->
+                                    <div class="pt-4 sm:pt-0 w-full sm:w-auto flex justify-end">
+                                        <button @click="copyContent" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-900 dark:text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] hover:bg-gray-300 dark:hover:bg-[#3b4354] transition-colors">
+                                            <span class="material-symbols-outlined text-xl">content_copy</span>
+                                            <span class="truncate">复制内容</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <!-- Content Area -->
+                                <div class="p-6 text-gray-600 dark:text-[#c4c9d4] leading-relaxed text-base overflow-y-auto flex-1" style="max-height: 600px;">
+                                    <div class="prose prose-sm md:prose-base dark:prose-invert max-w-none whitespace-pre-wrap">{{ currentContent }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ========== 错误状态页面 ========== -->
+    <div v-else-if="page === 'error'" class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <div class="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
+                <div class="layout-content-container flex flex-col w-full max-w-[960px] flex-1">
+                    <!-- TopNavBar -->
+                    <header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] px-6 py-4 rounded-xl bg-white/50 dark:bg-black/20 backdrop-blur-sm">
+                        <div class="flex items-center gap-4 text-gray-800 dark:text-white">
+                            <div class="size-6 text-primary">
+                                <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                                    <path clip-rule="evenodd" d="M47.2426 24L24 47.2426L0.757355 24L24 0.757355L47.2426 24ZM12.2426 21H35.7574L24 9.24264L12.2426 21Z" fill-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                            <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
+                        </div>
+                    </header>
+                    <main class="flex-grow flex items-center justify-center py-12 px-4">
+                        <div class="flex flex-col items-center gap-6 w-full max-w-lg text-center">
+                            <div class="flex items-center justify-center size-20 rounded-full bg-red-500/10 text-red-500">
+                                <span class="material-symbols-outlined !text-5xl">error</span>
+                            </div>
+                            <div class="flex flex-col items-center gap-2">
+                                <p class="text-gray-900 dark:text-white text-2xl font-bold leading-tight tracking-[-0.015em]">转换失败</p>
+                                <p class="text-gray-600 dark:text-[#9da6b9] text-base font-normal leading-normal max-w-md">{{ errorMessage }}</p>
+                            </div>
+                            <button @click="startNew" class="flex min-w-[84px] max-w-[480px] w-full sm:w-auto cursor-pointer items-center justify-center overflow-hidden rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] transition-colors hover:bg-primary/90">
+                                <span class="truncate">重新尝试</span>
+                            </button>
+                        </div>
+                    </main>
+                    <footer class="flex justify-center pt-8 pb-4">
+                        <p class="text-gray-500 dark:text-[#9da6b9] text-sm font-normal leading-normal">V2T - 视频转文字工具</p>
+                    </footer>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, reactive, computed } = Vue
+
+createApp({
+    setup() {
+        // 状态
+        const page = ref('initial')
+        const url = ref('')
+        const taskId = ref(null)
+        const currentTab = ref('article')
+        const errorMessage = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
+
+        const progress = reactive({
+            title: '',
+            text: '准备中...',
+            percent: 10,
+            step: '步骤 1/3'
+        })
+
+        const result = reactive({
+            title: '',
+            has_video: false,
+            has_audio: false,
+            article: '',
+            outline: '',
+            transcript: ''
+        })
+
+        let pollInterval = null
+
+        // 计算属性
+        const currentContent = computed(() => {
+            if (currentTab.value === 'article') return result.article || '(内容生成失败)'
+            if (currentTab.value === 'outline') return result.outline || '(大纲生成失败)'
+            return result.transcript || '(无转录内容)'
+        })
+
+        // 方法
+        const startNew = () => {
+            page.value = 'initial'
+            url.value = ''
+            taskId.value = null
+            currentTab.value = 'article'
+            Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+        }
+
+        const submitUrl = async () => {
+            if (!url.value.trim()) {
+                alert('请输入视频链接')
+                return
+            }
+
+            page.value = 'processing'
+            progress.text = '准备中...'
+            progress.percent = 10
+            progress.step = '步骤 1/3'
+            progress.title = ''
+
+            try {
+                const response = await fetch('api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url.value })
+                })
+                const data = await response.json()
+
+                if (!response.ok) {
+                    throw new Error(data.detail || '提交失败')
+                }
+
+                taskId.value = data.task_id
+                startPolling()
+            } catch (error) {
+                errorMessage.value = error.message
+                page.value = 'error'
+            }
+        }
+
+        const startPolling = () => {
+            if (pollInterval) clearInterval(pollInterval)
+            pollInterval = setInterval(checkTask, 2000)
+            checkTask()
+        }
+
+        const checkTask = async () => {
+            if (!taskId.value) return
+
+            try {
+                const response = await fetch(`api/task/${taskId.value}`)
+                const data = await response.json()
+
+                if (data.title) progress.title = data.title
+
+                const statusMap = {
+                    'pending': { text: '等待处理...', percent: 10, step: '步骤 1/3' },
+                    'downloading': { text: '正在下载视频...', percent: 33, step: '步骤 1/3' },
+                    'transcribing': { text: '正在转录音频...', percent: 55, step: '步骤 2/3' },
+                    'generating': { text: '正在生成内容...', percent: 80, step: '步骤 3/3' },
+                }
+
+                if (statusMap[data.status]) {
+                    const s = statusMap[data.status]
+                    progress.text = data.progress || s.text
+                    progress.percent = s.percent
+                    progress.step = s.step
+                }
+
+                if (data.status === 'completed') {
+                    clearInterval(pollInterval)
+                    Object.assign(result, {
+                        title: data.title || '视频转换结果',
+                        has_video: data.has_video,
+                        has_audio: data.has_audio,
+                        article: data.article,
+                        outline: data.outline,
+                        transcript: data.transcript
+                    })
+                    currentTab.value = data.article ? 'article' : (data.outline ? 'outline' : 'transcript')
+                    page.value = 'result'
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval)
+                    errorMessage.value = data.error || '处理失败'
+                    page.value = 'error'
+                }
+            } catch (error) {
+                console.error('轮询失败:', error)
+            }
+        }
+
+        const copyContent = () => {
+            navigator.clipboard.writeText(currentContent.value).then(() => {
+                alert('已复制到剪贴板')
+            }).catch(() => {
+                alert('复制失败，请手动选择复制')
+            })
+        }
+
+        return {
+            page,
+            url,
+            taskId,
+            currentTab,
+            errorMessage,
+            progress,
+            result,
+            currentContent,
+            startNew,
+            submitUrl,
+            copyContent
+        }
+    }
+}).mount('#app')
+</script>
+</body>
+</html>
