@@ -1,12 +1,20 @@
 """v2t Web API 服务"""
 
 import asyncio
+import logging
 import uuid
 import time
 from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -99,6 +107,8 @@ async def process_video_task(task_id: str, url: str):
     if not task:
         return
 
+    logger.info("任务 %s 开始处理: %s", task_id, url)
+
     settings = get_settings()
     output_dir = settings.temp_path
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -157,19 +167,23 @@ async def process_video_task(task_id: str, url: str):
         # 完成
         task.status = TaskStatus.COMPLETED
         task.progress = "处理完成"
+        logger.info("任务 %s 处理完成: %s", task_id, task.title)
 
     except DownloadError as e:
         task.status = TaskStatus.FAILED
         task.error = f"下载失败: {e}"
         task.progress = task.error
+        logger.warning("任务 %s 下载失败: %s", task_id, e)
     except TranscribeError as e:
         task.status = TaskStatus.FAILED
         task.error = f"转录失败: {e}"
         task.progress = task.error
+        logger.warning("任务 %s 转录失败: %s", task_id, e)
     except Exception as e:
         task.status = TaskStatus.FAILED
         task.error = str(e)
         task.progress = f"处理失败: {e}"
+        logger.exception("任务 %s 处理异常", task_id)
 
 
 @app.post("/api/process", response_model=TaskResponse)
