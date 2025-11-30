@@ -63,6 +63,7 @@ app = FastAPI(title="v2t - 视频转文字", description="输入视频链接，�
 
 class ProcessRequest(BaseModel):
     url: str
+    download_only: bool = False  # 仅下载，不转录
 
 
 class TaskResponse(BaseModel):
@@ -101,13 +102,13 @@ def cleanup_old_tasks():
                     pass
 
 
-async def process_video_task(task_id: str, url: str):
+async def process_video_task(task_id: str, url: str, download_only: bool = False):
     """后台处理视频任务"""
     task = tasks.get(task_id)
     if not task:
         return
 
-    logger.info("任务 %s 开始处理: %s", task_id, url)
+    logger.info("任务 %s 开始处理: %s (仅下载: %s)", task_id, url, download_only)
 
     settings = get_settings()
     output_dir = settings.temp_path
@@ -122,6 +123,18 @@ async def process_video_task(task_id: str, url: str):
         task.title = video_result.title
         task.video_path = video_result.path
         task.progress = f"下载完成: {video_result.title}"
+
+        # 仅下载模式：提取音频后直接完成
+        if download_only:
+            task.status = TaskStatus.TRANSCRIBING
+            task.progress = "正在提取音频..."
+            audio_path = await extract_audio_async(video_result.path)
+            task.audio_path = audio_path
+
+            task.status = TaskStatus.COMPLETED
+            task.progress = "下载完成"
+            logger.info("任务 %s 下载完成: %s", task_id, task.title)
+            return
 
         # 检查视频时长
         if video_result.duration and video_result.duration > settings.max_video_duration:
@@ -198,7 +211,7 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
     tasks[task_id] = task
 
     # 在后台执行处理
-    background_tasks.add_task(process_video_task, task_id, request.url)
+    background_tasks.add_task(process_video_task, task_id, request.url, request.download_only)
 
     return TaskResponse(
         task_id=task_id,

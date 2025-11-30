@@ -82,6 +82,11 @@
                                         </div>
                                     </div>
                                 </label>
+                                <!-- 仅下载选项 -->
+                                <label class="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" v-model="downloadOnly" class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-[#1c1f27]"/>
+                                    <span class="text-sm text-gray-600 dark:text-gray-400">仅下载音视频，不转录</span>
+                                </label>
                             </div>
                         </div>
                         <!-- SectionHeader -->
@@ -183,8 +188,8 @@
                                 </div>
                             </div>
                         </aside>
-                        <!-- Right Column: Content -->
-                        <div class="lg:col-span-2 flex flex-col bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39]">
+                        <!-- Right Column: Content (仅在有内容或处理中时显示) -->
+                        <div v-if="hasTextContent || isProcessing" class="lg:col-span-2 flex flex-col bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39]">
                             <div class="flex flex-col flex-1">
                                 <!-- Tabs & Copy Button Wrapper -->
                                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 border-b border-gray-200 dark:border-[#282e39]">
@@ -222,6 +227,12 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- 仅下载模式提示 -->
+                        <div v-else-if="!isFailed" class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39] p-12">
+                            <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
+                            <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
+                            <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">请使用左侧按钮下载视频或音频文件</p>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -238,6 +249,7 @@ createApp({
         // 状态
         const page = ref('initial')
         const url = ref('')
+        const downloadOnly = ref(false)
         const taskId = ref(null)
         const taskStatus = ref('pending')
         const currentTab = ref('article')
@@ -261,6 +273,7 @@ createApp({
 
         let pollInterval = null
         let lastUrl = ''
+        let lastDownloadOnly = false
 
         // 计算属性
         const isProcessing = computed(() => {
@@ -269,6 +282,11 @@ createApp({
 
         const isFailed = computed(() => {
             return taskStatus.value === 'failed'
+        })
+
+        // 是否有文字内容（用于判断是否显示内容区域）
+        const hasTextContent = computed(() => {
+            return !!(result.transcript || result.outline || result.article)
         })
 
         const currentContent = computed(() => {
@@ -344,6 +362,7 @@ createApp({
             if (pollInterval) clearInterval(pollInterval)
             resetState()
             url.value = lastUrl
+            downloadOnly.value = lastDownloadOnly
             submitUrl()
         }
 
@@ -354,6 +373,7 @@ createApp({
             }
 
             lastUrl = url.value
+            lastDownloadOnly = downloadOnly.value
             resetState()
             page.value = 'result'
 
@@ -361,7 +381,7 @@ createApp({
                 const response = await fetch('api/process', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url.value })
+                    body: JSON.stringify({ url: url.value, download_only: lastDownloadOnly })
                 })
                 const data = await response.json()
 
@@ -450,6 +470,7 @@ createApp({
         return {
             page,
             url,
+            downloadOnly,
             taskId,
             taskStatus,
             currentTab,
@@ -458,6 +479,7 @@ createApp({
             result,
             isProcessing,
             isFailed,
+            hasTextContent,
             currentContent,
             isContentLoading,
             contentLoadingText,
