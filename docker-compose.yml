@@ -10,3 +10,5 @@ services:
       - GITCODE_AI_TOKEN=${GITCODE_AI_TOKEN}
       - XIAZAITOOL_TOKEN=${XIAZAITOOL_TOKEN}
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
