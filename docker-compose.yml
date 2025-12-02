@@ -1,0 +1,14 @@
+services:
+  v2t:
+    build: .
+    image: v2t:latest
+    pull_policy: build
+    ports:
+      - "8100:8100"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GITCODE_AI_TOKEN=${GITCODE_AI_TOKEN}
+      - XIAZAITOOL_TOKEN=${XIAZAITOOL_TOKEN}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,10 +1,18 @@
-"""配置管理 - 使用 JSON 配置文件"""
+"""配置管理 - 优先使用环境变量，回退到 JSON 配置文件"""
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "v2t" / "config.json"
+
+# 环境变量映射
+ENV_MAPPING = {
+    "groq_api_key": "GROQ_API_KEY",
+    "gitcode_ai_token": "GITCODE_AI_TOKEN",
+    "xiazaitool_token": "XIAZAITOOL_TOKEN",
+}
 
 
 @dataclass
@@ -55,10 +63,15 @@ _settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    """获取配置（单例）"""
+    """获取配置（单例）- 环境变量优先，回退到配置文件"""
     global _settings
     if _settings is None:
         config = load_config()
+        # 环境变量优先覆盖配置文件
+        for field_name, env_name in ENV_MAPPING.items():
+            env_value = os.environ.get(env_name)
+            if env_value:
+                config[field_name] = env_value
         # 只传入 Settings 支持的字段
         valid_fields = {f.name for f in Settings.__dataclass_fields__.values()}
         filtered_config = {k: v for k, v in config.items() if k in valid_fields}

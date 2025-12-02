@@ -172,7 +172,24 @@ async def download_file(
             raise DownloadError(f"aria2c 下载失败: {error_msg}")
 
         if not save_path.exists():
-            raise DownloadError("下载完成但文件不存在")
+            # aria2c 可能使用了服务器指定的文件名，查找最新下载的文件
+            recent_files = sorted(
+                download_dir.iterdir(),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+            # 找到最新的非 .aria2 文件
+            downloaded_file = None
+            for f in recent_files:
+                if f.is_file() and not f.suffix == ".aria2":
+                    downloaded_file = f
+                    break
+
+            if downloaded_file:
+                # 重命名为预期的文件名
+                downloaded_file.rename(save_path)
+            else:
+                raise DownloadError("下载完成但文件不存在")
 
         return VideoResult(path=save_path, title=title)
 
