@@ -42,5 +42,4 @@ docker-compose.yml
 .dockerignore
 
 # Documentation
-README.md
 LICENSE
