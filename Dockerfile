@@ -30,11 +30,8 @@ RUN uv pip install .
 # 创建输出目录
 RUN mkdir -p /output
 
-# 设置工作目录为输出目录（方便用户挂载）
-WORKDIR /output
+# 暴露 Web 服务端口
+EXPOSE 8100
 
-# 入口点
-ENTRYPOINT ["v2t"]
-
-# 默认显示帮助
-CMD ["--help"]
+# 默认启动 Web 服务
+CMD ["v2t-web"]
