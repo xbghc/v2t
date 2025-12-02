@@ -2,6 +2,7 @@ services:
   v2t:
     build: .
     image: v2t:latest
+    pull_policy: build
     ports:
       - "8100:8100"
     environment:
