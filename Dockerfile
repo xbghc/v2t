@@ -16,8 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 uv
-RUN pip install uv
+# 安装 uv (先设置 PATH，确保后续命令可用)
+ENV PATH="/root/.local/bin:$PATH"
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 复制项目文件
 COPY pyproject.toml ./
