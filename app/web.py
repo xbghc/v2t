@@ -316,8 +316,12 @@ async def process_video_task(task_id: str, url: str, download_only: bool = False
 
 
 @app.post("/api/process", response_model=TaskResponse)
-async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks):
-    """创建视频处理任务"""
+async def create_task(
+    request: ProcessRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(require_user),
+):
+    """创建视频处理任务（需要登录）"""
     # 清理过期任务
     cleanup_old_tasks()
 
@@ -328,6 +332,8 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
 
     # 在后台执行处理
     background_tasks.add_task(process_video_task, task_id, request.url, request.download_only)
+
+    logger.info("用户 %s 创建任务 %s", user.email, task_id)
 
     return TaskResponse(
         task_id=task_id,

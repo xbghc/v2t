@@ -542,6 +542,12 @@ createApp({
         }
 
         const submitUrl = async () => {
+            // 检查是否登录
+            if (!user.value) {
+                showLoginModal.value = true
+                return
+            }
+
             if (!url.value.trim()) {
                 alert('请输入视频链接')
                 return
@@ -553,14 +559,26 @@ createApp({
             page.value = 'result'
 
             try {
+                const token = getToken()
                 const response = await fetch('api/process', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ url: url.value, download_only: lastDownloadOnly })
                 })
                 const data = await response.json()
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        // Token 过期，清除登录状态
+                        removeToken()
+                        user.value = null
+                        showLoginModal.value = true
+                        page.value = 'initial'
+                        return
+                    }
                     throw new Error(data.detail || '提交失败')
                 }
 
