@@ -12,6 +12,13 @@ ENV_MAPPING = {
     "groq_api_key": "GROQ_API_KEY",
     "gitcode_ai_token": "GITCODE_AI_TOKEN",
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
+    # SMTP 配置
+    "smtp_host": "SMTP_HOST",
+    "smtp_port": "SMTP_PORT",
+    "smtp_user": "SMTP_USER",
+    "smtp_password": "SMTP_PASSWORD",
+    # JWT 配置
+    "jwt_secret": "JWT_SECRET",
 }
 
 
@@ -34,6 +41,18 @@ class Settings:
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时
     temp_dir: str = "/tmp/v2t"  # 临时文件目录
+
+    # SMTP 邮件配置
+    smtp_host: str = ""  # 如 smtp.qq.com
+    smtp_port: int = 465  # SSL 端口
+    smtp_user: str = ""  # 发件邮箱
+    smtp_password: str = ""  # 邮箱授权码
+    smtp_use_tls: bool = True  # 使用 TLS
+    smtp_start_tls: bool = False  # 使用 STARTTLS
+
+    # JWT 配置
+    jwt_secret: str = "your-secret-key-change-in-production"  # JWT 密钥
+    jwt_expire_days: int = 7  # Token 过期天数
 
     @property
     def temp_path(self) -> Path:

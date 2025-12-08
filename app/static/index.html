@@ -45,6 +45,49 @@
 <body class="bg-background-light dark:bg-background-dark font-display">
 
 <div id="app" v-cloak>
+    <!-- ========== 登录模态框 ========== -->
+    <div v-if="showLoginModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+        <div class="bg-white dark:bg-[#1c1f27] rounded-xl w-full max-w-md p-6 relative">
+            <button @click="showLoginModal = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+            <h3 class="text-xl font-bold text-gray-900 dark:text-white mb-6">登录 / 注册</h3>
+
+            <!-- 邮箱输入 -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">邮箱地址</label>
+                <input v-model="loginEmail" type="email" :disabled="codeSent" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#111318] text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50" placeholder="your@email.com"/>
+            </div>
+
+            <!-- 验证码输入 -->
+            <div v-if="codeSent" class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">验证码</label>
+                <div class="flex gap-3">
+                    <input v-model="loginCode" type="text" maxlength="6" class="flex-1 px-4 py-3 rounded-lg border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#111318] text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-center text-lg tracking-widest" placeholder="000000" @keypress.enter="doLogin"/>
+                </div>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">验证码已发送至 {{ loginEmail }}</p>
+            </div>
+
+            <!-- 错误提示 -->
+            <p v-if="loginError" class="text-red-500 text-sm mb-4">{{ loginError }}</p>
+
+            <!-- 操作按钮 -->
+            <div class="flex gap-3">
+                <button v-if="!codeSent" @click="sendCode" :disabled="loginLoading" class="flex-1 py-3 px-4 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {{ loginLoading ? '发送中...' : '发送验证码' }}
+                </button>
+                <template v-else>
+                    <button @click="codeSent = false; loginCode = ''" class="py-3 px-4 bg-gray-200 dark:bg-[#282e39] text-gray-700 dark:text-gray-200 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-[#3b4354]">
+                        修改邮箱
+                    </button>
+                    <button @click="doLogin" :disabled="loginLoading || loginCode.length < 6" class="flex-1 py-3 px-4 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {{ loginLoading ? '登录中...' : '登录' }}
+                    </button>
+                </template>
+            </div>
+        </div>
+    </div>
+
     <!-- ========== 初始状态页面 ========== -->
     <div v-if="page === 'initial'" class="relative flex min-h-screen w-full flex-col">
         <div class="layout-container flex h-full grow flex-col">
@@ -59,6 +102,17 @@
                                 </svg>
                             </div>
                             <h2 class="text-lg font-bold leading-tight tracking-[-0.015em] text-gray-900 dark:text-white">V2T 视频转文字</h2>
+                        </div>
+                        <!-- 用户登录状态 -->
+                        <div class="flex items-center gap-3">
+                            <template v-if="user">
+                                <span class="text-sm text-gray-600 dark:text-gray-300">{{ user.nickname || user.email }}</span>
+                                <button @click="logout" class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">退出</button>
+                            </template>
+                            <button v-else @click="showLoginModal = true" class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-[#282e39] rounded-lg hover:bg-gray-200 dark:hover:bg-[#3b4354]">
+                                <span class="material-symbols-outlined text-lg">person</span>
+                                登录
+                            </button>
                         </div>
                     </header>
                     <main class="flex-grow">
@@ -123,9 +177,22 @@
                     </div>
                     <h2 class="text-gray-900 dark:text-white text-lg font-bold leading-tight tracking-[-0.015em]">V2T 视频转文字</h2>
                 </div>
-                <button @click="startNew" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
-                    <span class="truncate">新建转换</span>
-                </button>
+                <div class="flex items-center gap-4">
+                    <!-- 用户登录状态 -->
+                    <div class="flex items-center gap-3">
+                        <template v-if="user">
+                            <span class="text-sm text-gray-600 dark:text-gray-300">{{ user.nickname || user.email }}</span>
+                            <button @click="logout" class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">退出</button>
+                        </template>
+                        <button v-else @click="showLoginModal = true" class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-[#282e39] rounded-lg hover:bg-gray-200 dark:hover:bg-[#3b4354]">
+                            <span class="material-symbols-outlined text-lg">person</span>
+                            登录
+                        </button>
+                    </div>
+                    <button @click="startNew" class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+                        <span class="truncate">新建转换</span>
+                    </button>
+                </div>
             </header>
             <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
                 <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
@@ -242,11 +309,119 @@
 </div>
 
 <script>
-const { createApp, ref, reactive, computed } = Vue
+const { createApp, ref, reactive, computed, onMounted } = Vue
 
 createApp({
     setup() {
-        // 状态
+        // ============== 用户登录状态 ==============
+        const user = ref(null)
+        const showLoginModal = ref(false)
+        const loginEmail = ref('')
+        const loginCode = ref('')
+        const loginError = ref('')
+        const loginLoading = ref(false)
+        const codeSent = ref(false)
+
+        // 获取存储的 token
+        const getToken = () => localStorage.getItem('v2t_token')
+        const setToken = (token) => localStorage.setItem('v2t_token', token)
+        const removeToken = () => localStorage.removeItem('v2t_token')
+
+        // 获取用户信息
+        const fetchUserProfile = async () => {
+            const token = getToken()
+            if (!token) return
+
+            try {
+                const response = await fetch('/api/user/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+                if (response.ok) {
+                    user.value = await response.json()
+                } else {
+                    removeToken()
+                }
+            } catch (error) {
+                console.error('获取用户信息失败:', error)
+            }
+        }
+
+        // 发送验证码
+        const sendCode = async () => {
+            if (!loginEmail.value || !loginEmail.value.includes('@')) {
+                loginError.value = '请输入有效的邮箱地址'
+                return
+            }
+            loginError.value = ''
+            loginLoading.value = true
+
+            try {
+                const response = await fetch('/api/auth/send-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginEmail.value })
+                })
+                const data = await response.json()
+
+                if (data.success) {
+                    codeSent.value = true
+                } else {
+                    loginError.value = data.message || '发送失败'
+                }
+            } catch (error) {
+                loginError.value = '网络错误，请重试'
+            } finally {
+                loginLoading.value = false
+            }
+        }
+
+        // 登录
+        const doLogin = async () => {
+            if (loginCode.value.length < 6) {
+                loginError.value = '请输入6位验证码'
+                return
+            }
+            loginError.value = ''
+            loginLoading.value = true
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: loginEmail.value, code: loginCode.value })
+                })
+                const data = await response.json()
+
+                if (data.success && data.token) {
+                    setToken(data.token)
+                    await fetchUserProfile()
+                    showLoginModal.value = false
+                    // 重置登录表单
+                    loginEmail.value = ''
+                    loginCode.value = ''
+                    codeSent.value = false
+                } else {
+                    loginError.value = data.message || '登录失败'
+                }
+            } catch (error) {
+                loginError.value = '网络错误，请重试'
+            } finally {
+                loginLoading.value = false
+            }
+        }
+
+        // 退出登录
+        const logout = () => {
+            removeToken()
+            user.value = null
+        }
+
+        // 页面加载时获取用户信息
+        onMounted(() => {
+            fetchUserProfile()
+        })
+
+        // ============== 任务相关状态 ==============
         const page = ref('initial')
         const url = ref('')
         const downloadOnly = ref(false)
@@ -367,6 +542,12 @@ createApp({
         }
 
         const submitUrl = async () => {
+            // 检查是否登录
+            if (!user.value) {
+                showLoginModal.value = true
+                return
+            }
+
             if (!url.value.trim()) {
                 alert('请输入视频链接')
                 return
@@ -378,14 +559,26 @@ createApp({
             page.value = 'result'
 
             try {
+                const token = getToken()
                 const response = await fetch('api/process', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
                     body: JSON.stringify({ url: url.value, download_only: lastDownloadOnly })
                 })
                 const data = await response.json()
 
                 if (!response.ok) {
+                    if (response.status === 401) {
+                        // Token 过期，清除登录状态
+                        removeToken()
+                        user.value = null
+                        showLoginModal.value = true
+                        page.value = 'initial'
+                        return
+                    }
                     throw new Error(data.detail || '提交失败')
                 }
 
@@ -468,6 +661,18 @@ createApp({
         }
 
         return {
+            // 用户登录
+            user,
+            showLoginModal,
+            loginEmail,
+            loginCode,
+            loginError,
+            loginLoading,
+            codeSent,
+            sendCode,
+            doLogin,
+            logout,
+            // 任务相关
             page,
             url,
             downloadOnly,

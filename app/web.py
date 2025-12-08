@@ -7,7 +7,8 @@ import time
 from pathlib import Path
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Optional, Annotated
+from contextlib import asynccontextmanager
 
 # 配置日志
 logging.basicConfig(
@@ -16,15 +17,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.database import init_db, get_db
+from app.models import User
 from app.services.video_downloader import download_video, DownloadError
 from app.services.transcribe import extract_audio_async, TranscribeError
 from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
+from app.services.auth import (
+    send_code,
+    verify_and_login,
+    verify_token,
+    get_user_by_id,
+)
 
 
 class TaskStatus(str, Enum):
@@ -58,7 +68,113 @@ tasks: dict[str, TaskResult] = {}
 # 任务过期时间（1小时）
 TASK_EXPIRE_SECONDS = 3600
 
-app = FastAPI(title="v2t - 视频转文字", description="输入视频链接，获取视频、音频、大纲和详细文字")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时初始化数据库
+    await init_db()
+    logger.info("数据库初始化完成")
+    yield
+    # 关闭时的清理工作（如果需要）
+
+
+app = FastAPI(
+    title="v2t - 视频转文字",
+    description="输入视频链接，获取视频、音频、大纲和详细文字",
+    lifespan=lifespan,
+)
+
+
+# ============== 认证相关 ==============
+
+class SendCodeRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifyCodeRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class AuthResponse(BaseModel):
+    success: bool
+    message: str
+    token: Optional[str] = None
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    email: str
+    nickname: str
+    balance: int
+
+
+async def get_current_user(
+    authorization: Annotated[Optional[str], Header()] = None,
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """获取当前登录用户（可选）"""
+    if not authorization:
+        return None
+
+    # 支持 "Bearer token" 格式
+    token = authorization
+    if authorization.startswith("Bearer "):
+        token = authorization[7:]
+
+    payload = verify_token(token)
+    if not payload:
+        return None
+
+    user_id = int(payload.get("sub", 0))
+    if not user_id:
+        return None
+
+    return await get_user_by_id(db, user_id)
+
+
+async def require_user(
+    user: Annotated[Optional[User], Depends(get_current_user)]
+) -> User:
+    """要求用户必须登录"""
+    if not user:
+        raise HTTPException(status_code=401, detail="请先登录")
+    return user
+
+
+@app.post("/api/auth/send-code", response_model=AuthResponse)
+async def api_send_code(
+    request: SendCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """发送验证码"""
+    success, message = await send_code(db, request.email)
+    return AuthResponse(success=success, message=message)
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+async def api_login(
+    request: VerifyCodeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """验证码登录"""
+    success, message, token = await verify_and_login(db, request.email, request.code)
+    return AuthResponse(success=success, message=message, token=token)
+
+
+@app.get("/api/user/profile", response_model=UserProfileResponse)
+async def api_get_profile(user: User = Depends(require_user)):
+    """获取用户信息"""
+    return UserProfileResponse(
+        id=user.id,
+        email=user.email,
+        nickname=user.nickname,
+        balance=user.balance,
+    )
+
+
+# ============== 任务相关 ==============
 
 
 class ProcessRequest(BaseModel):
@@ -200,8 +316,12 @@ async def process_video_task(task_id: str, url: str, download_only: bool = False
 
 
 @app.post("/api/process", response_model=TaskResponse)
-async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks):
-    """创建视频处理任务"""
+async def create_task(
+    request: ProcessRequest,
+    background_tasks: BackgroundTasks,
+    user: User = Depends(require_user),
+):
+    """创建视频处理任务（需要登录）"""
     # 清理过期任务
     cleanup_old_tasks()
 
@@ -212,6 +332,8 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
 
     # 在后台执行处理
     background_tasks.add_task(process_video_task, task_id, request.url, request.download_only)
+
+    logger.info("用户 %s 创建任务 %s", user.email, task_id)
 
     return TaskResponse(
         task_id=task_id,
