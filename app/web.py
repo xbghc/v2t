@@ -273,14 +273,35 @@ async def download_task_audio(task_id: str):
     )
 
 
+# 静态文件目录
+STATIC_DIR = Path(__file__).parent / "static"
+DIST_DIR = STATIC_DIR / "dist"
+
+# 挂载构建后的静态资源
+# 注意：需要在启动前确保 dist 目录存在（运行 npm run build）
+try:
+    if (DIST_DIR / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
+    if DIST_DIR.exists():
+        # 挂载 dist 根目录下的其他静态文件（如 vite.svg）
+        app.mount("/static", StaticFiles(directory=DIST_DIR), name="static")
+except Exception:
+    pass  # 静态文件目录不存在时忽略
+
+
 # 前端页面
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """返回前端页面"""
-    html_path = Path(__file__).parent / "static" / "index.html"
+    # 优先使用构建后的 dist 目录
+    dist_html = DIST_DIR / "index.html"
+    if dist_html.exists():
+        return HTMLResponse(dist_html.read_text(encoding="utf-8"))
+    # 回退到原始的 static 目录（开发时）
+    html_path = STATIC_DIR / "index.html"
     if html_path.exists():
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>v2t Web</h1><p>前端文件未找到</p>")
+    return HTMLResponse("<h1>v2t Web</h1><p>前端文件未找到，请先运行 npm run build</p>")
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8100):
