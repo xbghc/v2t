@@ -1,0 +1,199 @@
+<script setup>
+import { computed } from 'vue'
+import { marked } from 'marked'
+import AppHeader from './AppHeader.vue'
+import ProgressBar from './ProgressBar.vue'
+import MediaDownload from './MediaDownload.vue'
+import ContentTabs from './ContentTabs.vue'
+
+const props = defineProps({
+    taskId: {
+        type: String,
+        default: null
+    },
+    taskStatus: {
+        type: String,
+        default: 'pending'
+    },
+    errorMessage: {
+        type: String,
+        default: ''
+    },
+    progress: {
+        type: Object,
+        required: true
+    },
+    result: {
+        type: Object,
+        required: true
+    }
+})
+
+const currentTab = defineModel('currentTab', { type: String, default: 'article' })
+
+defineEmits(['new-task', 'retry', 'copy'])
+
+const isProcessing = computed(() => {
+    return props.taskStatus !== 'completed' && props.taskStatus !== 'failed'
+})
+
+const isFailed = computed(() => {
+    return props.taskStatus === 'failed'
+})
+
+const hasTextContent = computed(() => {
+    return !!(props.result.transcript || props.result.outline || props.result.article)
+})
+
+const currentContent = computed(() => {
+    if (currentTab.value === 'article') return props.result.article || ''
+    if (currentTab.value === 'outline') return props.result.outline || ''
+    return props.result.transcript || ''
+})
+
+const isContentLoading = computed(() => {
+    if (!isProcessing.value && !isFailed.value) {
+        return false
+    }
+    if (currentTab.value === 'transcript') {
+        return !props.result.transcript
+    }
+    if (currentTab.value === 'outline') {
+        return !props.result.outline && isProcessing.value
+    }
+    if (currentTab.value === 'article') {
+        return !props.result.article && isProcessing.value
+    }
+    return false
+})
+
+const contentLoadingText = computed(() => {
+    if (currentTab.value === 'transcript') {
+        if (props.taskStatus === 'downloading') return '正在下载视频，转录内容稍后显示...'
+        if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        return '准备中...'
+    }
+    if (currentTab.value === 'outline' || currentTab.value === 'article') {
+        if (props.taskStatus === 'downloading') return '正在下载视频...'
+        if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        if (props.taskStatus === 'generating') return '正在生成内容...'
+        return '准备中...'
+    }
+    return '加载中...'
+})
+
+const renderedContent = computed(() => {
+    if (!currentContent.value) {
+        if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
+        if (!isProcessing.value) {
+            if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
+            if (currentTab.value === 'outline') return '<p class="text-gray-500">(大纲生成失败)</p>'
+            return '<p class="text-gray-500">(无转录内容)</p>'
+        }
+        return ''
+    }
+    return marked.parse(currentContent.value)
+})
+
+const statusTitle = computed(() => {
+    if (isFailed.value) return '转换失败'
+    if (isProcessing.value) return '正在处理'
+    return '转换完成'
+})
+
+const statusDescription = computed(() => {
+    if (isFailed.value) return props.errorMessage
+    if (isProcessing.value) return '请勿关闭页面，内容将逐步显示'
+    return '查看生成的内容，复制或下载原始媒体文件'
+})
+
+const videoDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}/video` : '')
+const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}/audio` : '')
+</script>
+
+<template>
+    <div class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <AppHeader variant="result" :show-new-button="true" @new-task="$emit('new-task')" />
+
+            <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
+                <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
+                    <!-- PageHeading -->
+                    <div class="flex flex-wrap justify-between gap-3 p-4">
+                        <div class="flex min-w-72 flex-col gap-2">
+                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">
+                                {{ statusTitle }}
+                            </p>
+                            <p class="text-gray-500 dark:text-[#9da6b9] text-base font-normal leading-normal">
+                                {{ statusDescription }}
+                            </p>
+                        </div>
+                        <div v-if="isFailed" class="flex items-center">
+                            <button
+                                @click="$emit('retry')"
+                                class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors"
+                            >
+                                <span class="truncate">重新尝试</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <ProgressBar
+                        v-if="isProcessing"
+                        :step="progress.step"
+                        :text="progress.text"
+                        :percent="progress.percent"
+                    />
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
+                        <!-- Left Column: Video Info -->
+                        <aside class="lg:col-span-1 flex flex-col gap-6">
+                            <div class="flex flex-col gap-4">
+                                <div class="flex flex-col gap-1">
+                                    <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">
+                                        {{ result.title || '视频标题' }}
+                                    </p>
+                                </div>
+                                <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
+                                    <MediaDownload
+                                        type="video"
+                                        :available="result.has_video"
+                                        :is-processing="isProcessing"
+                                        :download-url="videoDownloadUrl"
+                                    />
+                                    <MediaDownload
+                                        type="audio"
+                                        :available="result.has_audio"
+                                        :is-processing="isProcessing"
+                                        :download-url="audioDownloadUrl"
+                                    />
+                                </div>
+                            </div>
+                        </aside>
+
+                        <!-- Right Column: Content -->
+                        <ContentTabs
+                            v-if="hasTextContent || isProcessing"
+                            v-model:current-tab="currentTab"
+                            :is-loading="isContentLoading"
+                            :loading-text="contentLoadingText"
+                            :rendered-content="renderedContent"
+                            @copy="$emit('copy')"
+                        />
+
+                        <!-- 仅下载模式提示 -->
+                        <div
+                            v-else-if="!isFailed"
+                            class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39] p-12"
+                        >
+                            <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
+                            <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
+                            <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">请使用左侧按钮下载视频或音频文件</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+</template>
