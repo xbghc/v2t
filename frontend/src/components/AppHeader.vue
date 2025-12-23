@@ -22,12 +22,12 @@ defineEmits(['new-task'])
     >
         <div class="flex items-center gap-4 text-gray-800 dark:text-white">
             <AppLogo :size="variant === 'result' ? '6' : '5'" />
-            <h2 class="text-lg font-bold leading-tight tracking-[-0.015em] text-gray-900 dark:text-white">V2T 视频转文字</h2>
+            <h2 class="text-lg font-bold leading-tight tracking-tight-sm text-gray-900 dark:text-white">V2T 视频转文字</h2>
         </div>
         <button
             v-if="showNewButton"
             @click="$emit('new-task')"
-            class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors"
+            class="flex min-w-btn max-w-input cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
         >
             <span class="truncate">新建转换</span>
         </button>

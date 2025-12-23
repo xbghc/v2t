@@ -29,6 +29,28 @@ export default {
         "xl": "0.75rem",
         "full": "9999px"
       },
+      minWidth: {
+        "btn": "84px",
+      },
+      maxWidth: {
+        "input": "480px",
+        "content": "960px",
+      },
+      minHeight: {
+        "hero": "400px",
+      },
+      spacing: {
+        "3.25": "13px",
+        "3.75": "15px",
+      },
+      borderWidth: {
+        "3": "3px",
+      },
+      letterSpacing: {
+        "tight-sm": "-0.015em",
+        "tight-lg": "-0.033em",
+        "wide-sm": "0.015em",
+      },
     },
   },
   plugins: [

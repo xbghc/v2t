@@ -121,7 +121,7 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                     <!-- PageHeading -->
                     <div class="flex flex-wrap justify-between gap-3 p-4">
                         <div class="flex min-w-72 flex-col gap-2">
-                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">
+                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-tight-lg">
                                 {{ statusTitle }}
                             </p>
                             <p class="text-gray-500 dark:text-dark-text-muted text-base font-normal leading-normal">
@@ -131,7 +131,7 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                         <div v-if="isFailed" class="flex items-center">
                             <button
                                 @click="$emit('retry')"
-                                class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors"
+                                class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
                             >
                                 <span class="truncate">重新尝试</span>
                             </button>

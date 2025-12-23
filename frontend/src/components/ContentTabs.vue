@@ -40,11 +40,11 @@ const tabs = [
                             :key="tab.key"
                             href="#"
                             @click.prevent="$emit('update:currentTab', tab.key)"
-                            class="flex flex-col items-center justify-center border-b-[3px] pb-[13px] pt-2 transition-colors"
+                            class="flex flex-col items-center justify-center border-b-3 pb-3.25 pt-2 transition-colors"
                             :class="currentTab === tab.key ? 'border-b-primary' : 'border-b-transparent'"
                         >
                             <p
-                                class="text-sm font-bold leading-normal tracking-[0.015em]"
+                                class="text-sm font-bold leading-normal tracking-tight-sm"
                                 :class="currentTab === tab.key ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-dark-text-muted'"
                             >{{ tab.label }}</p>
                         </a>
@@ -56,7 +56,7 @@ const tabs = [
                         @click="$emit('copy')"
                         :disabled="isLoading"
                         :class="isLoading ? 'bg-gray-100 dark:bg-dark-card text-gray-400 dark:text-gray-600 cursor-not-allowed' : 'bg-gray-200 dark:bg-dark-border text-gray-900 dark:text-white cursor-pointer hover:bg-gray-300 dark:hover:bg-dark-border-light'"
-                        class="flex min-w-[84px] max-w-[480px] items-center justify-center overflow-hidden rounded-lg h-10 px-4 gap-2 text-sm font-bold leading-normal tracking-[0.015em] transition-colors"
+                        class="flex min-w-btn max-w-input items-center justify-center overflow-hidden rounded-lg h-10 px-4 gap-2 text-sm font-bold leading-normal tracking-tight-sm transition-colors"
                     >
                         <span class="material-symbols-outlined text-xl">content_copy</span>
                         <span class="truncate">复制内容</span>

@@ -44,7 +44,7 @@ const showPulse = computed(() => !props.available && props.isProcessing)
     <a
         v-if="available"
         :href="downloadUrl"
-        class="flex w-full min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-dark-border text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-dark-border-light transition-colors"
+        class="flex w-full min-w-btn max-w-input cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-200 dark:bg-dark-border text-gray-900 dark:text-white gap-2 text-sm font-medium leading-normal hover:bg-gray-300 dark:hover:bg-dark-border-light transition-colors"
     >
         <span class="material-symbols-outlined text-lg">{{ icon }}</span>
         <span class="truncate">{{ label }}</span>
@@ -52,7 +52,7 @@ const showPulse = computed(() => !props.available && props.isProcessing)
     <button
         v-else
         disabled
-        class="flex w-full min-w-[84px] max-w-[480px] items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 dark:bg-dark-card text-gray-400 dark:text-gray-600 gap-2 text-sm font-medium leading-normal cursor-not-allowed"
+        class="flex w-full min-w-btn max-w-input items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 dark:bg-dark-card text-gray-400 dark:text-gray-600 gap-2 text-sm font-medium leading-normal cursor-not-allowed"
     >
         <span class="material-symbols-outlined text-lg" :class="{ 'animate-pulse': showPulse }">{{ icon }}</span>
         <span class="truncate">{{ label }}</span>
