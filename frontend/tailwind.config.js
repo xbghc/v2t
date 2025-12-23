@@ -11,6 +11,14 @@ export default {
         "primary": "#135bec",
         "background-light": "#f6f6f8",
         "background-dark": "#101622",
+        "dark": {
+          "bg": "#111318",
+          "card": "#1c1f27",
+          "border": "#282e39",
+          "border-light": "#3b4354",
+          "text": "#c4c9d4",
+          "text-muted": "#9da6b9",
+        }
       },
       fontFamily: {
         "display": ["Inter", "sans-serif"]

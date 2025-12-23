@@ -25,16 +25,16 @@ defineEmits(['submit'])
                                 </div>
                                 <label class="flex flex-col min-w-40 h-14 w-full max-w-[480px] @[480px]:h-16">
                                     <div class="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm">
-                                        <div class="text-gray-400 dark:text-[#9da6b9] flex border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] items-center justify-center pl-4 rounded-l-lg border-r-0">
+                                        <div class="text-gray-400 dark:text-dark-text-muted flex border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card items-center justify-center pl-4 rounded-l-lg border-r-0">
                                             <span class="material-symbols-outlined text-xl">link</span>
                                         </div>
                                         <input
                                             v-model="url"
                                             @keypress.enter="$emit('submit')"
-                                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] h-full placeholder:text-gray-400 dark:placeholder:text-[#9da6b9] px-[15px] border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base"
+                                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card h-full placeholder:text-gray-400 dark:placeholder:text-dark-text-muted px-[15px] border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base"
                                             placeholder="https://www.bilibili.com/video/..."
                                         />
-                                        <div class="flex items-center justify-center rounded-r-lg border-l-0 border border-gray-300 dark:border-[#3b4354] bg-white dark:bg-[#1c1f27] pr-2">
+                                        <div class="flex items-center justify-center rounded-r-lg border-l-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card pr-2">
                                             <button
                                                 @click="$emit('submit')"
                                                 class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-md h-10 px-4 @[480px]:h-12 @[480px]:px-5 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 focus:ring-0 focus:outline-none @[480px]:text-base"
@@ -49,7 +49,7 @@ defineEmits(['submit'])
                                     <input
                                         type="checkbox"
                                         v-model="downloadOnly"
-                                        class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-[#1c1f27]"
+                                        class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
                                     />
                                     <span class="text-sm text-gray-600 dark:text-gray-400">仅下载音视频，不转录</span>
                                 </label>
@@ -57,7 +57,7 @@ defineEmits(['submit'])
                         </div>
                         <!-- SectionHeader -->
                         <div class="py-8">
-                            <h4 class="text-sm font-bold leading-normal tracking-[0.015em] px-4 py-2 text-center text-gray-500 dark:text-[#9da6b9]">支持主流视频平台</h4>
+                            <h4 class="text-sm font-bold leading-normal tracking-[0.015em] px-4 py-2 text-center text-gray-500 dark:text-dark-text-muted">支持主流视频平台</h4>
                         </div>
                         <!-- Platform Icons -->
                         <div class="flex flex-wrap gap-8 px-4 items-center justify-center opacity-60">

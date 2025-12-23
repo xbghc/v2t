@@ -17,8 +17,8 @@ defineEmits(['new-task'])
 
 <template>
     <header
-        class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-[#282e39] py-3"
-        :class="variant === 'result' ? 'px-6 sm:px-10 lg:px-20 bg-white dark:bg-[#111318]' : 'px-4 sm:px-6 lg:px-10'"
+        class="flex items-center justify-between whitespace-nowrap border-b border-solid border-gray-200 dark:border-b-dark-border py-3"
+        :class="variant === 'result' ? 'px-6 sm:px-10 lg:px-20 bg-white dark:bg-dark-bg' : 'px-4 sm:px-6 lg:px-10'"
     >
         <div class="flex items-center gap-4 text-gray-800 dark:text-white">
             <AppLogo :size="variant === 'result' ? '6' : '5'" />

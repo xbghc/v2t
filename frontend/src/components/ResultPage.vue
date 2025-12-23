@@ -124,7 +124,7 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                             <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-[-0.033em]">
                                 {{ statusTitle }}
                             </p>
-                            <p class="text-gray-500 dark:text-[#9da6b9] text-base font-normal leading-normal">
+                            <p class="text-gray-500 dark:text-dark-text-muted text-base font-normal leading-normal">
                                 {{ statusDescription }}
                             </p>
                         </div>
@@ -185,7 +185,7 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                         <!-- 仅下载模式提示 -->
                         <div
                             v-else-if="!isFailed"
-                            class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-[#111318] rounded-xl border border-gray-200 dark:border-[#282e39] p-12"
+                            class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-dark-bg rounded-xl border border-gray-200 dark:border-dark-border p-12"
                         >
                             <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
                             <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
