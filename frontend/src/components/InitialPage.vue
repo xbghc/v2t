@@ -31,7 +31,7 @@ defineEmits(['submit'])
                                         <input
                                             v-model="url"
                                             @keypress.enter="$emit('submit')"
-                                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card h-full placeholder:text-gray-400 dark:placeholder:text-dark-text-muted px-3.75 border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base"
+                                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card h-full placeholder:text-gray-400 dark:placeholder:text-dark-text-muted px-3_75 border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base"
                                             placeholder="https://www.bilibili.com/video/..."
                                         />
                                         <div class="flex items-center justify-center rounded-r-lg border-l-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card pr-2">

@@ -40,7 +40,7 @@ const tabs = [
                             :key="tab.key"
                             href="#"
                             @click.prevent="$emit('update:currentTab', tab.key)"
-                            class="flex flex-col items-center justify-center border-b-3 pb-3.25 pt-2 transition-colors"
+                            class="flex flex-col items-center justify-center border-b-3 pb-3_25 pt-2 transition-colors"
                             :class="currentTab === tab.key ? 'border-b-primary' : 'border-b-transparent'"
                         >
                             <p
