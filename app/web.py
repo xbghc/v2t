@@ -60,6 +60,11 @@ TASK_EXPIRE_SECONDS = 3600
 
 app = FastAPI(title="v2t - 视频转文字", description="输入视频链接，获取视频、音频、大纲和详细文字")
 
+# 挂载静态资源目录
+static_path = Path(__file__).parent / "static" / "assets"
+if static_path.exists():
+    app.mount("/assets", StaticFiles(directory=static_path), name="assets")
+
 
 class ProcessRequest(BaseModel):
     url: str

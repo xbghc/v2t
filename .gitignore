@@ -35,3 +35,10 @@ test-results/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend build output
+app/static/assets/
+app/static/index.html
+
+# Node modules
+node_modules/
