@@ -1,13 +1,28 @@
-"""v2t Web API 服务"""
+"""v2t Web API 服务 - 资源导向 + SSE"""
 
 import asyncio
 import logging
-import uuid
-import time
+import json
 from pathlib import Path
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+from typing import Optional, AsyncGenerator
+
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
+from pydantic import BaseModel
+
+from app.config import get_settings
+from app.database import (
+    init_db,
+    create_video, get_video, update_video, delete_video,
+    create_transcript, get_transcript, get_transcript_by_video, update_transcript,
+    create_outline, get_outline, get_outline_by_transcript, update_outline,
+    create_article, get_article, get_article_by_transcript, update_article,
+    Video, Transcript, Outline, Article,
+)
+from app.services.video_downloader import download_video, DownloadError
+from app.services.transcribe import extract_audio_async, transcribe_audio, TranscribeError
+from app.services.gitcode_ai import generate_outline as ai_generate_outline, generate_article as ai_generate_article, GitCodeAIError
 
 # 配置日志
 logging.basicConfig(
@@ -16,269 +31,570 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
-
-from app.config import get_settings
-from app.services.video_downloader import download_video, DownloadError
-from app.services.transcribe import extract_audio_async, TranscribeError
-from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
-
-
-class TaskStatus(str, Enum):
-    PENDING = "pending"
-    DOWNLOADING = "downloading"
-    TRANSCRIBING = "transcribing"
-    GENERATING = "generating"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
-@dataclass
-class TaskResult:
-    """任务结果"""
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
-    progress: str = "等待处理..."
-    title: str = ""
-    video_path: Optional[Path] = None
-    audio_path: Optional[Path] = None
-    transcript: str = ""
-    outline: str = ""
-    article: str = ""
-    error: str = ""
-    created_at: float = field(default_factory=time.time)
-
-
-# 内存存储任务（小规模使用足够）
-tasks: dict[str, TaskResult] = {}
-
-# 任务过期时间（1小时）
-TASK_EXPIRE_SECONDS = 3600
-
-app = FastAPI(title="v2t - 视频转文字", description="输入视频链接，获取视频、音频、大纲和详细文字")
+app = FastAPI(title="v2t - 视频转文字", description="资源导向的视频转文字 API")
 
 # 挂载静态资源目录
 static_path = Path(__file__).parent / "static" / "assets"
 if static_path.exists():
     app.mount("/assets", StaticFiles(directory=static_path), name="assets")
 
+# SSE 事件队列 - 用于实时推送进度
+# key: resource_type:resource_id, value: asyncio.Queue
+sse_queues: dict[str, asyncio.Queue] = {}
 
-class ProcessRequest(BaseModel):
+
+# ============ Pydantic Models ============
+
+class VideoCreateRequest(BaseModel):
     url: str
-    download_only: bool = False  # 仅下载，不转录
 
 
-class TaskResponse(BaseModel):
-    task_id: str
+class VideoResponse(BaseModel):
+    id: str
+    url: Optional[str] = None
+    title: Optional[str] = None
     status: str
-    progress: str
-    title: str = ""
     has_video: bool = False
     has_audio: bool = False
-    transcript: str = ""
-    outline: str = ""
-    article: str = ""
-    error: str = ""
+    created: bool = False
+    created_at: str
 
 
-def cleanup_old_tasks():
-    """清理过期任务"""
-    now = time.time()
-    expired = [
-        tid for tid, task in tasks.items()
-        if now - task.created_at > TASK_EXPIRE_SECONDS
-    ]
-    for tid in expired:
-        task = tasks.pop(tid, None)
-        if task:
-            # 删除临时文件
-            if task.video_path and task.video_path.exists():
-                try:
-                    task.video_path.unlink()
-                except OSError:
-                    pass
-            if task.audio_path and task.audio_path.exists():
-                try:
-                    task.audio_path.unlink()
-                except OSError:
-                    pass
+class TranscriptCreateRequest(BaseModel):
+    video_id: str
 
 
-async def process_video_task(task_id: str, url: str, download_only: bool = False):
-    """后台处理视频任务"""
-    task = tasks.get(task_id)
-    if not task:
-        return
+class TranscriptResponse(BaseModel):
+    id: str
+    video_id: Optional[str] = None
+    status: str
+    content: Optional[str] = None
+    created_at: str
 
-    logger.info("任务 %s 开始处理: %s (仅下载: %s)", task_id, url, download_only)
 
-    settings = get_settings()
-    output_dir = settings.temp_path
-    output_dir.mkdir(parents=True, exist_ok=True)
+class OutlineResponse(BaseModel):
+    id: str
+    transcript_id: str
+    status: str
+    content: Optional[str] = None
+    created_at: str
+
+
+class ArticleResponse(BaseModel):
+    id: str
+    transcript_id: str
+    status: str
+    content: Optional[str] = None
+    created_at: str
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class ErrorResponse(BaseModel):
+    detail: str
+
+
+# ============ SSE Helpers ============
+
+def get_sse_key(resource_type: str, resource_id: str) -> str:
+    return f"{resource_type}:{resource_id}"
+
+
+async def send_sse_event(resource_type: str, resource_id: str, event: str, data: dict):
+    """发送 SSE 事件到对应的队列"""
+    key = get_sse_key(resource_type, resource_id)
+    if key in sse_queues:
+        await sse_queues[key].put({"event": event, "data": data})
+
+
+async def sse_generator(resource_type: str, resource_id: str) -> AsyncGenerator[str, None]:
+    """SSE 事件生成器"""
+    key = get_sse_key(resource_type, resource_id)
+
+    # 创建队列
+    queue = asyncio.Queue()
+    sse_queues[key] = queue
 
     try:
-        # 1. 下载视频
-        task.status = TaskStatus.DOWNLOADING
-        task.progress = "正在下载视频..."
+        while True:
+            try:
+                # 等待事件，超时 30 秒发送心跳
+                msg = await asyncio.wait_for(queue.get(), timeout=30)
+                event = msg["event"]
+                data = json.dumps(msg["data"], ensure_ascii=False)
+                yield f"event: {event}\ndata: {data}\n\n"
 
-        video_result = await download_video(url, output_dir=output_dir)
-        task.title = video_result.title
-        task.video_path = video_result.path
-        task.progress = f"下载完成: {video_result.title}"
-
-        # 仅下载模式：提取音频后直接完成
-        if download_only:
-            task.status = TaskStatus.TRANSCRIBING
-            task.progress = "正在提取音频..."
-            audio_path = await extract_audio_async(video_result.path)
-            task.audio_path = audio_path
-
-            task.status = TaskStatus.COMPLETED
-            task.progress = "下载完成"
-            logger.info("任务 %s 下载完成: %s", task_id, task.title)
-            return
-
-        # 检查视频时长
-        if video_result.duration and video_result.duration > settings.max_video_duration:
-            max_min = settings.max_video_duration // 60
-            video_min = video_result.duration // 60
-            raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
-
-        # 2. 提取音频
-        task.status = TaskStatus.TRANSCRIBING
-        task.progress = "正在提取音频..."
-
-        audio_path = await extract_audio_async(video_result.path)
-        task.audio_path = audio_path
-        task.progress = "正在转录音频..."
-
-        # 3. 转录音频
-        from app.services.transcribe import transcribe_audio
-        transcript = await transcribe_audio(audio_path)
-        task.transcript = transcript
-        task.progress = "转录完成"
-
-        # 4. 生成 AI 内容
-        task.status = TaskStatus.GENERATING
-
-        # 生成大纲
-        task.progress = "正在生成大纲..."
-        try:
-            outline = await generate_outline(transcript)
-            if outline and len(outline.strip()) >= 50:
-                task.outline = outline
-        except GitCodeAIError:
-            task.outline = ""  # 大纲生成失败，跳过
-
-        # 生成详细文章
-        task.progress = "正在生成详细内容..."
-        try:
-            article = await generate_article(transcript)
-            if article and len(article.strip()) >= 50:
-                task.article = article
-        except GitCodeAIError:
-            task.article = ""  # 文章生成失败，跳过
-
-        # 完成
-        task.status = TaskStatus.COMPLETED
-        task.progress = "处理完成"
-        logger.info("任务 %s 处理完成: %s", task_id, task.title)
-
-    except DownloadError as e:
-        task.status = TaskStatus.FAILED
-        task.error = f"下载失败: {e}"
-        task.progress = task.error
-        logger.warning("任务 %s 下载失败: %s", task_id, e)
-    except TranscribeError as e:
-        task.status = TaskStatus.FAILED
-        task.error = f"转录失败: {e}"
-        task.progress = task.error
-        logger.warning("任务 %s 转录失败: %s", task_id, e)
-    except Exception as e:
-        task.status = TaskStatus.FAILED
-        task.error = str(e)
-        task.progress = f"处理失败: {e}"
-        logger.exception("任务 %s 处理异常", task_id)
+                # done 事件后退出
+                if event == "done" or event == "error":
+                    break
+            except asyncio.TimeoutError:
+                # 发送心跳
+                yield ": heartbeat\n\n"
+    finally:
+        # 清理队列
+        sse_queues.pop(key, None)
 
 
-@app.post("/api/process", response_model=TaskResponse)
-async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks):
-    """创建视频处理任务"""
-    # 清理过期任务
-    cleanup_old_tasks()
+# ============ Startup ============
 
-    # 创建新任务
-    task_id = str(uuid.uuid4())[:8]
-    task = TaskResult(task_id=task_id)
-    tasks[task_id] = task
+@app.on_event("startup")
+async def startup():
+    """应用启动时初始化数据库"""
+    await init_db()
+    logger.info("数据库初始化完成")
 
-    # 在后台执行处理
-    background_tasks.add_task(process_video_task, task_id, request.url, request.download_only)
 
-    return TaskResponse(
-        task_id=task_id,
-        status=task.status.value,
-        progress=task.progress,
+# ============ Videos API ============
+
+@app.post("/api/videos", response_model=VideoResponse)
+async def api_create_video(request: VideoCreateRequest, background_tasks: BackgroundTasks):
+    """创建视频资源并开始下载"""
+    video, created = await create_video(request.url)
+
+    if created:
+        # 新建，启动后台下载任务
+        background_tasks.add_task(process_video_download, video.id)
+
+    video_path = Path(video.video_path) if video.video_path else None
+    audio_path = Path(video.audio_path) if video.audio_path else None
+
+    return VideoResponse(
+        id=video.id,
+        url=video.normalized_url,
+        title=video.title,
+        status=video.status,
+        has_video=video_path is not None and video_path.exists(),
+        has_audio=audio_path is not None and audio_path.exists(),
+        created=created,
+        created_at=video.created_at,
     )
 
 
-@app.get("/api/task/{task_id}", response_model=TaskResponse)
-async def get_task(task_id: str):
-    """获取任务状态"""
-    task = tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+@app.get("/api/videos/{video_id}", response_model=VideoResponse)
+async def api_get_video(video_id: str):
+    """获取视频状态"""
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
 
-    return TaskResponse(
-        task_id=task.task_id,
-        status=task.status.value,
-        progress=task.progress,
-        title=task.title,
-        has_video=task.video_path is not None and task.video_path.exists(),
-        has_audio=task.audio_path is not None and task.audio_path.exists(),
-        transcript=task.transcript,
-        outline=task.outline,
-        article=task.article,
-        error=task.error,
+    video_path = Path(video.video_path) if video.video_path else None
+    audio_path = Path(video.audio_path) if video.audio_path else None
+
+    return VideoResponse(
+        id=video.id,
+        url=video.normalized_url,
+        title=video.title,
+        status=video.status,
+        has_video=video_path is not None and video_path.exists(),
+        has_audio=audio_path is not None and audio_path.exists(),
+        created=False,
+        created_at=video.created_at,
     )
 
 
-@app.get("/api/task/{task_id}/video")
-async def download_task_video(task_id: str):
+@app.get("/api/videos/{video_id}/events")
+async def api_video_events(video_id: str):
+    """SSE 订阅视频下载进度"""
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
+
+    return StreamingResponse(
+        sse_generator("video", video_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.delete("/api/videos/{video_id}", response_model=MessageResponse)
+async def api_delete_video(video_id: str):
+    """删除视频及关联文件"""
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
+
+    # 删除文件
+    if video.video_path:
+        try:
+            Path(video.video_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+    if video.audio_path:
+        try:
+            Path(video.audio_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    await delete_video(video_id)
+    return MessageResponse(message="视频已删除")
+
+
+@app.get("/api/videos/{video_id}/file")
+async def api_download_video_file(video_id: str):
     """下载视频文件"""
-    task = tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    if not task.video_path or not task.video_path.exists():
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
+    if not video.video_path:
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+
+    video_path = Path(video.video_path)
+    if not video_path.exists():
         raise HTTPException(status_code=404, detail="视频文件不存在")
 
     return FileResponse(
-        task.video_path,
-        filename=task.video_path.name,
+        video_path,
+        filename=video_path.name,
         media_type="video/mp4",
     )
 
 
-@app.get("/api/task/{task_id}/audio")
-async def download_task_audio(task_id: str):
+@app.get("/api/videos/{video_id}/audio")
+async def api_download_audio_file(video_id: str):
     """下载音频文件"""
-    task = tasks.get(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="任务不存在")
-    if not task.audio_path or not task.audio_path.exists():
+    video = await get_video(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
+    if not video.audio_path:
         raise HTTPException(status_code=404, detail="音频文件不存在")
 
+    audio_path = Path(video.audio_path)
+    if not audio_path.exists():
+        raise HTTPException(status_code=404, detail="音频文件不存在")
+
+    filename = f"{video.title}.mp3" if video.title else "audio.mp3"
     return FileResponse(
-        task.audio_path,
-        filename=f"{task.title}.mp3" if task.title else "audio.mp3",
+        audio_path,
+        filename=filename,
         media_type="audio/mpeg",
     )
 
 
-# 前端页面
+# ============ Transcripts API ============
+
+@app.post("/api/transcripts", response_model=TranscriptResponse, status_code=201)
+async def api_create_transcript(request: TranscriptCreateRequest, background_tasks: BackgroundTasks):
+    """创建转录"""
+    # 检查视频是否存在且已完成
+    video = await get_video(request.video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="视频不存在")
+    if video.status != "completed":
+        raise HTTPException(status_code=409, detail="视频尚未下载完成")
+
+    # 创建转录记录
+    transcript = await create_transcript(video_id=request.video_id)
+
+    # 启动后台转录任务
+    background_tasks.add_task(process_transcript, transcript.id, video)
+
+    return TranscriptResponse(
+        id=transcript.id,
+        video_id=transcript.video_id,
+        status="processing",
+        content=transcript.content,
+        created_at=transcript.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}", response_model=TranscriptResponse)
+async def api_get_transcript(transcript_id: str):
+    """获取转录状态"""
+    transcript = await get_transcript(transcript_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="转录不存在")
+
+    return TranscriptResponse(
+        id=transcript.id,
+        video_id=transcript.video_id,
+        status=transcript.status,
+        content=transcript.content,
+        created_at=transcript.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}/events")
+async def api_transcript_events(transcript_id: str):
+    """SSE 订阅转录进度"""
+    transcript = await get_transcript(transcript_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="转录不存在")
+
+    return StreamingResponse(
+        sse_generator("transcript", transcript_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+# ============ Outlines API ============
+
+@app.post("/api/transcripts/{transcript_id}/outline", response_model=OutlineResponse, status_code=201)
+async def api_create_outline(transcript_id: str, background_tasks: BackgroundTasks):
+    """创建大纲"""
+    transcript = await get_transcript(transcript_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="转录不存在")
+    if transcript.status != "completed":
+        raise HTTPException(status_code=409, detail="转录尚未完成")
+
+    # 创建大纲记录
+    outline = await create_outline(transcript_id=transcript_id)
+
+    # 启动后台生成任务
+    background_tasks.add_task(process_outline, outline.id, transcript.content)
+
+    return OutlineResponse(
+        id=outline.id,
+        transcript_id=outline.transcript_id,
+        status="processing",
+        content=outline.content,
+        created_at=outline.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}/outline", response_model=OutlineResponse)
+async def api_get_outline(transcript_id: str):
+    """获取大纲"""
+    outline = await get_outline_by_transcript(transcript_id)
+    if not outline:
+        raise HTTPException(status_code=404, detail="大纲不存在，请先调用 POST 创建")
+
+    return OutlineResponse(
+        id=outline.id,
+        transcript_id=outline.transcript_id,
+        status=outline.status,
+        content=outline.content,
+        created_at=outline.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}/outline/events")
+async def api_outline_events(transcript_id: str):
+    """SSE 订阅大纲生成进度"""
+    outline = await get_outline_by_transcript(transcript_id)
+    if not outline:
+        raise HTTPException(status_code=404, detail="大纲不存在")
+
+    return StreamingResponse(
+        sse_generator("outline", outline.id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+# ============ Articles API ============
+
+@app.post("/api/transcripts/{transcript_id}/article", response_model=ArticleResponse, status_code=201)
+async def api_create_article(transcript_id: str, background_tasks: BackgroundTasks):
+    """创建文章"""
+    transcript = await get_transcript(transcript_id)
+    if not transcript:
+        raise HTTPException(status_code=404, detail="转录不存在")
+    if transcript.status != "completed":
+        raise HTTPException(status_code=409, detail="转录尚未完成")
+
+    # 创建文章记录
+    article = await create_article(transcript_id=transcript_id)
+
+    # 启动后台生成任务
+    background_tasks.add_task(process_article, article.id, transcript.content)
+
+    return ArticleResponse(
+        id=article.id,
+        transcript_id=article.transcript_id,
+        status="processing",
+        content=article.content,
+        created_at=article.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}/article", response_model=ArticleResponse)
+async def api_get_article(transcript_id: str):
+    """获取文章"""
+    article = await get_article_by_transcript(transcript_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在，请先调用 POST 创建")
+
+    return ArticleResponse(
+        id=article.id,
+        transcript_id=article.transcript_id,
+        status=article.status,
+        content=article.content,
+        created_at=article.created_at,
+    )
+
+
+@app.get("/api/transcripts/{transcript_id}/article/events")
+async def api_article_events(transcript_id: str):
+    """SSE 订阅文章生成进度"""
+    article = await get_article_by_transcript(transcript_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="文章不存在")
+
+    return StreamingResponse(
+        sse_generator("article", article.id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+# ============ Background Tasks ============
+
+async def process_video_download(video_id: str):
+    """后台任务：下载视频"""
+    logger.info("开始下载视频: %s", video_id)
+
+    try:
+        await update_video(video_id, status="downloading")
+        await send_sse_event("video", video_id, "status", {"status": "downloading", "progress": "开始下载..."})
+
+        video = await get_video(video_id)
+        settings = get_settings()
+        output_dir = settings.temp_path
+
+        # 下载视频
+        result = await download_video(video.original_url, output_dir=output_dir)
+
+        await send_sse_event("video", video_id, "status", {"status": "downloading", "progress": "下载完成，提取音频..."})
+
+        # 提取音频
+        audio_path = await extract_audio_async(result.path)
+
+        # 更新数据库
+        await update_video(
+            video_id,
+            status="completed",
+            title=result.title,
+            download_url=result.url if hasattr(result, 'url') else None,
+            video_path=str(result.path),
+            audio_path=str(audio_path),
+        )
+
+        await send_sse_event("video", video_id, "status", {"status": "completed", "title": result.title})
+        await send_sse_event("video", video_id, "done", {})
+
+        logger.info("视频下载完成: %s - %s", video_id, result.title)
+
+    except DownloadError as e:
+        logger.warning("视频下载失败: %s - %s", video_id, e)
+        await send_sse_event("video", video_id, "error", {"detail": f"下载失败: {e}"})
+    except Exception as e:
+        logger.exception("视频下载异常: %s", video_id)
+        await send_sse_event("video", video_id, "error", {"detail": f"处理失败: {e}"})
+
+
+async def process_transcript(transcript_id: str, video: Video):
+    """后台任务：转录音频"""
+    logger.info("开始转录: %s", transcript_id)
+
+    try:
+        await update_transcript(transcript_id, status="processing")
+        await send_sse_event("transcript", transcript_id, "status", {"status": "processing", "progress": "开始转录..."})
+
+        if not video.audio_path:
+            raise TranscribeError("音频文件不存在")
+
+        audio_path = Path(video.audio_path)
+        if not audio_path.exists():
+            raise TranscribeError("音频文件不存在")
+
+        # 转录
+        await send_sse_event("transcript", transcript_id, "status", {"status": "processing", "progress": "转录中..."})
+        content = await transcribe_audio(audio_path)
+
+        # 更新数据库
+        await update_transcript(transcript_id, status="completed", content=content)
+
+        await send_sse_event("transcript", transcript_id, "status", {"status": "completed"})
+        await send_sse_event("transcript", transcript_id, "done", {})
+
+        logger.info("转录完成: %s", transcript_id)
+
+    except TranscribeError as e:
+        logger.warning("转录失败: %s - %s", transcript_id, e)
+        await send_sse_event("transcript", transcript_id, "error", {"detail": f"转录失败: {e}"})
+    except Exception as e:
+        logger.exception("转录异常: %s", transcript_id)
+        await send_sse_event("transcript", transcript_id, "error", {"detail": f"处理失败: {e}"})
+
+
+async def process_outline(outline_id: str, transcript_content: str):
+    """后台任务：生成大纲"""
+    logger.info("开始生成大纲: %s", outline_id)
+
+    try:
+        await update_outline(outline_id, status="processing")
+        await send_sse_event("outline", outline_id, "status", {"status": "processing", "progress": "生成大纲中..."})
+
+        # 生成大纲
+        content = await ai_generate_outline(transcript_content)
+
+        if not content or len(content.strip()) < 50:
+            raise GitCodeAIError("生成的大纲内容过短")
+
+        # 更新数据库
+        await update_outline(outline_id, status="completed", content=content)
+
+        await send_sse_event("outline", outline_id, "status", {"status": "completed"})
+        await send_sse_event("outline", outline_id, "done", {})
+
+        logger.info("大纲生成完成: %s", outline_id)
+
+    except GitCodeAIError as e:
+        logger.warning("大纲生成失败: %s - %s", outline_id, e)
+        await send_sse_event("outline", outline_id, "error", {"detail": f"生成失败: {e}"})
+    except Exception as e:
+        logger.exception("大纲生成异常: %s", outline_id)
+        await send_sse_event("outline", outline_id, "error", {"detail": f"处理失败: {e}"})
+
+
+async def process_article(article_id: str, transcript_content: str):
+    """后台任务：生成文章"""
+    logger.info("开始生成文章: %s", article_id)
+
+    try:
+        await update_article(article_id, status="processing")
+        await send_sse_event("article", article_id, "status", {"status": "processing", "progress": "生成文章中..."})
+
+        # 生成文章
+        content = await ai_generate_article(transcript_content)
+
+        if not content or len(content.strip()) < 50:
+            raise GitCodeAIError("生成的文章内容过短")
+
+        # 更新数据库
+        await update_article(article_id, status="completed", content=content)
+
+        await send_sse_event("article", article_id, "status", {"status": "completed"})
+        await send_sse_event("article", article_id, "done", {})
+
+        logger.info("文章生成完成: %s", article_id)
+
+    except GitCodeAIError as e:
+        logger.warning("文章生成失败: %s - %s", article_id, e)
+        await send_sse_event("article", article_id, "error", {"detail": f"生成失败: {e}"})
+    except Exception as e:
+        logger.exception("文章生成异常: %s", article_id)
+        await send_sse_event("article", article_id, "error", {"detail": f"处理失败: {e}"})
+
+
+# ============ Frontend ============
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     """返回前端页面"""
