@@ -1,5 +1,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
+import AppHeader from './components/AppHeader.vue'
+import AppFooter from './components/AppFooter.vue'
 import InitialPage from './components/InitialPage.vue'
 import ResultPage from './components/ResultPage.vue'
 
@@ -167,23 +169,35 @@ const copyContent = () => {
 </script>
 
 <template>
-    <InitialPage
-        v-if="page === 'initial'"
-        v-model:url="url"
-        v-model:download-only="downloadOnly"
-        @submit="submitUrl"
-    />
+    <div class="relative flex min-h-screen w-full flex-col">
+        <div class="layout-container flex h-full grow flex-col">
+            <!-- Initial Page Layout -->
+            <div v-if="page === 'initial'" class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-20 lg:px-40">
+                <div class="layout-content-container flex w-full flex-col max-w-content flex-1">
+                    <AppHeader />
+                    <InitialPage
+                        v-model:url="url"
+                        v-model:download-only="downloadOnly"
+                        @submit="submitUrl"
+                    />
+                    <AppFooter />
+                </div>
+            </div>
 
-    <ResultPage
-        v-else-if="page === 'result'"
-        :task-id="taskId"
-        :task-status="taskStatus"
-        :error-message="errorMessage"
-        :progress="progress"
-        :result="result"
-        v-model:current-tab="currentTab"
-        @new-task="startNew"
-        @retry="retryTask"
-        @copy="copyContent"
-    />
+            <!-- Result Page Layout -->
+            <template v-else-if="page === 'result'">
+                <AppHeader variant="result" :show-new-button="true" @new-task="startNew" />
+                <ResultPage
+                    :task-id="taskId"
+                    :task-status="taskStatus"
+                    :error-message="errorMessage"
+                    :progress="progress"
+                    :result="result"
+                    v-model:current-tab="currentTab"
+                    @retry="retryTask"
+                    @copy="copyContent"
+                />
+            </template>
+        </div>
+    </div>
 </template>

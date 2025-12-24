@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import { marked } from 'marked'
-import AppHeader from './AppHeader.vue'
 import ProgressBar from './ProgressBar.vue'
 import MediaDownload from './MediaDownload.vue'
 import ContentTabs from './ContentTabs.vue'
@@ -31,7 +30,7 @@ const props = defineProps({
 
 const currentTab = defineModel('currentTab', { type: String, default: 'article' })
 
-defineEmits(['new-task', 'retry', 'copy'])
+defineEmits(['retry', 'copy'])
 
 const isProcessing = computed(() => {
     return props.taskStatus !== 'completed' && props.taskStatus !== 'failed'
@@ -112,88 +111,82 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
 </script>
 
 <template>
-    <div class="relative flex min-h-screen w-full flex-col">
-        <div class="layout-container flex h-full grow flex-col">
-            <AppHeader variant="result" :show-new-button="true" @new-task="$emit('new-task')" />
-
-            <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
-                <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
-                    <!-- PageHeading -->
-                    <div class="flex flex-wrap justify-between gap-3 p-4">
-                        <div class="flex min-w-72 flex-col gap-2">
-                            <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-tight-lg">
-                                {{ statusTitle }}
-                            </p>
-                            <p class="text-gray-500 dark:text-dark-text-muted text-base font-normal leading-normal">
-                                {{ statusDescription }}
-                            </p>
-                        </div>
-                        <div v-if="isFailed" class="flex items-center">
-                            <button
-                                @click="$emit('retry')"
-                                class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
-                            >
-                                <span class="truncate">重新尝试</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Progress Bar -->
-                    <ProgressBar
-                        v-if="isProcessing"
-                        :step="progress.step"
-                        :text="progress.text"
-                        :percent="progress.percent"
-                    />
-
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
-                        <!-- Left Column: Video Info -->
-                        <aside class="lg:col-span-1 flex flex-col gap-6">
-                            <div class="flex flex-col gap-4">
-                                <div class="flex flex-col gap-1">
-                                    <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">
-                                        {{ result.title || '视频标题' }}
-                                    </p>
-                                </div>
-                                <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
-                                    <MediaDownload
-                                        type="video"
-                                        :available="result.has_video"
-                                        :is-processing="isProcessing"
-                                        :download-url="videoDownloadUrl"
-                                    />
-                                    <MediaDownload
-                                        type="audio"
-                                        :available="result.has_audio"
-                                        :is-processing="isProcessing"
-                                        :download-url="audioDownloadUrl"
-                                    />
-                                </div>
-                            </div>
-                        </aside>
-
-                        <!-- Right Column: Content -->
-                        <ContentTabs
-                            v-if="hasTextContent || isProcessing"
-                            v-model:current-tab="currentTab"
-                            :is-loading="isContentLoading"
-                            :loading-text="contentLoadingText"
-                            :rendered-content="renderedContent"
-                            @copy="$emit('copy')"
-                        />
-
-                        <!-- 仅下载模式提示 -->
-                        <div
-                            v-else-if="!isFailed"
-                            class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-dark-bg rounded-xl border border-gray-200 dark:border-dark-border p-12"
-                        >
-                            <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
-                            <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
-                            <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">请使用左侧按钮下载视频或音频文件</p>
-                        </div>
-                    </div>
+    <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
+        <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
+            <!-- PageHeading -->
+            <div class="flex flex-wrap justify-between gap-3 p-4">
+                <div class="flex min-w-72 flex-col gap-2">
+                    <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-tight-lg">
+                        {{ statusTitle }}
+                    </p>
+                    <p class="text-gray-500 dark:text-dark-text-muted text-base font-normal leading-normal">
+                        {{ statusDescription }}
+                    </p>
                 </div>
-            </main>
+                <div v-if="isFailed" class="flex items-center">
+                    <button
+                        @click="$emit('retry')"
+                        class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
+                    >
+                        <span class="truncate">重新尝试</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <ProgressBar
+                v-if="isProcessing"
+                :step="progress.step"
+                :text="progress.text"
+                :percent="progress.percent"
+            />
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
+                <!-- Left Column: Video Info -->
+                <aside class="lg:col-span-1 flex flex-col gap-6">
+                    <div class="flex flex-col gap-4">
+                        <div class="flex flex-col gap-1">
+                            <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">
+                                {{ result.title || '视频标题' }}
+                            </p>
+                        </div>
+                        <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
+                            <MediaDownload
+                                type="video"
+                                :available="result.has_video"
+                                :is-processing="isProcessing"
+                                :download-url="videoDownloadUrl"
+                            />
+                            <MediaDownload
+                                type="audio"
+                                :available="result.has_audio"
+                                :is-processing="isProcessing"
+                                :download-url="audioDownloadUrl"
+                            />
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Right Column: Content -->
+                <ContentTabs
+                    v-if="hasTextContent || isProcessing"
+                    v-model:current-tab="currentTab"
+                    :is-loading="isContentLoading"
+                    :loading-text="contentLoadingText"
+                    :rendered-content="renderedContent"
+                    @copy="$emit('copy')"
+                />
+
+                <!-- 仅下载模式提示 -->
+                <div
+                    v-else-if="!isFailed"
+                    class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-dark-bg rounded-xl border border-gray-200 dark:border-dark-border p-12"
+                >
+                    <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
+                    <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
+                    <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">请使用左侧按钮下载视频或音频文件</p>
+                </div>
+            </div>
         </div>
-    </div>
+    </main>
 </template>
