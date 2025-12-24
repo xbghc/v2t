@@ -20,7 +20,12 @@
 
 ---
 
-## 二、数据库设计 (SQLite)
+## 二、数据库设计 (SQLite + aiosqlite)
+
+### 技术选型
+
+- **原生 sqlite3 + aiosqlite**: 轻量，无额外依赖，适合简单 CRUD
+- **不使用 SQLAlchemy**: 项目简单，ORM 过度工程
 
 ### 表结构
 
@@ -30,45 +35,37 @@ CREATE TABLE videos (
     id TEXT PRIMARY KEY,              -- 8位UUID
     url TEXT NOT NULL,                -- 原始视频URL
     title TEXT,                       -- 视频标题
-    status TEXT DEFAULT 'pending',    -- pending|downloading|completed|failed
+    status TEXT DEFAULT 'pending',    -- pending|downloading|completed
     video_path TEXT,                  -- 视频文件路径
     audio_path TEXT,                  -- 音频文件路径
-    error TEXT,                       -- 错误信息
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 转录资源
 CREATE TABLE transcripts (
     id TEXT PRIMARY KEY,
     video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,                     -- 转录内容
-    error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 大纲资源
 CREATE TABLE outlines (
     id TEXT PRIMARY KEY,
     video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,
-    error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 文章资源
 CREATE TABLE articles (
     id TEXT PRIMARY KEY,
     video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,
-    error TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 索引
@@ -76,6 +73,12 @@ CREATE INDEX idx_transcripts_video_id ON transcripts(video_id);
 CREATE INDEX idx_outlines_video_id ON outlines(video_id);
 CREATE INDEX idx_articles_video_id ON articles(video_id);
 ```
+
+### 错误处理策略
+
+- **失败时不入库**: 操作失败时，不插入/更新数据库记录
+- **API 返回实际错误**: 后端向前端返回具体错误信息
+- **用户重试**: 前端显示错误后，用户可重新发起请求
 
 ### 状态枚举
 
@@ -85,7 +88,8 @@ CREATE INDEX idx_articles_video_id ON articles(video_id);
 | `downloading` | 下载中（仅 videos） |
 | `processing` | 处理中 |
 | `completed` | 完成 |
-| `failed` | 失败 |
+
+> 注：无 `failed` 状态，失败时记录不入库，API 直接返回错误
 
 ---
 
@@ -152,9 +156,7 @@ GET    /api/videos/{id}/article     # 获取文章
   "status": "completed",
   "has_video": true,
   "has_audio": true,
-  "error": null,
-  "created_at": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-01T00:01:00Z"
+  "created_at": "2025-01-01T00:00:00Z"
 }
 ```
 
@@ -198,7 +200,6 @@ GET    /api/videos/{id}/article     # 获取文章
   "video_id": "a1b2c3d4",
   "status": "completed",
   "content": "转录文本内容...",
-  "error": null,
   "created_at": "2025-01-01T00:01:00Z"
 }
 ```
@@ -206,9 +207,25 @@ GET    /api/videos/{id}/article     # 获取文章
 **响应** (404 Not Found) - 如果未创建转录:
 ```json
 {
-  "error": "转录不存在，请先调用 POST /api/videos/{id}/transcript"
+  "detail": "转录不存在，请先调用 POST /api/videos/{id}/transcript"
 }
 ```
+
+### 错误响应格式
+
+所有失败请求返回统一格式：
+
+```json
+{
+  "detail": "具体错误信息"
+}
+```
+
+HTTP 状态码：
+- `400` - 请求参数错误
+- `404` - 资源不存在
+- `409` - 状态冲突（如视频未下载完就请求转录）
+- `500` - 服务器内部错误（下载失败、API 调用失败等）
 
 ---
 
@@ -292,7 +309,6 @@ POST /api/videos/abc123/outline
                     │              videos 表                    │
                     ├──────────────────────────────────────────┤
                     │  pending → downloading → completed       │
-                    │                      ↘ failed            │
                     └──────────────────────────────────────────┘
                                         │
                                         │ video.status == completed
@@ -302,12 +318,13 @@ POST /api/videos/abc123/outline
 ├─────────────────────┤  ├─────────────────────┤  ├─────────────────────┤
 │ pending → processing│  │ pending → processing│  │ pending → processing│
 │        ↘ completed  │  │        ↘ completed  │  │        ↘ completed  │
-│        ↘ failed     │  │        ↘ failed     │  │        ↘ failed     │
 └─────────────────────┘  └─────────────────────┘  └─────────────────────┘
          │                        ▲                        ▲
          │                        │                        │
          └────────────────────────┴────────────────────────┘
                   需要 transcript.status == completed
+
+> 注：失败时不更新状态，API 返回错误，用户可重试
 ```
 
 ---
