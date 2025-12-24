@@ -31,10 +31,12 @@
 ### 表结构
 
 ```sql
--- 视频资源（核心）
+-- 视频资源
 CREATE TABLE videos (
     id TEXT PRIMARY KEY,              -- 8位UUID
-    url TEXT NOT NULL,                -- 原始视频URL
+    original_url TEXT,                -- 用户输入的原始链接
+    normalized_url TEXT UNIQUE,       -- 规范化后的唯一标识（去除参数）
+    download_url TEXT,                -- 解析得到的下载链接
     title TEXT,                       -- 视频标题
     status TEXT DEFAULT 'pending',    -- pending|downloading|completed
     video_path TEXT,                  -- 视频文件路径
@@ -70,10 +72,34 @@ CREATE TABLE articles (
 );
 
 -- 索引
+CREATE INDEX idx_videos_normalized_url ON videos(normalized_url);
 CREATE INDEX idx_transcripts_video_id ON transcripts(video_id);
 CREATE INDEX idx_outlines_transcript_id ON outlines(transcript_id);
 CREATE INDEX idx_articles_transcript_id ON articles(transcript_id);
 ```
+
+### URL 规范化
+
+```python
+from urllib.parse import urlparse
+
+def normalize_url(url: str) -> str:
+    """去除 URL 参数，返回规范化的唯一标识"""
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+```
+
+**示例**:
+| 原始 URL | 规范化后 |
+|----------|----------|
+| `https://bilibili.com/video/BV123?spm=xxx` | `https://bilibili.com/video/BV123` |
+| `https://bilibili.com/video/BV123?t=120` | `https://bilibili.com/video/BV123` |
+
+**API 行为**:
+- POST 时先规范化 URL，查询是否已存在
+- 已存在且完成 → 返回已有记录
+- 已存在但处理中 → 返回已有记录（前端订阅 SSE）
+- 不存在 → 创建新记录
 
 ### 错误处理策略
 
@@ -128,24 +154,38 @@ GET    /api/transcripts/{id}/article/events  # SSE 订阅
 ### API 详细规格
 
 #### POST /api/videos
-创建视频资源并开始下载
+创建视频资源并开始下载（URL 会被规范化去重）
 
 **请求**:
 ```json
 {
-  "url": "https://example.com/video"
+  "url": "https://example.com/video?param=xxx"
 }
 ```
 
-**响应** (201 Created):
+**响应** (201 Created) - 新建:
 ```json
 {
   "id": "a1b2c3d4",
   "url": "https://example.com/video",
   "status": "downloading",
+  "created": true,
   "created_at": "2025-01-01T00:00:00Z"
 }
 ```
+
+**响应** (200 OK) - 已存在:
+```json
+{
+  "id": "a1b2c3d4",
+  "url": "https://example.com/video",
+  "status": "completed",
+  "created": false,
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+> `created: false` 表示返回的是已存在的记录，前端可直接使用或订阅 SSE
 
 ---
 
