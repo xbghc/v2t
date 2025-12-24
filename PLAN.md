@@ -1,216 +1,125 @@
 # REST API 原子性改进计划
 
-## 一、问题分析总结
+## 一、设计理念
 
-### 当前 API 端点
+### 从 Task 到 Resource
 
-| 端点 | 原子性 | 问题 |
-|------|--------|------|
-| `POST /api/process` | ❌ 非原子 | 单一端点执行5个串联操作（下载→提取→转录→大纲→文章） |
-| `GET /api/task/{task_id}` | ⚠️ 部分 | 返回数据可能与磁盘状态不一致 |
-| `GET /api/task/{task_id}/video` | ✅ 原子 | - |
-| `GET /api/task/{task_id}/audio` | ✅ 原子 | - |
+| 原设计 | 新设计 |
+|--------|--------|
+| `task_id` 管理一切 | `video_id` 是核心资源 |
+| 一次性启动全流程 | 用户决定每一步 |
+| 内存存储 | SQLite 持久化 |
+| 轮询 task 状态 | 轮询具体资源状态 |
 
-### 核心问题
+### 核心原则
 
-1. **单一端点做太多事**: `POST /api/process` 包含下载、提取、转录、生成大纲、生成文章5个步骤
-2. **AI生成失败静默忽略**: 大纲和文章生成失败时不报告错误（`web.py:173-183`）
-3. **状态值错误**: `download_only` 模式使用 `TRANSCRIBING` 状态表示音频提取（`web.py:133`）
-4. **无法重试单个步骤**: 用户只能重新提交整个任务
-5. **无法取消任务**: 没有取消机制
-6. **内存存储不可靠**: 服务重启丢失所有任务
+1. **资源导向**: 视频是核心资源，转录/大纲/文章是派生资源
+2. **原子操作**: 每个 API 只做一件事
+3. **持久化**: 使用 SQLite 存储，服务重启不丢失数据
+4. **可重试**: 每个步骤可独立重试
 
 ---
 
-## 二、改进方案
+## 二、数据库设计 (SQLite)
 
-### 新的 API 设计
+### 表结构
 
-#### 核心理念
-- **每个操作一个端点**: 下载、转录、生成大纲、生成文章分别独立
-- **显式状态转换**: 用户决定何时执行下一步
-- **支持重试**: 每个步骤可独立重试
-- **清晰的错误报告**: 失败原因明确返回
+```sql
+-- 视频资源（核心）
+CREATE TABLE videos (
+    id TEXT PRIMARY KEY,              -- 8位UUID
+    url TEXT NOT NULL,                -- 原始视频URL
+    title TEXT,                       -- 视频标题
+    status TEXT DEFAULT 'pending',    -- pending|downloading|completed|failed
+    video_path TEXT,                  -- 视频文件路径
+    audio_path TEXT,                  -- 音频文件路径
+    error TEXT,                       -- 错误信息
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-#### 新端点设计
+-- 转录资源
+CREATE TABLE transcripts (
+    id TEXT PRIMARY KEY,
+    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    content TEXT,                     -- 转录内容
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+-- 大纲资源
+CREATE TABLE outlines (
+    id TEXT PRIMARY KEY,
+    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    content TEXT,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 文章资源
+CREATE TABLE articles (
+    id TEXT PRIMARY KEY,
+    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    status TEXT DEFAULT 'pending',    -- pending|processing|completed|failed
+    content TEXT,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 索引
+CREATE INDEX idx_transcripts_video_id ON transcripts(video_id);
+CREATE INDEX idx_outlines_video_id ON outlines(video_id);
+CREATE INDEX idx_articles_video_id ON articles(video_id);
 ```
-# 任务管理
-POST   /api/tasks                      # 创建任务（仅创建，不执行）
-GET    /api/tasks/{task_id}            # 获取任务状态
-DELETE /api/tasks/{task_id}            # 取消/删除任务
 
-# 原子操作
-POST   /api/tasks/{task_id}/download   # 下载视频
-POST   /api/tasks/{task_id}/transcribe # 转录音频（自动提取音频）
-POST   /api/tasks/{task_id}/outline    # 生成大纲
-POST   /api/tasks/{task_id}/article    # 生成文章
+### 状态枚举
 
-# 文件下载
-GET    /api/tasks/{task_id}/video      # 下载视频文件
-GET    /api/tasks/{task_id}/audio      # 下载音频文件
-
-# 便捷端点（可选，保持向后兼容）
-POST   /api/process                    # 一键处理（内部调用上述原子操作）
-```
-
-#### 状态机设计
-
-```
-                                    ┌─────────────┐
-                                    │   CREATED   │
-                                    └──────┬──────┘
-                                           │ POST /download
-                                           ▼
-                              ┌───────────────────────┐
-                              │     DOWNLOADING       │
-                              └───────────┬───────────┘
-                                          │
-                    ┌─────────────────────┴─────────────────────┐
-                    ▼                                           ▼
-           ┌───────────────┐                           ┌───────────────┐
-           │  DOWNLOADED   │                           │    FAILED     │
-           └───────┬───────┘                           └───────────────┘
-                   │ POST /transcribe                          ▲
-                   ▼                                           │
-          ┌────────────────┐                                   │
-          │  TRANSCRIBING  │───────────────────────────────────┤
-          └───────┬────────┘                                   │
-                  │                                            │
-                  ▼                                            │
-          ┌────────────────┐                                   │
-          │  TRANSCRIBED   │                                   │
-          └───────┬────────┘                                   │
-                  │                                            │
-     ┌────────────┴────────────┐                               │
-     │                         │                               │
-     ▼                         ▼                               │
-POST /outline            POST /article                         │
-     │                         │                               │
-     ▼                         ▼                               │
-┌──────────┐             ┌──────────┐                          │
-│ OUTLINED │             │ ARTICLED │──────────────────────────┘
-└──────────┘             └──────────┘
-```
+| 状态 | 说明 |
+|------|------|
+| `pending` | 等待处理 |
+| `downloading` | 下载中（仅 videos） |
+| `processing` | 处理中 |
+| `completed` | 完成 |
+| `failed` | 失败 |
 
 ---
 
-## 三、实施步骤
+## 三、API 设计
 
-### Phase 1: 核心重构 (P0)
+### 端点概览
 
-#### Step 1.1: 添加新的状态枚举
-**文件**: `app/web.py`
+```
+# 视频资源
+POST   /api/videos                  # 创建视频（开始下载）
+GET    /api/videos/{id}             # 获取视频状态
+DELETE /api/videos/{id}             # 删除视频及所有派生资源
 
-```python
-class TaskStatus(str, Enum):
-    CREATED = "created"           # 新增：任务已创建
-    DOWNLOADING = "downloading"
-    DOWNLOADED = "downloaded"     # 新增：下载完成
-    EXTRACTING = "extracting"     # 新增：提取音频中
-    TRANSCRIBING = "transcribing"
-    TRANSCRIBED = "transcribed"   # 新增：转录完成
-    GENERATING_OUTLINE = "generating_outline"  # 新增
-    GENERATING_ARTICLE = "generating_article"  # 新增
-    COMPLETED = "completed"
-    FAILED = "failed"
+# 视频文件
+GET    /api/videos/{id}/file        # 下载视频文件
+GET    /api/videos/{id}/audio       # 下载音频文件
+
+# 转录资源
+POST   /api/videos/{id}/transcript  # 创建转录（开始处理）
+GET    /api/videos/{id}/transcript  # 获取转录结果
+
+# 大纲资源
+POST   /api/videos/{id}/outline     # 创建大纲
+GET    /api/videos/{id}/outline     # 获取大纲
+
+# 文章资源
+POST   /api/videos/{id}/article     # 创建文章
+GET    /api/videos/{id}/article     # 获取文章
 ```
 
-#### Step 1.2: 扩展 TaskResult 模型
-**文件**: `app/web.py`
+### API 详细规格
 
-```python
-class TaskResult:
-    # 现有字段...
-
-    # 新增字段
-    outline_status: str = "pending"    # pending|generating|completed|failed
-    outline_error: str | None = None
-    article_status: str = "pending"    # pending|generating|completed|failed
-    article_error: str | None = None
-
-    # 步骤时间戳
-    download_started_at: datetime | None = None
-    download_completed_at: datetime | None = None
-    transcribe_started_at: datetime | None = None
-    transcribe_completed_at: datetime | None = None
-```
-
-#### Step 1.3: 创建原子操作端点
-**文件**: `app/web.py`
-
-- 实现 `POST /api/tasks` - 仅创建任务，返回 task_id
-- 实现 `POST /api/tasks/{task_id}/download` - 仅下载视频
-- 实现 `POST /api/tasks/{task_id}/transcribe` - 转录（含提取音频）
-- 实现 `POST /api/tasks/{task_id}/outline` - 生成大纲
-- 实现 `POST /api/tasks/{task_id}/article` - 生成文章
-- 实现 `DELETE /api/tasks/{task_id}` - 取消任务
-
-#### Step 1.4: 修改现有 /api/process 为编排端点
-保持向后兼容，内部调用新的原子操作
-
----
-
-### Phase 2: 错误处理改进 (P1)
-
-#### Step 2.1: 移除静默失败
-**文件**: `app/web.py:169-183`
-
-```python
-# 改前
-try:
-    outline = await generate_outline(transcript)
-except GitCodeAIError:
-    task.outline = ""  # 静默失败
-
-# 改后
-try:
-    outline = await generate_outline(transcript)
-    task.outline_status = "completed"
-except GitCodeAIError as e:
-    task.outline_status = "failed"
-    task.outline_error = str(e)
-```
-
-#### Step 2.2: 添加详细错误信息
-在 TaskResult 中记录每个步骤的错误详情
-
----
-
-### Phase 3: 前端适配 (P2)
-
-#### Step 3.1: 更新 API 客户端
-**文件**: `frontend/src/api/task.js`
-
-```javascript
-// 新增原子操作 API
-export const createTask = (url) =>
-  axios.post('/api/tasks', { url })
-
-export const downloadVideo = (taskId) =>
-  axios.post(`/api/tasks/${taskId}/download`)
-
-export const transcribeAudio = (taskId) =>
-  axios.post(`/api/tasks/${taskId}/transcribe`)
-
-export const generateOutline = (taskId) =>
-  axios.post(`/api/tasks/${taskId}/outline`)
-
-export const generateArticle = (taskId) =>
-  axios.post(`/api/tasks/${taskId}/article`)
-```
-
-#### Step 3.2: 更新轮询逻辑
-**文件**: `frontend/src/composables/useTaskPolling.js`
-
-适配新的状态枚举和子状态
-
----
-
-## 四、API 详细规格
-
-### POST /api/tasks
-创建新任务（不执行任何操作）
+#### POST /api/videos
+创建视频资源并开始下载
 
 **请求**:
 ```json
@@ -222,177 +131,232 @@ export const generateArticle = (taskId) =>
 **响应** (201 Created):
 ```json
 {
-  "task_id": "a1b2c3d4",
-  "status": "created",
+  "id": "a1b2c3d4",
   "url": "https://example.com/video",
+  "status": "downloading",
   "created_at": "2025-01-01T00:00:00Z"
 }
 ```
 
 ---
 
-### POST /api/tasks/{task_id}/download
-下载视频
-
-**前置条件**: `status == "created"`
-
-**响应** (202 Accepted):
-```json
-{
-  "task_id": "a1b2c3d4",
-  "status": "downloading",
-  "message": "开始下载视频"
-}
-```
-
-**完成后状态**: `downloaded` 或 `failed`
-
----
-
-### POST /api/tasks/{task_id}/transcribe
-转录音频（自动提取音频）
-
-**前置条件**: `status == "downloaded"`
-
-**响应** (202 Accepted):
-```json
-{
-  "task_id": "a1b2c3d4",
-  "status": "extracting",
-  "message": "开始提取音频"
-}
-```
-
-**完成后状态**: `transcribed` 或 `failed`
-
----
-
-### POST /api/tasks/{task_id}/outline
-生成大纲
-
-**前置条件**: `status in ["transcribed", "completed"]`
-
-**响应** (202 Accepted):
-```json
-{
-  "task_id": "a1b2c3d4",
-  "outline_status": "generating",
-  "message": "开始生成大纲"
-}
-```
-
-**完成后**: `outline_status = "completed"` 或 `"failed"`
-
----
-
-### POST /api/tasks/{task_id}/article
-生成文章
-
-**前置条件**: `status in ["transcribed", "completed"]`
-
-**响应** (202 Accepted):
-```json
-{
-  "task_id": "a1b2c3d4",
-  "article_status": "generating",
-  "message": "开始生成文章"
-}
-```
-
-**完成后**: `article_status = "completed"` 或 `"failed"`
-
----
-
-### DELETE /api/tasks/{task_id}
-取消/删除任务
+#### GET /api/videos/{id}
+获取视频完整状态
 
 **响应** (200 OK):
 ```json
 {
-  "task_id": "a1b2c3d4",
-  "message": "任务已取消"
-}
-```
-
----
-
-### GET /api/tasks/{task_id}
-获取任务完整状态
-
-**响应** (200 OK):
-```json
-{
-  "task_id": "a1b2c3d4",
-  "status": "transcribed",
+  "id": "a1b2c3d4",
   "url": "https://example.com/video",
   "title": "视频标题",
-  "progress": "转录完成",
-
+  "status": "completed",
   "has_video": true,
   "has_audio": true,
-
-  "transcript": "转录文本...",
-
-  "outline_status": "completed",
-  "outline": "大纲内容...",
-  "outline_error": null,
-
-  "article_status": "pending",
-  "article": null,
-  "article_error": null,
-
   "error": null,
-
   "created_at": "2025-01-01T00:00:00Z",
-  "download_completed_at": "2025-01-01T00:01:00Z",
-  "transcribe_completed_at": "2025-01-01T00:05:00Z"
+  "updated_at": "2025-01-01T00:01:00Z"
 }
 ```
 
 ---
 
-## 五、向后兼容
+#### DELETE /api/videos/{id}
+删除视频及所有派生资源
 
-### 保留 POST /api/process
-
-作为"便捷端点"，内部编排调用原子操作：
-
-```python
-@app.post("/api/process")
-async def process_video(request: ProcessRequest, background_tasks: BackgroundTasks):
-    # 1. 创建任务
-    task = create_task(request.url)
-
-    # 2. 启动后台编排
-    background_tasks.add_task(orchestrate_full_process, task.task_id, request.download_only)
-
-    return {"task_id": task.task_id, "status": "pending"}
-
-async def orchestrate_full_process(task_id: str, download_only: bool):
-    # 按顺序调用原子操作
-    await execute_download(task_id)
-    await execute_transcribe(task_id)
-    if not download_only:
-        await execute_outline(task_id)
-        await execute_article(task_id)
+**响应** (200 OK):
+```json
+{
+  "message": "视频已删除"
+}
 ```
 
 ---
 
-## 六、测试计划
+#### POST /api/videos/{id}/transcript
+创建转录（自动提取音频）
 
-1. **单元测试**: 每个原子操作的成功/失败路径
-2. **集成测试**: 完整流程编排
-3. **并发测试**: 多个任务同时执行
-4. **错误恢复测试**: 步骤失败后重试
+**前置条件**: `video.status == "completed"`
+
+**响应** (201 Created):
+```json
+{
+  "id": "t1r2a3n4",
+  "video_id": "a1b2c3d4",
+  "status": "processing"
+}
+```
 
 ---
 
-## 七、文件变更清单
+#### GET /api/videos/{id}/transcript
+获取转录结果
 
-| 文件 | 变更类型 | 说明 |
-|------|----------|------|
-| `app/web.py` | 重构 | 添加新端点，重构状态管理 |
-| `frontend/src/api/task.js` | 扩展 | 添加新 API 调用 |
-| `frontend/src/composables/useTaskPolling.js` | 修改 | 适配新状态 |
-| `frontend/src/components/TaskProgress.vue` | 修改 | 显示细粒度状态 |
+**响应** (200 OK):
+```json
+{
+  "id": "t1r2a3n4",
+  "video_id": "a1b2c3d4",
+  "status": "completed",
+  "content": "转录文本内容...",
+  "error": null,
+  "created_at": "2025-01-01T00:01:00Z"
+}
+```
+
+**响应** (404 Not Found) - 如果未创建转录:
+```json
+{
+  "error": "转录不存在，请先调用 POST /api/videos/{id}/transcript"
+}
+```
+
+---
+
+#### POST /api/videos/{id}/outline
+创建大纲
+
+**前置条件**: 转录已完成 (`transcript.status == "completed"`)
+
+**响应** (201 Created):
+```json
+{
+  "id": "o1u2t3l4",
+  "video_id": "a1b2c3d4",
+  "status": "processing"
+}
+```
+
+---
+
+#### POST /api/videos/{id}/article
+创建文章
+
+**前置条件**: 转录已完成 (`transcript.status == "completed"`)
+
+**响应** (201 Created):
+```json
+{
+  "id": "a1r2t3i4",
+  "video_id": "a1b2c3d4",
+  "status": "processing"
+}
+```
+
+---
+
+## 四、用户流程
+
+### 完整流程示例
+
+```
+用户输入 URL: https://example.com/video
+        │
+        ▼
+POST /api/videos { url: "..." }
+        │
+        ├─→ 返回 { id: "abc123", status: "downloading" }
+        │
+        ▼
+轮询 GET /api/videos/abc123
+        │
+        ├─→ status: "downloading" → 继续轮询
+        ├─→ status: "completed"   → 下载完成
+        │
+        ▼
+POST /api/videos/abc123/transcript
+        │
+        ├─→ 返回 { status: "processing" }
+        │
+        ▼
+轮询 GET /api/videos/abc123/transcript
+        │
+        ├─→ status: "processing" → 继续轮询
+        ├─→ status: "completed"  → 转录完成，显示内容
+        │
+        ▼
+用户点击"生成大纲"
+        │
+        ▼
+POST /api/videos/abc123/outline
+        │
+        ▼
+轮询 GET /api/videos/abc123/outline
+        │
+        ├─→ status: "completed" → 显示大纲
+```
+
+### 状态流转图
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │              videos 表                    │
+                    ├──────────────────────────────────────────┤
+                    │  pending → downloading → completed       │
+                    │                      ↘ failed            │
+                    └──────────────────────────────────────────┘
+                                        │
+                                        │ video.status == completed
+                                        ▼
+┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
+│   transcripts 表    │  │    outlines 表      │  │    articles 表      │
+├─────────────────────┤  ├─────────────────────┤  ├─────────────────────┤
+│ pending → processing│  │ pending → processing│  │ pending → processing│
+│        ↘ completed  │  │        ↘ completed  │  │        ↘ completed  │
+│        ↘ failed     │  │        ↘ failed     │  │        ↘ failed     │
+└─────────────────────┘  └─────────────────────┘  └─────────────────────┘
+         │                        ▲                        ▲
+         │                        │                        │
+         └────────────────────────┴────────────────────────┘
+                  需要 transcript.status == completed
+```
+
+---
+
+## 五、实施步骤
+
+### Phase 1: 数据库层
+
+1. 创建 `app/database.py`
+   - 定义数据库连接
+   - 创建表结构
+   - 提供 CRUD 操作函数
+
+2. 创建数据模型
+   - Video, Transcript, Outline, Article 模型类
+
+### Phase 2: API 层重构
+
+1. 重写 `app/web.py`
+   - 移除 task 相关代码
+   - 实现新的资源导向端点
+   - 使用数据库替代内存存储
+
+2. 保持服务层不变
+   - `video_downloader.py` - 下载逻辑
+   - `transcribe.py` - 转录逻辑
+   - `gitcode_ai.py` - AI 生成逻辑
+
+### Phase 3: 前端适配
+
+1. 更新 `frontend/src/api/`
+   - 重命名 `task.js` → `video.js`
+   - 实现新的 API 调用
+
+2. 更新组件
+   - 适配新的数据结构
+   - 更新轮询逻辑
+
+---
+
+## 六、文件变更清单
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `app/database.py` | 新建 | SQLite 数据库操作 |
+| `app/models.py` | 新建 | 数据模型定义 |
+| `app/web.py` | 重写 | 资源导向 API |
+| `data/v2t.db` | 新建 | SQLite 数据库文件 |
+| `frontend/src/api/video.js` | 新建 | 视频资源 API |
+| `frontend/src/api/task.js` | 删除 | 移除旧 API |
+| `frontend/src/composables/useVideoPolling.js` | 新建 | 视频轮询 |
+| `frontend/src/composables/useTaskPolling.js` | 删除 | 移除旧轮询 |
