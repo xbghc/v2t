@@ -6,17 +6,18 @@
 
 | 原设计 | 新设计 |
 |--------|--------|
-| `task_id` 管理一切 | `video_id` 是核心资源 |
+| `task_id` 管理一切 | `transcript` 是核心资源 |
 | 一次性启动全流程 | 用户决定每一步 |
 | 内存存储 | SQLite 持久化 |
-| 轮询 task 状态 | 轮询具体资源状态 |
+| 轮询 task 状态 | SSE 实时推送状态 |
 
 ### 核心原则
 
-1. **资源导向**: 视频是核心资源，转录/大纲/文章是派生资源
+1. **资源导向**: transcript 是核心资源，video 是可选输入源，outline/article 依赖 transcript
 2. **原子操作**: 每个 API 只做一件事
 3. **持久化**: 使用 SQLite 存储，服务重启不丢失数据
-4. **可重试**: 每个步骤可独立重试
+4. **实时推送**: 使用 SSE 推送进度，支持断线重连
+5. **可重试**: 每个步骤可独立重试
 
 ---
 
@@ -41,28 +42,28 @@ CREATE TABLE videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 转录资源
+-- 转录资源（核心，video_id 可选）
 CREATE TABLE transcripts (
     id TEXT PRIMARY KEY,
-    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,  -- 可选，支持独立转录
     status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,                     -- 转录内容
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 大纲资源
+-- 大纲资源（依赖转录）
 CREATE TABLE outlines (
     id TEXT PRIMARY KEY,
-    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    transcript_id TEXT NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
     status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 文章资源
+-- 文章资源（依赖转录）
 CREATE TABLE articles (
     id TEXT PRIMARY KEY,
-    video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    transcript_id TEXT NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
     status TEXT DEFAULT 'pending',    -- pending|processing|completed
     content TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -70,8 +71,8 @@ CREATE TABLE articles (
 
 -- 索引
 CREATE INDEX idx_transcripts_video_id ON transcripts(video_id);
-CREATE INDEX idx_outlines_video_id ON outlines(video_id);
-CREATE INDEX idx_articles_video_id ON articles(video_id);
+CREATE INDEX idx_outlines_transcript_id ON outlines(transcript_id);
+CREATE INDEX idx_articles_transcript_id ON articles(transcript_id);
 ```
 
 ### 错误处理策略
@@ -100,7 +101,8 @@ CREATE INDEX idx_articles_video_id ON articles(video_id);
 ```
 # 视频资源
 POST   /api/videos                  # 创建视频（开始下载）
-GET    /api/videos/{id}             # 获取视频状态
+GET    /api/videos/{id}             # 获取视频状态（用于断线重连）
+GET    /api/videos/{id}/events      # SSE 订阅下载进度
 DELETE /api/videos/{id}             # 删除视频及所有派生资源
 
 # 视频文件
@@ -108,16 +110,19 @@ GET    /api/videos/{id}/file        # 下载视频文件
 GET    /api/videos/{id}/audio       # 下载音频文件
 
 # 转录资源
-POST   /api/videos/{id}/transcript  # 创建转录（开始处理）
-GET    /api/videos/{id}/transcript  # 获取转录结果
+POST   /api/transcripts             # 创建转录（支持 video_id 或直接上传）
+GET    /api/transcripts/{id}        # 获取转录状态
+GET    /api/transcripts/{id}/events # SSE 订阅转录进度
 
 # 大纲资源
-POST   /api/videos/{id}/outline     # 创建大纲
-GET    /api/videos/{id}/outline     # 获取大纲
+POST   /api/transcripts/{id}/outline  # 创建大纲
+GET    /api/transcripts/{id}/outline  # 获取大纲
+GET    /api/transcripts/{id}/outline/events  # SSE 订阅
 
 # 文章资源
-POST   /api/videos/{id}/article     # 创建文章
-GET    /api/videos/{id}/article     # 获取文章
+POST   /api/transcripts/{id}/article  # 创建文章
+GET    /api/transcripts/{id}/article  # 获取文章
+GET    /api/transcripts/{id}/article/events  # SSE 订阅
 ```
 
 ### API 详细规格
@@ -145,7 +150,7 @@ GET    /api/videos/{id}/article     # 获取文章
 ---
 
 #### GET /api/videos/{id}
-获取视频完整状态
+获取视频状态（用于断线重连）
 
 **响应** (200 OK):
 ```json
@@ -162,6 +167,32 @@ GET    /api/videos/{id}/article     # 获取文章
 
 ---
 
+#### GET /api/videos/{id}/events
+SSE 订阅下载进度
+
+**响应** (text/event-stream):
+```
+event: status
+data: {"status": "downloading", "progress": "10%"}
+
+event: status
+data: {"status": "downloading", "progress": "50%"}
+
+event: status
+data: {"status": "completed", "title": "视频标题"}
+
+event: done
+data: {}
+```
+
+**错误事件**:
+```
+event: error
+data: {"detail": "下载失败：网络超时"}
+```
+
+---
+
 #### DELETE /api/videos/{id}
 删除视频及所有派生资源
 
@@ -174,10 +205,23 @@ GET    /api/videos/{id}/article     # 获取文章
 
 ---
 
-#### POST /api/videos/{id}/transcript
-创建转录（自动提取音频）
+#### POST /api/transcripts
+创建转录（支持多种输入方式）
 
-**前置条件**: `video.status == "completed"`
+**请求方式1** - 关联已下载的视频:
+```json
+{
+  "video_id": "a1b2c3d4"
+}
+```
+
+**请求方式2** - 直接上传音频（将来扩展）:
+```
+multipart/form-data
+- audio: 音频文件
+```
+
+**前置条件**: 如果使用 video_id，则 `video.status == "completed"`
 
 **响应** (201 Created):
 ```json
@@ -190,8 +234,8 @@ GET    /api/videos/{id}/article     # 获取文章
 
 ---
 
-#### GET /api/videos/{id}/transcript
-获取转录结果
+#### GET /api/transcripts/{id}
+获取转录状态
 
 **响应** (200 OK):
 ```json
@@ -204,11 +248,24 @@ GET    /api/videos/{id}/article     # 获取文章
 }
 ```
 
-**响应** (404 Not Found) - 如果未创建转录:
-```json
-{
-  "detail": "转录不存在，请先调用 POST /api/videos/{id}/transcript"
-}
+---
+
+#### GET /api/transcripts/{id}/events
+SSE 订阅转录进度
+
+**响应** (text/event-stream):
+```
+event: status
+data: {"status": "processing", "progress": "提取音频中..."}
+
+event: status
+data: {"status": "processing", "progress": "转录中..."}
+
+event: status
+data: {"status": "completed"}
+
+event: done
+data: {}
 ```
 
 ### 错误响应格式
@@ -229,33 +286,65 @@ HTTP 状态码：
 
 ---
 
-#### POST /api/videos/{id}/outline
+#### POST /api/transcripts/{id}/outline
 创建大纲
 
-**前置条件**: 转录已完成 (`transcript.status == "completed"`)
+**前置条件**: `transcript.status == "completed"`
 
 **响应** (201 Created):
 ```json
 {
   "id": "o1u2t3l4",
-  "video_id": "a1b2c3d4",
+  "transcript_id": "t1r2a3n4",
   "status": "processing"
 }
 ```
 
 ---
 
-#### POST /api/videos/{id}/article
+#### GET /api/transcripts/{id}/outline
+获取大纲
+
+**响应** (200 OK):
+```json
+{
+  "id": "o1u2t3l4",
+  "transcript_id": "t1r2a3n4",
+  "status": "completed",
+  "content": "大纲内容...",
+  "created_at": "2025-01-01T00:05:00Z"
+}
+```
+
+---
+
+#### POST /api/transcripts/{id}/article
 创建文章
 
-**前置条件**: 转录已完成 (`transcript.status == "completed"`)
+**前置条件**: `transcript.status == "completed"`
 
 **响应** (201 Created):
 ```json
 {
   "id": "a1r2t3i4",
-  "video_id": "a1b2c3d4",
+  "transcript_id": "t1r2a3n4",
   "status": "processing"
+}
+```
+
+---
+
+#### GET /api/transcripts/{id}/article
+获取文章
+
+**响应** (200 OK):
+```json
+{
+  "id": "a1r2t3i4",
+  "transcript_id": "t1r2a3n4",
+  "status": "completed",
+  "content": "文章内容...",
+  "created_at": "2025-01-01T00:06:00Z"
 }
 ```
 
@@ -263,7 +352,7 @@ HTTP 状态码：
 
 ## 四、用户流程
 
-### 完整流程示例
+### 完整流程示例（使用 SSE）
 
 ```
 用户输入 URL: https://example.com/video
@@ -271,60 +360,77 @@ HTTP 状态码：
         ▼
 POST /api/videos { url: "..." }
         │
-        ├─→ 返回 { id: "abc123", status: "downloading" }
+        ├─→ 返回 { id: "v123", status: "downloading" }
         │
         ▼
-轮询 GET /api/videos/abc123
+订阅 GET /api/videos/v123/events (SSE)
         │
-        ├─→ status: "downloading" → 继续轮询
-        ├─→ status: "completed"   → 下载完成
-        │
-        ▼
-POST /api/videos/abc123/transcript
-        │
-        ├─→ 返回 { status: "processing" }
+        ├─→ event: status { progress: "10%" }
+        ├─→ event: status { progress: "50%" }
+        ├─→ event: status { status: "completed" }
+        ├─→ event: done
         │
         ▼
-轮询 GET /api/videos/abc123/transcript
+POST /api/transcripts { video_id: "v123" }
         │
-        ├─→ status: "processing" → 继续轮询
-        ├─→ status: "completed"  → 转录完成，显示内容
+        ├─→ 返回 { id: "t456", status: "processing" }
+        │
+        ▼
+订阅 GET /api/transcripts/t456/events (SSE)
+        │
+        ├─→ event: status { progress: "提取音频中..." }
+        ├─→ event: status { progress: "转录中..." }
+        ├─→ event: status { status: "completed" }
+        ├─→ event: done
+        │
+        ▼
+GET /api/transcripts/t456  →  获取转录内容
         │
         ▼
 用户点击"生成大纲"
         │
         ▼
-POST /api/videos/abc123/outline
+POST /api/transcripts/t456/outline
         │
         ▼
-轮询 GET /api/videos/abc123/outline
+订阅 GET /api/transcripts/t456/outline/events (SSE)
         │
-        ├─→ status: "completed" → 显示大纲
+        ├─→ event: status { status: "completed" }
+        │
+        ▼
+GET /api/transcripts/t456/outline  →  获取大纲内容
 ```
 
-### 状态流转图
+### 资源依赖图
 
 ```
-                    ┌──────────────────────────────────────────┐
-                    │              videos 表                    │
-                    ├──────────────────────────────────────────┤
-                    │  pending → downloading → completed       │
-                    └──────────────────────────────────────────┘
-                                        │
-                                        │ video.status == completed
-                                        ▼
-┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐
-│   transcripts 表    │  │    outlines 表      │  │    articles 表      │
-├─────────────────────┤  ├─────────────────────┤  ├─────────────────────┤
-│ pending → processing│  │ pending → processing│  │ pending → processing│
-│        ↘ completed  │  │        ↘ completed  │  │        ↘ completed  │
-└─────────────────────┘  └─────────────────────┘  └─────────────────────┘
-         │                        ▲                        ▲
-         │                        │                        │
-         └────────────────────────┴────────────────────────┘
-                  需要 transcript.status == completed
+┌─────────────────────────────────────────────────────────────────────┐
+│                           videos 表                                  │
+│                    (可选输入源，video_id 可为空)                      │
+├─────────────────────────────────────────────────────────────────────┤
+│              pending → downloading → completed                       │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ 可选关联
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        transcripts 表                                │
+│                         (核心资源)                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│              pending → processing → completed                        │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ transcript.status == completed
+                    ┌───────────────┴───────────────┐
+                    ▼                               ▼
+        ┌─────────────────────┐         ┌─────────────────────┐
+        │    outlines 表      │         │    articles 表      │
+        ├─────────────────────┤         ├─────────────────────┤
+        │ pending → processing│         │ pending → processing│
+        │        ↘ completed  │         │        ↘ completed  │
+        └─────────────────────┘         └─────────────────────┘
 
-> 注：失败时不更新状态，API 返回错误，用户可重试
+> 注：失败时通过 SSE 发送 error 事件，记录不入库，用户可重试
 ```
 
 ---
@@ -334,18 +440,16 @@ POST /api/videos/abc123/outline
 ### Phase 1: 数据库层
 
 1. 创建 `app/database.py`
-   - 定义数据库连接
+   - 定义数据库连接（aiosqlite）
    - 创建表结构
    - 提供 CRUD 操作函数
-
-2. 创建数据模型
-   - Video, Transcript, Outline, Article 模型类
 
 ### Phase 2: API 层重构
 
 1. 重写 `app/web.py`
    - 移除 task 相关代码
-   - 实现新的资源导向端点
+   - 实现资源导向端点
+   - 实现 SSE 端点
    - 使用数据库替代内存存储
 
 2. 保持服务层不变
@@ -356,12 +460,12 @@ POST /api/videos/abc123/outline
 ### Phase 3: 前端适配
 
 1. 更新 `frontend/src/api/`
-   - 重命名 `task.js` → `video.js`
    - 实现新的 API 调用
+   - 添加 SSE 订阅函数
 
 2. 更新组件
+   - 使用 EventSource 订阅 SSE
    - 适配新的数据结构
-   - 更新轮询逻辑
 
 ---
 
@@ -370,10 +474,10 @@ POST /api/videos/abc123/outline
 | 文件 | 操作 | 说明 |
 |------|------|------|
 | `app/database.py` | 新建 | SQLite 数据库操作 |
-| `app/models.py` | 新建 | 数据模型定义 |
-| `app/web.py` | 重写 | 资源导向 API |
+| `app/web.py` | 重写 | 资源导向 API + SSE |
 | `data/v2t.db` | 新建 | SQLite 数据库文件 |
-| `frontend/src/api/video.js` | 新建 | 视频资源 API |
+| `frontend/src/api/video.js` | 新建 | 视频 API |
+| `frontend/src/api/transcript.js` | 新建 | 转录 API + SSE |
 | `frontend/src/api/task.js` | 删除 | 移除旧 API |
-| `frontend/src/composables/useVideoPolling.js` | 新建 | 视频轮询 |
+| `frontend/src/composables/useSSE.js` | 新建 | SSE 订阅 composable |
 | `frontend/src/composables/useTaskPolling.js` | 删除 | 移除旧轮询 |
