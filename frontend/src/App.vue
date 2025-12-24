@@ -1,7 +1,8 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { createTask } from './api/task'
-import { useTaskPolling } from './composables/useTaskPolling'
+import { createVideo, subscribeVideoEvents } from './api/video'
+import { createTranscript, subscribeTranscriptEvents, createOutline, createArticle, getOutline, getArticle, subscribeOutlineEvents, subscribeArticleEvents } from './api/transcript'
+import { useSSE } from './composables/useSSE'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
 import InitialPage from './components/InitialPage.vue'
@@ -14,6 +15,10 @@ const downloadOnly = ref(false)
 const taskStatus = ref('pending')
 const currentTab = ref('article')
 const errorMessage = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
+
+// 资源 ID
+const videoId = ref(null)
+const transcriptId = ref(null)
 
 const progress = reactive({
     title: '',
@@ -34,51 +39,94 @@ const result = reactive({
 let lastUrl = ''
 let lastDownloadOnly = false
 
-// 状态映射
-const statusMap = {
-    'pending': { text: '等待处理...', percent: 10, step: '步骤 1/3' },
-    'downloading': { text: '正在下载视频...', percent: 33, step: '步骤 1/3' },
-    'transcribing': { text: '正在转录音频...', percent: 55, step: '步骤 2/3' },
-    'generating': { text: '正在生成内容...', percent: 80, step: '步骤 3/3' },
-    'completed': { text: '处理完成', percent: 100, step: '完成' },
-}
-
-// 轮询
-const { taskId, start: startPolling, stop: stopPolling } = useTaskPolling({
-    onUpdate(data) {
-        taskStatus.value = data.status
-
-        // 渐进更新数据
-        if (data.title) {
-            progress.title = data.title
-            result.title = data.title
+// SSE 订阅
+const videoSSE = useSSE({
+    onStatus(data) {
+        if (data.progress) {
+            progress.text = data.progress
         }
-        if (data.has_video) result.has_video = true
-        if (data.has_audio) result.has_audio = true
-        if (data.transcript) result.transcript = data.transcript
-        if (data.outline) result.outline = data.outline
-        if (data.article) result.article = data.article
-
-        // 更新进度条
-        if (statusMap[data.status]) {
-            const s = statusMap[data.status]
-            progress.text = data.progress || s.text
-            progress.percent = s.percent
-            progress.step = s.step
+        if (data.status === 'downloading') {
+            taskStatus.value = 'downloading'
+            progress.percent = 33
+            progress.step = '步骤 1/3'
         }
+        if (data.status === 'completed') {
+            if (data.title) {
+                progress.title = data.title
+                result.title = data.title
+            }
+            result.has_video = true
+            result.has_audio = true
 
-        // 自动切换到有内容的tab
-        if (result.transcript && !result.outline && !result.article && currentTab.value !== 'transcript') {
-            currentTab.value = 'transcript'
+            // 下载完成后自动开始转录（除非仅下载模式）
+            if (!lastDownloadOnly) {
+                startTranscript()
+            } else {
+                taskStatus.value = 'completed'
+                progress.text = '下载完成'
+                progress.percent = 100
+                progress.step = '完成'
+            }
         }
     },
-    onComplete() {
-        currentTab.value = result.article ? 'article' : (result.outline ? 'outline' : 'transcript')
+    onDone() {
+        // done 事件在 onStatus completed 之后处理
     },
-    onFailed(data) {
-        errorMessage.value = data.error || '处理失败'
+    onError(message) {
+        errorMessage.value = message
+        taskStatus.value = 'failed'
     }
 })
+
+const transcriptSSE = useSSE({
+    onStatus(data) {
+        if (data.progress) {
+            progress.text = data.progress
+        }
+        if (data.status === 'processing') {
+            taskStatus.value = 'transcribing'
+            progress.percent = 55
+            progress.step = '步骤 2/3'
+        }
+        if (data.status === 'completed') {
+            // 转录完成，开始生成大纲和文章
+            startGeneration()
+        }
+    },
+    onError(message) {
+        errorMessage.value = message
+        taskStatus.value = 'failed'
+    }
+})
+
+const outlineSSE = useSSE({
+    onStatus(data) {
+        if (data.status === 'completed') {
+            fetchOutline()
+        }
+    },
+    onError(message) {
+        console.warn('大纲生成失败:', message)
+        // 大纲失败不影响整体流程
+        checkGenerationComplete()
+    }
+})
+
+const articleSSE = useSSE({
+    onStatus(data) {
+        if (data.status === 'completed') {
+            fetchArticle()
+        }
+    },
+    onError(message) {
+        console.warn('文章生成失败:', message)
+        // 文章失败不影响整体流程
+        checkGenerationComplete()
+    }
+})
+
+let outlineComplete = false
+let articleComplete = false
 
 // 当前内容（用于复制）
 const currentContent = computed(() => {
@@ -94,17 +142,28 @@ const resetState = () => {
     errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
     Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
     Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+    videoId.value = null
+    transcriptId.value = null
+    outlineComplete = false
+    articleComplete = false
+}
+
+const closeAllSSE = () => {
+    videoSSE.close()
+    transcriptSSE.close()
+    outlineSSE.close()
+    articleSSE.close()
 }
 
 const startNew = () => {
-    stopPolling()
+    closeAllSSE()
     resetState()
     url.value = ''
     page.value = 'initial'
 }
 
 const retryTask = () => {
-    stopPolling()
+    closeAllSSE()
     resetState()
     url.value = lastUrl
     downloadOnly.value = lastDownloadOnly
@@ -123,12 +182,148 @@ const submitUrl = async () => {
     page.value = 'result'
 
     try {
-        const data = await createTask(url.value, lastDownloadOnly)
-        startPolling(data.task_id)
+        // 创建视频并开始下载
+        const data = await createVideo(url.value)
+        videoId.value = data.id
+
+        if (data.created) {
+            // 新建的视频，订阅 SSE
+            progress.text = '开始下载...'
+            videoSSE.subscribe(subscribeVideoEvents(data.id))
+        } else {
+            // 已存在的视频
+            if (data.status === 'completed') {
+                result.title = data.title || ''
+                progress.title = data.title || ''
+                result.has_video = data.has_video
+                result.has_audio = data.has_audio
+
+                if (!lastDownloadOnly) {
+                    // 直接开始转录
+                    startTranscript()
+                } else {
+                    taskStatus.value = 'completed'
+                    progress.text = '下载完成（已缓存）'
+                    progress.percent = 100
+                    progress.step = '完成'
+                }
+            } else if (data.status === 'downloading') {
+                // 正在下载，订阅 SSE
+                progress.text = '下载中...'
+                videoSSE.subscribe(subscribeVideoEvents(data.id))
+            } else {
+                // pending 状态，可能需要重新开始
+                progress.text = '开始下载...'
+                videoSSE.subscribe(subscribeVideoEvents(data.id))
+            }
+        }
     } catch (error) {
         errorMessage.value = error.message
         taskStatus.value = 'failed'
     }
+}
+
+const startTranscript = async () => {
+    try {
+        taskStatus.value = 'transcribing'
+        progress.text = '开始转录...'
+        progress.percent = 55
+        progress.step = '步骤 2/3'
+
+        const data = await createTranscript(videoId.value)
+        transcriptId.value = data.id
+
+        // 订阅转录进度
+        transcriptSSE.subscribe(subscribeTranscriptEvents(data.id))
+    } catch (error) {
+        errorMessage.value = error.message
+        taskStatus.value = 'failed'
+    }
+}
+
+const startGeneration = async () => {
+    taskStatus.value = 'generating'
+    progress.text = '正在生成内容...'
+    progress.percent = 80
+    progress.step = '步骤 3/3'
+
+    outlineComplete = false
+    articleComplete = false
+
+    // 并行生成大纲和文章
+    try {
+        const outlineData = await createOutline(transcriptId.value)
+        outlineSSE.subscribe(subscribeOutlineEvents(transcriptId.value))
+    } catch (error) {
+        console.warn('创建大纲失败:', error)
+        outlineComplete = true
+    }
+
+    try {
+        const articleData = await createArticle(transcriptId.value)
+        articleSSE.subscribe(subscribeArticleEvents(transcriptId.value))
+    } catch (error) {
+        console.warn('创建文章失败:', error)
+        articleComplete = true
+    }
+
+    // 如果两个都失败了，直接完成
+    if (outlineComplete && articleComplete) {
+        finishTask()
+    }
+}
+
+const fetchOutline = async () => {
+    try {
+        const data = await getOutline(transcriptId.value)
+        if (data.content) {
+            result.outline = data.content
+        }
+    } catch (error) {
+        console.warn('获取大纲失败:', error)
+    }
+    outlineComplete = true
+    checkGenerationComplete()
+}
+
+const fetchArticle = async () => {
+    try {
+        const data = await getArticle(transcriptId.value)
+        if (data.content) {
+            result.article = data.content
+        }
+    } catch (error) {
+        console.warn('获取文章失败:', error)
+    }
+    articleComplete = true
+    checkGenerationComplete()
+}
+
+const checkGenerationComplete = () => {
+    if (outlineComplete && articleComplete) {
+        finishTask()
+    }
+}
+
+const finishTask = async () => {
+    // 获取转录内容
+    try {
+        const { getTranscript } = await import('./api/transcript')
+        const data = await getTranscript(transcriptId.value)
+        if (data.content) {
+            result.transcript = data.content
+        }
+    } catch (error) {
+        console.warn('获取转录失败:', error)
+    }
+
+    taskStatus.value = 'completed'
+    progress.text = '处理完成'
+    progress.percent = 100
+    progress.step = '完成'
+
+    // 自动切换到有内容的 tab
+    currentTab.value = result.article ? 'article' : (result.outline ? 'outline' : 'transcript')
 }
 
 const copyContent = () => {
@@ -161,7 +356,7 @@ const copyContent = () => {
             <template v-else-if="page === 'result'">
                 <AppHeader variant="result" :show-new-button="true" @new-task="startNew" />
                 <ResultPage
-                    :task-id="taskId"
+                    :task-id="videoId"
                     :task-status="taskStatus"
                     :error-message="errorMessage"
                     :progress="progress"
