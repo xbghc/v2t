@@ -1,7 +1,7 @@
 """SQLite 数据库操作层"""
 
 import aiosqlite
-import uuid
+import secrets
 from pathlib import Path
 from urllib.parse import urlparse
 from dataclasses import dataclass
@@ -15,8 +15,8 @@ DB_PATH = Path(__file__).parent.parent / "data" / "v2t.db"
 
 
 def generate_id() -> str:
-    """生成 8 位 UUID"""
-    return str(uuid.uuid4())[:8]
+    """生成 16 位安全随机 ID"""
+    return secrets.token_urlsafe(12)[:16]
 
 
 def normalize_url(url: str) -> str:
