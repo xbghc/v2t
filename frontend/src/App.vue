@@ -1,5 +1,6 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
+import { createTask, getTask } from './api/task'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
 import InitialPage from './components/InitialPage.vue'
@@ -78,17 +79,7 @@ const submitUrl = async () => {
     page.value = 'result'
 
     try {
-        const response = await fetch('api/process', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: url.value, download_only: lastDownloadOnly })
-        })
-        const data = await response.json()
-
-        if (!response.ok) {
-            throw new Error(data.detail || '提交失败')
-        }
-
+        const data = await createTask(url.value, lastDownloadOnly)
         taskId.value = data.task_id
         startPolling()
     } catch (error) {
@@ -107,8 +98,7 @@ const checkTask = async () => {
     if (!taskId.value) return
 
     try {
-        const response = await fetch(`api/task/${taskId.value}`)
-        const data = await response.json()
+        const data = await getTask(taskId.value)
 
         // 更新任务状态
         taskStatus.value = data.status
