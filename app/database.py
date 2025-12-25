@@ -15,8 +15,8 @@ DB_PATH = Path(__file__).parent.parent / "data" / "v2t.db"
 
 
 def generate_id() -> str:
-    """生成 16 位安全随机 ID"""
-    return secrets.token_urlsafe(12)[:16]
+    """生成安全随机 ID"""
+    return secrets.token_urlsafe(16)
 
 
 def normalize_url(url: str) -> str:
