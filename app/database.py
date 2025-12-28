@@ -52,7 +52,7 @@ class Video:
 class Audio:
     """音频文件"""
     id: str
-    video_id: Optional[str]  # 如果从视频提取，则关联视频
+    video_id: Optional[str]  # 1:1 关联视频（如果从视频提取）
     title: Optional[str]
     audio_path: Optional[str]
     duration: Optional[int]
@@ -112,10 +112,10 @@ CREATE TABLE IF NOT EXISTS videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 音频文件
+-- 音频文件（video:audio = 1:1）
 CREATE TABLE IF NOT EXISTS audios (
     id TEXT PRIMARY KEY,
-    video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+    video_id TEXT UNIQUE REFERENCES videos(id) ON DELETE SET NULL,
     title TEXT,
     audio_path TEXT,
     duration INTEGER,
@@ -353,11 +353,11 @@ async def get_audio(audio_id: str) -> Optional[Audio]:
 
 
 async def get_audio_by_video(video_id: str) -> Optional[Audio]:
-    """根据 video_id 获取音频"""
+    """根据 video_id 获取音频（1:1 关系）"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM audios WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
+            "SELECT * FROM audios WHERE video_id = ?",
             (video_id,)
         )
         row = await cursor.fetchone()
