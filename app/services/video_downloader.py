@@ -8,7 +8,6 @@ import re
 
 from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn
 
-from app.config import get_settings
 from app.services.xiazaitool import parse_video_url, XiazaitoolError
 
 
@@ -23,14 +22,6 @@ class VideoResult:
     path: Path
     title: str
     duration: int | None = None  # 秒
-
-
-def sanitize_filename(filename: str) -> str:
-    """清理文件名，移除非法字符"""
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    if len(filename) > 200:
-        filename = filename[:200]
-    return filename.strip()
 
 
 def get_referer(url: str) -> str:
@@ -80,8 +71,8 @@ async def download_file(
     url: str,
     video_url: str,
     title: str,
-    output_dir: Path | None = None,
-    filename: str | None = None,
+    output_dir: Path,
+    filename: str,
 ) -> VideoResult:
     """
     使用 aria2c 多线程下载视频文件
@@ -90,21 +81,14 @@ async def download_file(
         url: 原始视频页面链接（用于获取 referer）
         video_url: 直接下载链接
         title: 视频标题
-        output_dir: 输出目录（默认使用临时目录）
-        filename: 文件名（不含扩展名），默认使用标题
+        output_dir: 输出目录
+        filename: 文件名（不含扩展名）
 
     Returns:
         VideoResult: 下载结果
     """
-    settings = get_settings()
-    download_dir = output_dir or settings.temp_path
-
-    # 使用指定的文件名或标题
-    if filename:
-        save_name = f"{filename}.mp4"
-    else:
-        save_name = f"{sanitize_filename(title)}.mp4" if title else "video.mp4"
-    save_path = download_dir / save_name
+    save_name = f"{filename}.mp4"
+    save_path = output_dir / save_name
 
     # 已存在则直接返回
     if save_path.exists():
@@ -209,16 +193,16 @@ async def download_file(
 
 async def download_video(
     url: str,
-    output_dir: Path | None = None,
-    filename: str | None = None,
+    output_dir: Path,
+    filename: str,
 ) -> VideoResult:
     """
     下载视频
 
     Args:
         url: 视频页面链接
-        output_dir: 输出目录（默认使用临时目录）
-        filename: 文件名（不含扩展名），默认使用视频标题
+        output_dir: 输出目录
+        filename: 文件名（不含扩展名）
 
     Returns:
         VideoResult: 下载结果
