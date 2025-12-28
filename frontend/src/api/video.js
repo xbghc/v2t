@@ -3,27 +3,29 @@
  */
 
 /**
- * 创建视频（开始下载）
- * @param {string} url - 视频链接
- * @returns {Promise<{id: string, status: string, created: boolean}>}
+ * 上传视频文件
+ * @param {File} file - 视频文件
+ * @returns {Promise<{id: string, title: string}>}
  */
-export async function createVideo(url) {
-    const response = await fetch('/api/videos', {
+export async function uploadVideo(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await fetch('/api/videos/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: formData
     })
     const data = await response.json()
 
     if (!response.ok) {
-        throw new Error(data.detail || '创建失败')
+        throw new Error(data.detail || '上传视频失败')
     }
 
     return data
 }
 
 /**
- * 获取视频状态
+ * 获取视频信息
  * @param {string} videoId - 视频ID
  * @returns {Promise<Object>}
  */
@@ -32,7 +34,7 @@ export async function getVideo(videoId) {
     const data = await response.json()
 
     if (!response.ok) {
-        throw new Error(data.detail || '获取失败')
+        throw new Error(data.detail || '获取视频失败')
     }
 
     return data
@@ -49,15 +51,6 @@ export async function deleteVideo(videoId) {
 
     if (!response.ok) {
         const data = await response.json()
-        throw new Error(data.detail || '删除失败')
+        throw new Error(data.detail || '删除视频失败')
     }
-}
-
-/**
- * 订阅视频下载进度 (SSE)
- * @param {string} videoId - 视频ID
- * @returns {EventSource}
- */
-export function subscribeVideoEvents(videoId) {
-    return new EventSource(`/api/videos/${videoId}/events`)
 }

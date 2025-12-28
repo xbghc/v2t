@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { createVideo, subscribeVideoEvents } from './api/video'
+import { createUrlDownload, subscribeDownloadEvents } from './api/download'
 import { createTranscript, subscribeTranscriptEvents, createOutline, createArticle, getOutline, getArticle, subscribeOutlineEvents, subscribeArticleEvents } from './api/transcript'
 import { useSSE } from './composables/useSSE'
 import AppHeader from './components/AppHeader.vue'
@@ -17,7 +17,9 @@ const currentTab = ref('article')
 const errorMessage = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
 
 // 资源 ID
+const downloadId = ref(null)
 const videoId = ref(null)
+const audioId = ref(null)
 const transcriptId = ref(null)
 
 const progress = reactive({
@@ -40,7 +42,7 @@ let lastUrl = ''
 let lastDownloadOnly = false
 
 // SSE 订阅
-const videoSSE = useSSE({
+const downloadSSE = useSSE({
     onStatus(data) {
         if (data.progress) {
             progress.text = data.progress
@@ -54,6 +56,12 @@ const videoSSE = useSSE({
             if (data.title) {
                 progress.title = data.title
                 result.title = data.title
+            }
+            if (data.video_id) {
+                videoId.value = data.video_id
+            }
+            if (data.audio_id) {
+                audioId.value = data.audio_id
             }
             result.has_video = true
             result.has_audio = true
@@ -142,14 +150,16 @@ const resetState = () => {
     errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
     Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
     Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+    downloadId.value = null
     videoId.value = null
+    audioId.value = null
     transcriptId.value = null
     outlineComplete = false
     articleComplete = false
 }
 
 const closeAllSSE = () => {
-    videoSSE.close()
+    downloadSSE.close()
     transcriptSSE.close()
     outlineSSE.close()
     articleSSE.close()
@@ -182,21 +192,31 @@ const submitUrl = async () => {
     page.value = 'result'
 
     try {
-        // 创建视频并开始下载
-        const data = await createVideo(url.value)
-        videoId.value = data.id
+        // 创建下载任务
+        const data = await createUrlDownload(url.value)
+        downloadId.value = data.id
 
         if (data.created) {
-            // 新建的视频，订阅 SSE
+            // 新建的下载任务，订阅 SSE
             progress.text = '开始下载...'
-            videoSSE.subscribe(subscribeVideoEvents(data.id))
+            downloadSSE.subscribe(subscribeDownloadEvents(data.id))
         } else {
-            // 已存在的视频
-            if (data.status === 'completed') {
-                result.title = data.title || ''
-                progress.title = data.title || ''
-                result.has_video = data.has_video
-                result.has_audio = data.has_audio
+            // 已存在的下载任务
+            if (data.status === 'completed' && data.video_id && data.audio_id) {
+                videoId.value = data.video_id
+                audioId.value = data.audio_id
+
+                // 获取视频信息
+                try {
+                    const { getVideo } = await import('./api/video')
+                    const videoData = await getVideo(data.video_id)
+                    result.title = videoData.title || ''
+                    progress.title = videoData.title || ''
+                    result.has_video = videoData.has_video
+                    result.has_audio = true
+                } catch (e) {
+                    console.warn('获取视频信息失败:', e)
+                }
 
                 if (!lastDownloadOnly) {
                     // 直接开始转录
@@ -210,11 +230,11 @@ const submitUrl = async () => {
             } else if (data.status === 'downloading') {
                 // 正在下载，订阅 SSE
                 progress.text = '下载中...'
-                videoSSE.subscribe(subscribeVideoEvents(data.id))
+                downloadSSE.subscribe(subscribeDownloadEvents(data.id))
             } else {
-                // pending 状态，可能需要重新开始
+                // pending 状态，订阅 SSE 等待
                 progress.text = '开始下载...'
-                videoSSE.subscribe(subscribeVideoEvents(data.id))
+                downloadSSE.subscribe(subscribeDownloadEvents(data.id))
             }
         }
     } catch (error) {
@@ -224,13 +244,19 @@ const submitUrl = async () => {
 }
 
 const startTranscript = async () => {
+    if (!audioId.value) {
+        errorMessage.value = '音频 ID 不存在'
+        taskStatus.value = 'failed'
+        return
+    }
+
     try {
         taskStatus.value = 'transcribing'
         progress.text = '开始转录...'
         progress.percent = 55
         progress.step = '步骤 2/3'
 
-        const data = await createTranscript(videoId.value)
+        const data = await createTranscript(audioId.value)
         transcriptId.value = data.id
 
         // 订阅转录进度
@@ -356,7 +382,7 @@ const copyContent = () => {
             <template v-else-if="page === 'result'">
                 <AppHeader variant="result" :show-new-button="true" @new-task="startNew" />
                 <ResultPage
-                    :task-id="videoId"
+                    :task-id="downloadId"
                     :task-status="taskStatus"
                     :error-message="errorMessage"
                     :progress="progress"

@@ -6,7 +6,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 from dataclasses import dataclass
 from typing import Optional
-from datetime import datetime
 
 from app.config import get_settings
 
@@ -25,24 +24,46 @@ def normalize_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
 
-# 数据模型
+# ============ 数据模型 ============
+
+@dataclass
+class UrlDownload:
+    """URL 下载任务"""
+    id: str
+    original_url: str
+    normalized_url: str
+    download_url: Optional[str]
+    video_id: Optional[str]
+    status: str  # pending, downloading, completed
+    created_at: str
+
+
 @dataclass
 class Video:
+    """视频文件"""
     id: str
-    original_url: Optional[str]
-    normalized_url: Optional[str]
-    download_url: Optional[str]
     title: Optional[str]
-    status: str
     video_path: Optional[str]
+    duration: Optional[int]
+    created_at: str
+
+
+@dataclass
+class Audio:
+    """音频文件"""
+    id: str
+    video_id: Optional[str]  # 如果从视频提取，则关联视频
+    title: Optional[str]
     audio_path: Optional[str]
+    duration: Optional[int]
     created_at: str
 
 
 @dataclass
 class Transcript:
+    """转录"""
     id: str
-    video_id: Optional[str]
+    audio_id: Optional[str]
     status: str
     content: Optional[str]
     created_at: str
@@ -50,6 +71,7 @@ class Transcript:
 
 @dataclass
 class Outline:
+    """大纲"""
     id: str
     transcript_id: str
     status: str
@@ -59,6 +81,7 @@ class Outline:
 
 @dataclass
 class Article:
+    """文章"""
     id: str
     transcript_id: str
     status: str
@@ -66,25 +89,43 @@ class Article:
     created_at: str
 
 
-# 建表 SQL
+# ============ 建表 SQL ============
+
 INIT_SQL = """
--- 视频资源
+-- URL 下载任务（URL -> Video 的映射）
+CREATE TABLE IF NOT EXISTS url_downloads (
+    id TEXT PRIMARY KEY,
+    original_url TEXT NOT NULL,
+    normalized_url TEXT UNIQUE NOT NULL,
+    download_url TEXT,
+    video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 视频文件
 CREATE TABLE IF NOT EXISTS videos (
     id TEXT PRIMARY KEY,
-    original_url TEXT,
-    normalized_url TEXT UNIQUE,
-    download_url TEXT,
     title TEXT,
-    status TEXT DEFAULT 'pending',
     video_path TEXT,
+    duration INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 音频文件
+CREATE TABLE IF NOT EXISTS audios (
+    id TEXT PRIMARY KEY,
+    video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+    title TEXT,
     audio_path TEXT,
+    duration INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 转录资源
 CREATE TABLE IF NOT EXISTS transcripts (
     id TEXT PRIMARY KEY,
-    video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+    audio_id TEXT REFERENCES audios(id) ON DELETE SET NULL,
     status TEXT DEFAULT 'pending',
     content TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -109,8 +150,10 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 
 -- 索引
-CREATE INDEX IF NOT EXISTS idx_videos_normalized_url ON videos(normalized_url);
-CREATE INDEX IF NOT EXISTS idx_transcripts_video_id ON transcripts(video_id);
+CREATE INDEX IF NOT EXISTS idx_url_downloads_normalized_url ON url_downloads(normalized_url);
+CREATE INDEX IF NOT EXISTS idx_url_downloads_video_id ON url_downloads(video_id);
+CREATE INDEX IF NOT EXISTS idx_audios_video_id ON audios(video_id);
+CREATE INDEX IF NOT EXISTS idx_transcripts_audio_id ON transcripts(audio_id);
 CREATE INDEX IF NOT EXISTS idx_outlines_transcript_id ON outlines(transcript_id);
 CREATE INDEX IF NOT EXISTS idx_articles_transcript_id ON articles(transcript_id);
 """
@@ -131,12 +174,12 @@ async def get_db() -> aiosqlite.Connection:
     return db
 
 
-# ============ Videos CRUD ============
+# ============ UrlDownloads CRUD ============
 
-async def create_video(original_url: str) -> tuple[Video, bool]:
+async def create_url_download(original_url: str) -> tuple[UrlDownload, bool]:
     """
-    创建视频记录
-    返回 (video, created) - created 表示是否新创建
+    创建 URL 下载任务
+    返回 (url_download, created) - created 表示是否新创建
     """
     normalized = normalize_url(original_url)
 
@@ -145,26 +188,89 @@ async def create_video(original_url: str) -> tuple[Video, bool]:
 
         # 检查是否已存在
         cursor = await db.execute(
-            "SELECT * FROM videos WHERE normalized_url = ?",
+            "SELECT * FROM url_downloads WHERE normalized_url = ?",
             (normalized,)
         )
         row = await cursor.fetchone()
 
         if row:
-            return _row_to_video(row), False
+            return _row_to_url_download(row), False
 
         # 创建新记录
-        video_id = generate_id()
+        download_id = generate_id()
         await db.execute(
-            """INSERT INTO videos (id, original_url, normalized_url, status)
+            """INSERT INTO url_downloads (id, original_url, normalized_url, status)
                VALUES (?, ?, ?, 'pending')""",
-            (video_id, original_url, normalized)
+            (download_id, original_url, normalized)
+        )
+        await db.commit()
+
+        cursor = await db.execute("SELECT * FROM url_downloads WHERE id = ?", (download_id,))
+        row = await cursor.fetchone()
+        return _row_to_url_download(row), True
+
+
+async def get_url_download(download_id: str) -> Optional[UrlDownload]:
+    """获取 URL 下载任务"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM url_downloads WHERE id = ?", (download_id,))
+        row = await cursor.fetchone()
+        return _row_to_url_download(row) if row else None
+
+
+async def update_url_download(download_id: str, **kwargs) -> Optional[UrlDownload]:
+    """更新 URL 下载任务"""
+    if not kwargs:
+        return await get_url_download(download_id)
+
+    fields = ", ".join(f"{k} = ?" for k in kwargs.keys())
+    values = list(kwargs.values()) + [download_id]
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(f"UPDATE url_downloads SET {fields} WHERE id = ?", values)
+        await db.commit()
+
+        cursor = await db.execute("SELECT * FROM url_downloads WHERE id = ?", (download_id,))
+        row = await cursor.fetchone()
+        return _row_to_url_download(row) if row else None
+
+
+def _row_to_url_download(row) -> UrlDownload:
+    return UrlDownload(
+        id=row["id"],
+        original_url=row["original_url"],
+        normalized_url=row["normalized_url"],
+        download_url=row["download_url"],
+        video_id=row["video_id"],
+        status=row["status"],
+        created_at=row["created_at"],
+    )
+
+
+# ============ Videos CRUD ============
+
+async def create_video(
+    title: Optional[str] = None,
+    video_path: Optional[str] = None,
+    duration: Optional[int] = None,
+) -> Video:
+    """创建视频记录"""
+    video_id = generate_id()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(
+            """INSERT INTO videos (id, title, video_path, duration)
+               VALUES (?, ?, ?, ?)""",
+            (video_id, title, video_path, duration)
         )
         await db.commit()
 
         cursor = await db.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
         row = await cursor.fetchone()
-        return _row_to_video(row), True
+        return _row_to_video(row)
 
 
 async def get_video(video_id: str) -> Optional[Video]:
@@ -205,29 +311,108 @@ async def delete_video(video_id: str) -> bool:
 def _row_to_video(row) -> Video:
     return Video(
         id=row["id"],
-        original_url=row["original_url"],
-        normalized_url=row["normalized_url"],
-        download_url=row["download_url"],
         title=row["title"],
-        status=row["status"],
         video_path=row["video_path"],
+        duration=row["duration"],
+        created_at=row["created_at"],
+    )
+
+
+# ============ Audios CRUD ============
+
+async def create_audio(
+    video_id: Optional[str] = None,
+    title: Optional[str] = None,
+    audio_path: Optional[str] = None,
+    duration: Optional[int] = None,
+) -> Audio:
+    """创建音频记录"""
+    audio_id = generate_id()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(
+            """INSERT INTO audios (id, video_id, title, audio_path, duration)
+               VALUES (?, ?, ?, ?, ?)""",
+            (audio_id, video_id, title, audio_path, duration)
+        )
+        await db.commit()
+
+        cursor = await db.execute("SELECT * FROM audios WHERE id = ?", (audio_id,))
+        row = await cursor.fetchone()
+        return _row_to_audio(row)
+
+
+async def get_audio(audio_id: str) -> Optional[Audio]:
+    """获取音频"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM audios WHERE id = ?", (audio_id,))
+        row = await cursor.fetchone()
+        return _row_to_audio(row) if row else None
+
+
+async def get_audio_by_video(video_id: str) -> Optional[Audio]:
+    """根据 video_id 获取音频"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM audios WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
+            (video_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_audio(row) if row else None
+
+
+async def update_audio(audio_id: str, **kwargs) -> Optional[Audio]:
+    """更新音频"""
+    if not kwargs:
+        return await get_audio(audio_id)
+
+    fields = ", ".join(f"{k} = ?" for k in kwargs.keys())
+    values = list(kwargs.values()) + [audio_id]
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(f"UPDATE audios SET {fields} WHERE id = ?", values)
+        await db.commit()
+
+        cursor = await db.execute("SELECT * FROM audios WHERE id = ?", (audio_id,))
+        row = await cursor.fetchone()
+        return _row_to_audio(row) if row else None
+
+
+async def delete_audio(audio_id: str) -> bool:
+    """删除音频"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM audios WHERE id = ?", (audio_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+def _row_to_audio(row) -> Audio:
+    return Audio(
+        id=row["id"],
+        video_id=row["video_id"],
+        title=row["title"],
         audio_path=row["audio_path"],
+        duration=row["duration"],
         created_at=row["created_at"],
     )
 
 
 # ============ Transcripts CRUD ============
 
-async def create_transcript(video_id: Optional[str] = None) -> Transcript:
+async def create_transcript(audio_id: Optional[str] = None) -> Transcript:
     """创建转录记录"""
     transcript_id = generate_id()
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute(
-            """INSERT INTO transcripts (id, video_id, status)
+            """INSERT INTO transcripts (id, audio_id, status)
                VALUES (?, ?, 'pending')""",
-            (transcript_id, video_id)
+            (transcript_id, audio_id)
         )
         await db.commit()
 
@@ -245,13 +430,13 @@ async def get_transcript(transcript_id: str) -> Optional[Transcript]:
         return _row_to_transcript(row) if row else None
 
 
-async def get_transcript_by_video(video_id: str) -> Optional[Transcript]:
-    """根据 video_id 获取转录"""
+async def get_transcript_by_audio(audio_id: str) -> Optional[Transcript]:
+    """根据 audio_id 获取转录"""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute(
-            "SELECT * FROM transcripts WHERE video_id = ? ORDER BY created_at DESC LIMIT 1",
-            (video_id,)
+            "SELECT * FROM transcripts WHERE audio_id = ? ORDER BY created_at DESC LIMIT 1",
+            (audio_id,)
         )
         row = await cursor.fetchone()
         return _row_to_transcript(row) if row else None
@@ -278,7 +463,7 @@ async def update_transcript(transcript_id: str, **kwargs) -> Optional[Transcript
 def _row_to_transcript(row) -> Transcript:
     return Transcript(
         id=row["id"],
-        video_id=row["video_id"],
+        audio_id=row["audio_id"],
         status=row["status"],
         content=row["content"],
         created_at=row["created_at"],

@@ -4,14 +4,14 @@
 
 /**
  * 创建转录
- * @param {string} videoId - 视频ID
+ * @param {string} audioId - 音频ID
  * @returns {Promise<{id: string, status: string}>}
  */
-export async function createTranscript(videoId) {
+export async function createTranscript(audioId) {
     const response = await fetch('/api/transcripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_id: videoId })
+        body: JSON.stringify({ audio_id: audioId })
     })
     const data = await response.json()
 
@@ -32,7 +32,7 @@ export async function getTranscript(transcriptId) {
     const data = await response.json()
 
     if (!response.ok) {
-        throw new Error(data.detail || '获取失败')
+        throw new Error(data.detail || '获取转录失败')
     }
 
     return data

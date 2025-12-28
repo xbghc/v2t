@@ -3,10 +3,11 @@
 import asyncio
 import logging
 import json
+import shutil
 from pathlib import Path
 from typing import Optional, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -14,11 +15,14 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.database import (
     init_db,
+    create_url_download, get_url_download, update_url_download,
     create_video, get_video, update_video, delete_video,
-    create_transcript, get_transcript, get_transcript_by_video, update_transcript,
+    create_audio, get_audio, get_audio_by_video, update_audio, delete_audio,
+    create_transcript, get_transcript, get_transcript_by_audio, update_transcript,
     create_outline, get_outline, get_outline_by_transcript, update_outline,
     create_article, get_article, get_article_by_transcript, update_article,
-    Video, Transcript, Outline, Article,
+    UrlDownload, Video, Audio, Transcript, Outline, Article,
+    generate_id,
 )
 from app.services.video_downloader import download_video, DownloadError
 from app.services.transcribe import extract_audio_async, transcribe_audio, TranscribeError
@@ -45,28 +49,48 @@ sse_queues: dict[str, asyncio.Queue] = {}
 
 # ============ Pydantic Models ============
 
-class VideoCreateRequest(BaseModel):
+class UrlDownloadCreateRequest(BaseModel):
     url: str
 
 
-class VideoResponse(BaseModel):
+class UrlDownloadResponse(BaseModel):
     id: str
-    url: Optional[str] = None
-    title: Optional[str] = None
+    url: str
     status: str
-    has_video: bool = False
-    has_audio: bool = False
+    video_id: Optional[str] = None
+    audio_id: Optional[str] = None
     created: bool = False
     created_at: str
 
 
-class TranscriptCreateRequest(BaseModel):
+class VideoResponse(BaseModel):
+    id: str
+    title: Optional[str] = None
+    has_video: bool = False
+    duration: Optional[int] = None
+    created_at: str
+
+
+class AudioResponse(BaseModel):
+    id: str
+    video_id: Optional[str] = None
+    title: Optional[str] = None
+    has_audio: bool = False
+    duration: Optional[int] = None
+    created_at: str
+
+
+class AudioCreateRequest(BaseModel):
     video_id: str
+
+
+class TranscriptCreateRequest(BaseModel):
+    audio_id: str
 
 
 class TranscriptResponse(BaseModel):
     id: str
-    video_id: Optional[str] = None
+    audio_id: Optional[str] = None
     status: str
     content: Optional[str] = None
     created_at: str
@@ -146,68 +170,132 @@ async def startup():
     logger.info("数据库初始化完成")
 
 
-# ============ Videos API ============
+# ============ URL Downloads API ============
 
-@app.post("/api/videos", response_model=VideoResponse)
-async def api_create_video(request: VideoCreateRequest, background_tasks: BackgroundTasks):
-    """创建视频资源并开始下载"""
-    video, created = await create_video(request.url)
+@app.post("/api/url-downloads", response_model=UrlDownloadResponse, status_code=201)
+async def api_create_url_download(request: UrlDownloadCreateRequest, background_tasks: BackgroundTasks):
+    """创建 URL 下载任务"""
+    download, created = await create_url_download(request.url)
 
     if created:
         # 新建，启动后台下载任务
-        background_tasks.add_task(process_video_download, video.id)
+        background_tasks.add_task(process_url_download, download.id)
 
-    video_path = Path(video.video_path) if video.video_path else None
-    audio_path = Path(video.audio_path) if video.audio_path else None
+    # 获取关联的 audio_id
+    audio_id = None
+    if download.video_id:
+        audio = await get_audio_by_video(download.video_id)
+        if audio:
+            audio_id = audio.id
+
+    return UrlDownloadResponse(
+        id=download.id,
+        url=download.normalized_url,
+        status=download.status,
+        video_id=download.video_id,
+        audio_id=audio_id,
+        created=created,
+        created_at=download.created_at,
+    )
+
+
+@app.get("/api/url-downloads/{download_id}", response_model=UrlDownloadResponse)
+async def api_get_url_download(download_id: str):
+    """获取 URL 下载状态"""
+    download = await get_url_download(download_id)
+    if not download:
+        raise HTTPException(status_code=404, detail="下载任务不存在")
+
+    # 获取关联的 audio_id
+    audio_id = None
+    if download.video_id:
+        audio = await get_audio_by_video(download.video_id)
+        if audio:
+            audio_id = audio.id
+
+    return UrlDownloadResponse(
+        id=download.id,
+        url=download.normalized_url,
+        status=download.status,
+        video_id=download.video_id,
+        audio_id=audio_id,
+        created=False,
+        created_at=download.created_at,
+    )
+
+
+@app.get("/api/url-downloads/{download_id}/events")
+async def api_url_download_events(download_id: str):
+    """SSE 订阅下载进度"""
+    download = await get_url_download(download_id)
+    if not download:
+        raise HTTPException(status_code=404, detail="下载任务不存在")
+
+    return StreamingResponse(
+        sse_generator("download", download_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+# ============ Videos API ============
+
+@app.post("/api/videos/upload", response_model=VideoResponse, status_code=201)
+async def api_upload_video(file: UploadFile = File(...)):
+    """上传视频文件"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    # 检查文件类型
+    video_types = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
+    ext = Path(file.filename).suffix.lower()
+    if ext not in video_types:
+        raise HTTPException(status_code=400, detail=f"不支持的视频类型: {ext}")
+
+    settings = get_settings()
+    file_id = generate_id()
+
+    # 保存文件
+    save_path = settings.temp_path / f"{file_id}{ext}"
+    with save_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # 获取文件标题（去除扩展名）
+    title = Path(file.filename).stem
+
+    # 创建视频记录
+    video = await create_video(
+        title=title,
+        video_path=str(save_path),
+    )
 
     return VideoResponse(
         id=video.id,
-        url=video.normalized_url,
         title=video.title,
-        status=video.status,
-        has_video=video_path is not None and video_path.exists(),
-        has_audio=audio_path is not None and audio_path.exists(),
-        created=created,
+        has_video=save_path.exists(),
+        duration=video.duration,
         created_at=video.created_at,
     )
 
 
 @app.get("/api/videos/{video_id}", response_model=VideoResponse)
 async def api_get_video(video_id: str):
-    """获取视频状态"""
+    """获取视频信息"""
     video = await get_video(video_id)
     if not video:
         raise HTTPException(status_code=404, detail="视频不存在")
 
     video_path = Path(video.video_path) if video.video_path else None
-    audio_path = Path(video.audio_path) if video.audio_path else None
 
     return VideoResponse(
         id=video.id,
-        url=video.normalized_url,
         title=video.title,
-        status=video.status,
         has_video=video_path is not None and video_path.exists(),
-        has_audio=audio_path is not None and audio_path.exists(),
-        created=False,
+        duration=video.duration,
         created_at=video.created_at,
-    )
-
-
-@app.get("/api/videos/{video_id}/events")
-async def api_video_events(video_id: str):
-    """SSE 订阅视频下载进度"""
-    video = await get_video(video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="视频不存在")
-
-    return StreamingResponse(
-        sse_generator("video", video_id),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        }
     )
 
 
@@ -222,11 +310,6 @@ async def api_delete_video(video_id: str):
     if video.video_path:
         try:
             Path(video.video_path).unlink(missing_ok=True)
-        except OSError:
-            pass
-    if video.audio_path:
-        try:
-            Path(video.audio_path).unlink(missing_ok=True)
         except OSError:
             pass
 
@@ -247,27 +330,154 @@ async def api_download_video_file(video_id: str):
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="视频文件不存在")
 
+    filename = f"{video.title}{video_path.suffix}" if video.title else video_path.name
     return FileResponse(
         video_path,
-        filename=video_path.name,
+        filename=filename,
         media_type="video/mp4",
     )
 
 
-@app.get("/api/videos/{video_id}/audio")
-async def api_download_audio_file(video_id: str):
-    """下载音频文件"""
-    video = await get_video(video_id)
+# ============ Audios API ============
+
+@app.post("/api/audios", response_model=AudioResponse, status_code=201)
+async def api_create_audio(request: AudioCreateRequest, background_tasks: BackgroundTasks):
+    """从视频提取音频"""
+    video = await get_video(request.video_id)
     if not video:
         raise HTTPException(status_code=404, detail="视频不存在")
-    if not video.audio_path:
+    if not video.video_path:
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+
+    video_path = Path(video.video_path)
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+
+    # 创建音频记录
+    audio = await create_audio(
+        video_id=video.id,
+        title=video.title,
+    )
+
+    # 启动后台提取任务
+    background_tasks.add_task(process_audio_extract, audio.id, video_path)
+
+    return AudioResponse(
+        id=audio.id,
+        video_id=audio.video_id,
+        title=audio.title,
+        has_audio=False,  # 尚未提取
+        duration=audio.duration,
+        created_at=audio.created_at,
+    )
+
+
+@app.post("/api/audios/upload", response_model=AudioResponse, status_code=201)
+async def api_upload_audio(file: UploadFile = File(...)):
+    """上传音频文件"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    # 检查文件类型
+    audio_types = [".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg"]
+    ext = Path(file.filename).suffix.lower()
+    if ext not in audio_types:
+        raise HTTPException(status_code=400, detail=f"不支持的音频类型: {ext}")
+
+    settings = get_settings()
+    file_id = generate_id()
+
+    # 保存文件
+    save_path = settings.temp_path / f"{file_id}{ext}"
+    with save_path.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # 获取文件标题（去除扩展名）
+    title = Path(file.filename).stem
+
+    # 创建音频记录
+    audio = await create_audio(
+        title=title,
+        audio_path=str(save_path),
+    )
+
+    return AudioResponse(
+        id=audio.id,
+        video_id=audio.video_id,
+        title=audio.title,
+        has_audio=save_path.exists(),
+        duration=audio.duration,
+        created_at=audio.created_at,
+    )
+
+
+@app.get("/api/audios/{audio_id}", response_model=AudioResponse)
+async def api_get_audio(audio_id: str):
+    """获取音频信息"""
+    audio = await get_audio(audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="音频不存在")
+
+    audio_path = Path(audio.audio_path) if audio.audio_path else None
+
+    return AudioResponse(
+        id=audio.id,
+        video_id=audio.video_id,
+        title=audio.title,
+        has_audio=audio_path is not None and audio_path.exists(),
+        duration=audio.duration,
+        created_at=audio.created_at,
+    )
+
+
+@app.get("/api/audios/{audio_id}/events")
+async def api_audio_events(audio_id: str):
+    """SSE 订阅音频提取进度"""
+    audio = await get_audio(audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="音频不存在")
+
+    return StreamingResponse(
+        sse_generator("audio", audio_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.delete("/api/audios/{audio_id}", response_model=MessageResponse)
+async def api_delete_audio(audio_id: str):
+    """删除音频及文件"""
+    audio = await get_audio(audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="音频不存在")
+
+    if audio.audio_path:
+        try:
+            Path(audio.audio_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    await delete_audio(audio_id)
+    return MessageResponse(message="音频已删除")
+
+
+@app.get("/api/audios/{audio_id}/file")
+async def api_download_audio_file(audio_id: str):
+    """下载音频文件"""
+    audio = await get_audio(audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="音频不存在")
+    if not audio.audio_path:
         raise HTTPException(status_code=404, detail="音频文件不存在")
 
-    audio_path = Path(video.audio_path)
+    audio_path = Path(audio.audio_path)
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="音频文件不存在")
 
-    filename = f"{video.title}.mp3" if video.title else "audio.mp3"
+    filename = f"{audio.title}.mp3" if audio.title else "audio.mp3"
     return FileResponse(
         audio_path,
         filename=filename,
@@ -280,22 +490,25 @@ async def api_download_audio_file(video_id: str):
 @app.post("/api/transcripts", response_model=TranscriptResponse, status_code=201)
 async def api_create_transcript(request: TranscriptCreateRequest, background_tasks: BackgroundTasks):
     """创建转录"""
-    # 检查视频是否存在且已完成
-    video = await get_video(request.video_id)
-    if not video:
-        raise HTTPException(status_code=404, detail="视频不存在")
-    if video.status != "completed":
-        raise HTTPException(status_code=409, detail="视频尚未下载完成")
+    audio = await get_audio(request.audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="音频不存在")
+    if not audio.audio_path:
+        raise HTTPException(status_code=409, detail="音频尚未准备好")
+
+    audio_path = Path(audio.audio_path)
+    if not audio_path.exists():
+        raise HTTPException(status_code=409, detail="音频文件不存在")
 
     # 创建转录记录
-    transcript = await create_transcript(video_id=request.video_id)
+    transcript = await create_transcript(audio_id=request.audio_id)
 
     # 启动后台转录任务
-    background_tasks.add_task(process_transcript, transcript.id, video)
+    background_tasks.add_task(process_transcript, transcript.id, audio)
 
     return TranscriptResponse(
         id=transcript.id,
-        video_id=transcript.video_id,
+        audio_id=transcript.audio_id,
         status="processing",
         content=transcript.content,
         created_at=transcript.created_at,
@@ -311,7 +524,7 @@ async def api_get_transcript(transcript_id: str):
 
     return TranscriptResponse(
         id=transcript.id,
-        video_id=transcript.video_id,
+        audio_id=transcript.audio_id,
         status=transcript.status,
         content=transcript.content,
         created_at=transcript.created_at,
@@ -455,50 +668,89 @@ async def api_article_events(transcript_id: str):
 
 # ============ Background Tasks ============
 
-async def process_video_download(video_id: str):
-    """后台任务：下载视频"""
-    logger.info("开始下载视频: %s", video_id)
+async def process_url_download(download_id: str):
+    """后台任务：URL 下载"""
+    logger.info("开始下载: %s", download_id)
 
     try:
-        await update_video(video_id, status="downloading")
-        await send_sse_event("video", video_id, "status", {"status": "downloading", "progress": "开始下载..."})
+        await update_url_download(download_id, status="downloading")
+        await send_sse_event("download", download_id, "status", {"status": "downloading", "progress": "开始下载..."})
 
-        video = await get_video(video_id)
+        download = await get_url_download(download_id)
         settings = get_settings()
         output_dir = settings.temp_path
 
-        # 下载视频（使用 video_id 作为文件名，避免文件名过长）
-        result = await download_video(video.original_url, output_dir, video_id)
+        # 使用 download_id 作为文件名
+        result = await download_video(download.original_url, output_dir, download_id)
 
-        await send_sse_event("video", video_id, "status", {"status": "downloading", "progress": "下载完成，提取音频..."})
+        await send_sse_event("download", download_id, "status", {"status": "downloading", "progress": "下载完成，提取音频..."})
+
+        # 创建视频记录
+        video = await create_video(
+            title=result.title,
+            video_path=str(result.path),
+        )
 
         # 提取音频
         audio_path = await extract_audio_async(result.path)
 
-        # 更新数据库
-        await update_video(
-            video_id,
-            status="completed",
+        # 创建音频记录
+        audio = await create_audio(
+            video_id=video.id,
             title=result.title,
-            download_url=result.url if hasattr(result, 'url') else None,
-            video_path=str(result.path),
             audio_path=str(audio_path),
         )
 
-        await send_sse_event("video", video_id, "status", {"status": "completed", "title": result.title})
-        await send_sse_event("video", video_id, "done", {})
+        # 更新下载记录，关联视频
+        await update_url_download(
+            download_id,
+            status="completed",
+            video_id=video.id,
+            download_url=result.url if hasattr(result, 'url') else None,
+        )
 
-        logger.info("视频下载完成: %s - %s", video_id, result.title)
+        await send_sse_event("download", download_id, "status", {
+            "status": "completed",
+            "title": result.title,
+            "video_id": video.id,
+            "audio_id": audio.id,
+        })
+        await send_sse_event("download", download_id, "done", {})
+
+        logger.info("下载完成: %s -> video %s, audio %s - %s", download_id, video.id, audio.id, result.title)
 
     except DownloadError as e:
-        logger.warning("视频下载失败: %s - %s", video_id, e)
-        await send_sse_event("video", video_id, "error", {"detail": f"下载失败: {e}"})
+        logger.warning("下载失败: %s - %s", download_id, e)
+        await send_sse_event("download", download_id, "error", {"detail": f"下载失败: {e}"})
     except Exception as e:
-        logger.exception("视频下载异常: %s", video_id)
-        await send_sse_event("video", video_id, "error", {"detail": f"处理失败: {e}"})
+        logger.exception("下载异常: %s", download_id)
+        await send_sse_event("download", download_id, "error", {"detail": f"处理失败: {e}"})
 
 
-async def process_transcript(transcript_id: str, video: Video):
+async def process_audio_extract(audio_id: str, video_path: Path):
+    """后台任务：从视频提取音频"""
+    logger.info("开始提取音频: %s", audio_id)
+
+    try:
+        await send_sse_event("audio", audio_id, "status", {"status": "processing", "progress": "提取音频中..."})
+
+        # 提取音频
+        audio_path = await extract_audio_async(video_path)
+
+        # 更新音频记录
+        await update_audio(audio_id, audio_path=str(audio_path))
+
+        await send_sse_event("audio", audio_id, "status", {"status": "completed"})
+        await send_sse_event("audio", audio_id, "done", {})
+
+        logger.info("音频提取完成: %s", audio_id)
+
+    except Exception as e:
+        logger.exception("音频提取失败: %s", audio_id)
+        await send_sse_event("audio", audio_id, "error", {"detail": f"音频提取失败: {e}"})
+
+
+async def process_transcript(transcript_id: str, audio: Audio):
     """后台任务：转录音频"""
     logger.info("开始转录: %s", transcript_id)
 
@@ -506,10 +758,10 @@ async def process_transcript(transcript_id: str, video: Video):
         await update_transcript(transcript_id, status="processing")
         await send_sse_event("transcript", transcript_id, "status", {"status": "processing", "progress": "开始转录..."})
 
-        if not video.audio_path:
+        if not audio.audio_path:
             raise TranscribeError("音频文件不存在")
 
-        audio_path = Path(video.audio_path)
+        audio_path = Path(audio.audio_path)
         if not audio_path.exists():
             raise TranscribeError("音频文件不存在")
 
