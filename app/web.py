@@ -4,6 +4,7 @@ import asyncio
 import logging
 import json
 import shutil
+import time
 from pathlib import Path
 from typing import Optional, AsyncGenerator
 
@@ -18,10 +19,11 @@ from app.database import (
     create_url_download, get_url_download, update_url_download,
     create_video, get_video, update_video, delete_video,
     create_audio, get_audio, get_audio_by_video, update_audio, delete_audio,
+    create_video_audio_conversion, get_conversion_by_video,
     create_transcript, get_transcript, get_transcript_by_audio, update_transcript,
     create_outline, get_outline, get_outline_by_transcript, update_outline,
     create_article, get_article, get_article_by_transcript, update_article,
-    UrlDownload, Video, Audio, Transcript, Outline, Article,
+    UrlDownload, Video, Audio, VideoAudioConversion, Transcript, Outline, Article,
     generate_id,
 )
 from app.services.video_downloader import download_video, DownloadError
@@ -73,10 +75,17 @@ class VideoResponse(BaseModel):
 
 class AudioResponse(BaseModel):
     id: str
-    video_id: Optional[str] = None
     title: Optional[str] = None
     has_audio: bool = False
     duration: Optional[int] = None
+    created_at: str
+
+
+class ConversionResponse(BaseModel):
+    id: str
+    video_id: str
+    audio_id: str
+    conversion_ms: Optional[int] = None
     created_at: str
 
 
@@ -353,18 +362,19 @@ async def api_create_audio(request: AudioCreateRequest, background_tasks: Backgr
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="视频文件不存在")
 
+    # 检查是否已有转换记录
+    existing = await get_conversion_by_video(video.id)
+    if existing:
+        raise HTTPException(status_code=409, detail="该视频已有音频")
+
     # 创建音频记录
-    audio = await create_audio(
-        video_id=video.id,
-        title=video.title,
-    )
+    audio = await create_audio(title=video.title)
 
     # 启动后台提取任务
-    background_tasks.add_task(process_audio_extract, audio.id, video_path)
+    background_tasks.add_task(process_audio_extract, audio.id, video.id, video_path)
 
     return AudioResponse(
         id=audio.id,
-        video_id=audio.video_id,
         title=audio.title,
         has_audio=False,  # 尚未提取
         duration=audio.duration,
@@ -403,7 +413,6 @@ async def api_upload_audio(file: UploadFile = File(...)):
 
     return AudioResponse(
         id=audio.id,
-        video_id=audio.video_id,
         title=audio.title,
         has_audio=save_path.exists(),
         duration=audio.duration,
@@ -422,7 +431,6 @@ async def api_get_audio(audio_id: str):
 
     return AudioResponse(
         id=audio.id,
-        video_id=audio.video_id,
         title=audio.title,
         has_audio=audio_path is not None and audio_path.exists(),
         duration=audio.duration,
@@ -691,14 +699,22 @@ async def process_url_download(download_id: str):
             video_path=str(result.path),
         )
 
-        # 提取音频
+        # 提取音频并计时
+        start_time = time.monotonic()
         audio_path = await extract_audio_async(result.path)
+        conversion_ms = int((time.monotonic() - start_time) * 1000)
 
         # 创建音频记录
         audio = await create_audio(
-            video_id=video.id,
             title=result.title,
             audio_path=str(audio_path),
+        )
+
+        # 创建转换记录
+        await create_video_audio_conversion(
+            video_id=video.id,
+            audio_id=audio.id,
+            conversion_ms=conversion_ms,
         )
 
         # 更新下载记录，关联视频
@@ -717,7 +733,7 @@ async def process_url_download(download_id: str):
         })
         await send_sse_event("download", download_id, "done", {})
 
-        logger.info("下载完成: %s -> video %s, audio %s - %s", download_id, video.id, audio.id, result.title)
+        logger.info("下载完成: %s -> video %s, audio %s - %s (转换耗时 %dms)", download_id, video.id, audio.id, result.title, conversion_ms)
 
     except DownloadError as e:
         logger.warning("下载失败: %s - %s", download_id, e)
@@ -727,23 +743,32 @@ async def process_url_download(download_id: str):
         await send_sse_event("download", download_id, "error", {"detail": f"处理失败: {e}"})
 
 
-async def process_audio_extract(audio_id: str, video_path: Path):
+async def process_audio_extract(audio_id: str, video_id: str, video_path: Path):
     """后台任务：从视频提取音频"""
-    logger.info("开始提取音频: %s", audio_id)
+    logger.info("开始提取音频: %s (from video %s)", audio_id, video_id)
 
     try:
         await send_sse_event("audio", audio_id, "status", {"status": "processing", "progress": "提取音频中..."})
 
-        # 提取音频
+        # 提取音频并计时
+        start_time = time.monotonic()
         audio_path = await extract_audio_async(video_path)
+        conversion_ms = int((time.monotonic() - start_time) * 1000)
 
         # 更新音频记录
         await update_audio(audio_id, audio_path=str(audio_path))
 
+        # 创建转换记录
+        await create_video_audio_conversion(
+            video_id=video_id,
+            audio_id=audio_id,
+            conversion_ms=conversion_ms,
+        )
+
         await send_sse_event("audio", audio_id, "status", {"status": "completed"})
         await send_sse_event("audio", audio_id, "done", {})
 
-        logger.info("音频提取完成: %s", audio_id)
+        logger.info("音频提取完成: %s (转换耗时 %dms)", audio_id, conversion_ms)
 
     except Exception as e:
         logger.exception("音频提取失败: %s", audio_id)

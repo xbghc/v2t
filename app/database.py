@@ -52,10 +52,19 @@ class Video:
 class Audio:
     """音频文件"""
     id: str
-    video_id: Optional[str]  # 1:1 关联视频（如果从视频提取）
     title: Optional[str]
     audio_path: Optional[str]
     duration: Optional[int]
+    created_at: str
+
+
+@dataclass
+class VideoAudioConversion:
+    """视频转音频记录"""
+    id: str
+    video_id: str
+    audio_id: str
+    conversion_ms: Optional[int]  # 转换耗时（毫秒）
     created_at: str
 
 
@@ -112,13 +121,21 @@ CREATE TABLE IF NOT EXISTS videos (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 音频文件（video:audio = 1:1）
+-- 音频文件
 CREATE TABLE IF NOT EXISTS audios (
     id TEXT PRIMARY KEY,
-    video_id TEXT UNIQUE REFERENCES videos(id) ON DELETE SET NULL,
     title TEXT,
     audio_path TEXT,
     duration INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 视频转音频记录（video:audio = 1:1）
+CREATE TABLE IF NOT EXISTS video_audio_conversions (
+    id TEXT PRIMARY KEY,
+    video_id TEXT UNIQUE NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+    audio_id TEXT UNIQUE NOT NULL REFERENCES audios(id) ON DELETE CASCADE,
+    conversion_ms INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -152,7 +169,8 @@ CREATE TABLE IF NOT EXISTS articles (
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_url_downloads_normalized_url ON url_downloads(normalized_url);
 CREATE INDEX IF NOT EXISTS idx_url_downloads_video_id ON url_downloads(video_id);
-CREATE INDEX IF NOT EXISTS idx_audios_video_id ON audios(video_id);
+CREATE INDEX IF NOT EXISTS idx_conversions_video_id ON video_audio_conversions(video_id);
+CREATE INDEX IF NOT EXISTS idx_conversions_audio_id ON video_audio_conversions(audio_id);
 CREATE INDEX IF NOT EXISTS idx_transcripts_audio_id ON transcripts(audio_id);
 CREATE INDEX IF NOT EXISTS idx_outlines_transcript_id ON outlines(transcript_id);
 CREATE INDEX IF NOT EXISTS idx_articles_transcript_id ON articles(transcript_id);
@@ -321,7 +339,6 @@ def _row_to_video(row) -> Video:
 # ============ Audios CRUD ============
 
 async def create_audio(
-    video_id: Optional[str] = None,
     title: Optional[str] = None,
     audio_path: Optional[str] = None,
     duration: Optional[int] = None,
@@ -332,9 +349,9 @@ async def create_audio(
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         await db.execute(
-            """INSERT INTO audios (id, video_id, title, audio_path, duration)
-               VALUES (?, ?, ?, ?, ?)""",
-            (audio_id, video_id, title, audio_path, duration)
+            """INSERT INTO audios (id, title, audio_path, duration)
+               VALUES (?, ?, ?, ?)""",
+            (audio_id, title, audio_path, duration)
         )
         await db.commit()
 
@@ -348,18 +365,6 @@ async def get_audio(audio_id: str) -> Optional[Audio]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("SELECT * FROM audios WHERE id = ?", (audio_id,))
-        row = await cursor.fetchone()
-        return _row_to_audio(row) if row else None
-
-
-async def get_audio_by_video(video_id: str) -> Optional[Audio]:
-    """根据 video_id 获取音频（1:1 关系）"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        cursor = await db.execute(
-            "SELECT * FROM audios WHERE video_id = ?",
-            (video_id,)
-        )
         row = await cursor.fetchone()
         return _row_to_audio(row) if row else None
 
@@ -393,10 +398,94 @@ async def delete_audio(audio_id: str) -> bool:
 def _row_to_audio(row) -> Audio:
     return Audio(
         id=row["id"],
-        video_id=row["video_id"],
         title=row["title"],
         audio_path=row["audio_path"],
         duration=row["duration"],
+        created_at=row["created_at"],
+    )
+
+
+# ============ VideoAudioConversions CRUD ============
+
+async def create_video_audio_conversion(
+    video_id: str,
+    audio_id: str,
+    conversion_ms: Optional[int] = None,
+) -> VideoAudioConversion:
+    """创建视频转音频记录"""
+    conversion_id = generate_id()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        await db.execute(
+            """INSERT INTO video_audio_conversions (id, video_id, audio_id, conversion_ms)
+               VALUES (?, ?, ?, ?)""",
+            (conversion_id, video_id, audio_id, conversion_ms)
+        )
+        await db.commit()
+
+        cursor = await db.execute(
+            "SELECT * FROM video_audio_conversions WHERE id = ?", (conversion_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_conversion(row)
+
+
+async def get_conversion(conversion_id: str) -> Optional[VideoAudioConversion]:
+    """获取转换记录"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM video_audio_conversions WHERE id = ?", (conversion_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_conversion(row) if row else None
+
+
+async def get_conversion_by_video(video_id: str) -> Optional[VideoAudioConversion]:
+    """根据 video_id 获取转换记录（1:1 关系）"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM video_audio_conversions WHERE video_id = ?",
+            (video_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_conversion(row) if row else None
+
+
+async def get_conversion_by_audio(audio_id: str) -> Optional[VideoAudioConversion]:
+    """根据 audio_id 获取转换记录（1:1 关系）"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT * FROM video_audio_conversions WHERE audio_id = ?",
+            (audio_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_conversion(row) if row else None
+
+
+async def get_audio_by_video(video_id: str) -> Optional[Audio]:
+    """根据 video_id 获取关联的音频（通过转换表）"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """SELECT a.* FROM audios a
+               JOIN video_audio_conversions c ON a.id = c.audio_id
+               WHERE c.video_id = ?""",
+            (video_id,)
+        )
+        row = await cursor.fetchone()
+        return _row_to_audio(row) if row else None
+
+
+def _row_to_conversion(row) -> VideoAudioConversion:
+    return VideoAudioConversion(
+        id=row["id"],
+        video_id=row["video_id"],
+        audio_id=row["audio_id"],
+        conversion_ms=row["conversion_ms"],
         created_at=row["created_at"],
     )
 

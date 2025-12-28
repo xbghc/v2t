@@ -5,7 +5,7 @@
 /**
  * 从视频提取音频
  * @param {string} videoId - 视频ID
- * @returns {Promise<{id: string, video_id: string, title: string}>}
+ * @returns {Promise<{id: string, title: string, has_audio: boolean}>}
  */
 export async function createAudio(videoId) {
     const response = await fetch('/api/audios', {
