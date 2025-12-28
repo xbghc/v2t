@@ -467,8 +467,8 @@ async def process_video_download(video_id: str):
         settings = get_settings()
         output_dir = settings.temp_path
 
-        # 下载视频
-        result = await download_video(video.original_url, output_dir=output_dir)
+        # 下载视频（使用 video_id 作为文件名，避免文件名过长）
+        result = await download_video(video.original_url, output_dir=output_dir, filename=video_id)
 
         await send_sse_event("video", video_id, "status", {"status": "downloading", "progress": "下载完成，提取音频..."})
 
