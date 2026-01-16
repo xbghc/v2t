@@ -1,15 +1,15 @@
 """视频下载服务 - 使用 xiazaitool API + aria2c 多线程下载"""
 
 import asyncio
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
-from dataclasses import dataclass
-import re
 
-from rich.progress import Progress, BarColumn, DownloadColumn, TransferSpeedColumn
+from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 
 from app.config import get_settings
-from app.services.xiazaitool import parse_video_url, XiazaitoolError
+from app.services.xiazaitool import XiazaitoolError, parse_video_url
 
 
 class DownloadError(Exception):

@@ -1,7 +1,8 @@
 """xiazaitool API 测试"""
 
 import pytest
-from app.services.xiazaitool import parse_video_url, XiazaitoolError
+
+from app.services.xiazaitool import XiazaitoolError, parse_video_url
 
 
 @pytest.mark.asyncio

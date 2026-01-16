@@ -26,7 +26,7 @@ defineProps({
                 <div
                     class="bg-primary h-2 rounded-full transition-all duration-500"
                     :style="{ width: `${percent}%` }"
-                ></div>
+                />
             </div>
         </div>
     </div>

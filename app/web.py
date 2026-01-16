@@ -1,13 +1,11 @@
 """v2t Web API 服务"""
 
-import asyncio
 import logging
-import uuid
 import time
-from pathlib import Path
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from pathlib import Path
 
 # 配置日志
 logging.basicConfig(
@@ -16,15 +14,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.video_downloader import download_video, DownloadError
-from app.services.transcribe import extract_audio_async, TranscribeError
-from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
+from app.services.gitcode_ai import GitCodeAIError, generate_article, generate_outline
+from app.services.transcribe import TranscribeError, extract_audio_async
+from app.services.video_downloader import DownloadError, download_video
 
 
 class TaskStatus(str, Enum):
@@ -43,8 +41,8 @@ class TaskResult:
     status: TaskStatus = TaskStatus.PENDING
     progress: str = "等待处理..."
     title: str = ""
-    video_path: Optional[Path] = None
-    audio_path: Optional[Path] = None
+    video_path: Path | None = None
+    audio_path: Path | None = None
     transcript: str = ""
     outline: str = ""
     article: str = ""

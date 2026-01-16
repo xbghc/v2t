@@ -1,7 +1,8 @@
 """xiazaitool API 服务 - 解析视频链接"""
 
-import httpx
 from dataclasses import dataclass
+
+import httpx
 
 from app.config import get_settings
 

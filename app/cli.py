@@ -9,10 +9,10 @@ import typer
 from rich.console import Console
 from rich.prompt import Prompt
 
-from app.config import load_config, save_config, get_settings, CONFIG_PATH
-from app.services.video_downloader import download_video, DownloadError
-from app.services.transcribe import transcribe_video, extract_audio_async, TranscribeError
-from app.services.gitcode_ai import generate_outline, generate_article, GitCodeAIError
+from app.config import CONFIG_PATH, get_settings, load_config, save_config
+from app.services.gitcode_ai import GitCodeAIError, generate_article, generate_outline
+from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_video
+from app.services.video_downloader import DownloadError, download_video
 
 console = Console()
 

@@ -1,11 +1,12 @@
 """GitCode AI API 测试"""
 
 import pytest
+
 from app.services.gitcode_ai import (
-    chat,
-    generate_outline,
-    generate_article,
     GitCodeAIError,
+    chat,
+    generate_article,
+    generate_outline,
 )
 
 

@@ -54,7 +54,10 @@ const showPulse = computed(() => !props.available && props.isProcessing)
         disabled
         class="flex w-full min-w-btn max-w-input items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-gray-100 dark:bg-dark-card text-gray-400 dark:text-gray-600 gap-2 text-sm font-medium leading-normal cursor-not-allowed"
     >
-        <span class="material-symbols-outlined text-lg" :class="{ 'animate-pulse': showPulse }">{{ icon }}</span>
+        <span
+            class="material-symbols-outlined text-lg"
+            :class="{ 'animate-pulse': showPulse }"
+        >{{ icon }}</span>
         <span class="truncate">{{ label }}</span>
     </button>
 </template>

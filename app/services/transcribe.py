@@ -7,7 +7,7 @@ from pathlib import Path
 
 import openai
 from openai import AsyncOpenAI
-from rich.progress import Progress, BarColumn, TaskProgressColumn, TimeRemainingColumn
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TimeRemainingColumn
 
 from app.config import get_settings
 

@@ -25,6 +25,10 @@ const props = defineProps({
     result: {
         type: Object,
         required: true
+    },
+    currentContent: {
+        type: String,
+        default: ''
     }
 })
 
@@ -42,12 +46,6 @@ const isFailed = computed(() => {
 
 const hasTextContent = computed(() => {
     return !!(props.result.transcript || props.result.outline || props.result.article)
-})
-
-const currentContent = computed(() => {
-    if (currentTab.value === 'article') return props.result.article || ''
-    if (currentTab.value === 'outline') return props.result.outline || ''
-    return props.result.transcript || ''
 })
 
 const isContentLoading = computed(() => {
@@ -82,7 +80,7 @@ const contentLoadingText = computed(() => {
 })
 
 const renderedContent = computed(() => {
-    if (!currentContent.value) {
+    if (!props.currentContent) {
         if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
         if (!isProcessing.value) {
             if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
@@ -91,7 +89,7 @@ const renderedContent = computed(() => {
         }
         return ''
     }
-    return marked.parse(currentContent.value)
+    return marked.parse(props.currentContent)
 })
 
 const statusTitle = computed(() => {
@@ -123,10 +121,13 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                         {{ statusDescription }}
                     </p>
                 </div>
-                <div v-if="isFailed" class="flex items-center">
+                <div
+                    v-if="isFailed"
+                    class="flex items-center"
+                >
                     <button
-                        @click="$emit('retry')"
                         class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
+                        @click="$emit('retry')"
                     >
                         <span class="truncate">重新尝试</span>
                     </button>
@@ -183,8 +184,12 @@ const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}
                     class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-dark-bg rounded-xl border border-gray-200 dark:border-dark-border p-12"
                 >
                     <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
-                    <p class="text-gray-600 dark:text-gray-400 text-center">仅下载模式，无文字内容</p>
-                    <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">请使用左侧按钮下载视频或音频文件</p>
+                    <p class="text-gray-600 dark:text-gray-400 text-center">
+                        仅下载模式，无文字内容
+                    </p>
+                    <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">
+                        请使用左侧按钮下载视频或音频文件
+                    </p>
                 </div>
             </div>
         </div>

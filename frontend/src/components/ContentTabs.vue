@@ -39,9 +39,9 @@ const tabs = [
                             v-for="tab in tabs"
                             :key="tab.key"
                             href="#"
-                            @click.prevent="$emit('update:currentTab', tab.key)"
                             class="flex flex-col items-center justify-center border-b-3 pb-3_25 pt-2 transition-colors"
                             :class="currentTab === tab.key ? 'border-b-primary' : 'border-b-transparent'"
+                            @click.prevent="$emit('update:currentTab', tab.key)"
                         >
                             <p
                                 class="text-sm font-bold leading-normal tracking-tight-sm"
@@ -53,10 +53,10 @@ const tabs = [
                 <!-- Copy Button -->
                 <div class="pt-4 sm:pt-0 w-full sm:w-auto flex justify-end">
                     <button
-                        @click="$emit('copy')"
                         :disabled="isLoading"
                         :class="isLoading ? 'bg-gray-100 dark:bg-dark-card text-gray-400 dark:text-gray-600 cursor-not-allowed' : 'bg-gray-200 dark:bg-dark-border text-gray-900 dark:text-white cursor-pointer hover:bg-gray-300 dark:hover:bg-dark-border-light'"
                         class="flex min-w-btn max-w-input items-center justify-center overflow-hidden rounded-lg h-10 px-4 gap-2 text-sm font-bold leading-normal tracking-tight-sm transition-colors"
+                        @click="$emit('copy')"
                     >
                         <span class="material-symbols-outlined text-xl">content_copy</span>
                         <span class="truncate">复制内容</span>
@@ -64,14 +64,26 @@ const tabs = [
                 </div>
             </div>
             <!-- Content Area -->
-            <div class="p-6 text-gray-600 dark:text-dark-text leading-relaxed text-base overflow-y-auto flex-1" style="max-height: 600px;">
+            <div
+                class="p-6 text-gray-600 dark:text-dark-text leading-relaxed text-base overflow-y-auto flex-1"
+                style="max-height: 600px;"
+            >
                 <!-- 加载中状态 -->
-                <div v-if="isLoading" class="flex flex-col items-center justify-center py-12 gap-4">
-                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    <p class="text-gray-500 dark:text-gray-400 text-sm">{{ loadingText }}</p>
+                <div
+                    v-if="isLoading"
+                    class="flex flex-col items-center justify-center py-12 gap-4"
+                >
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                    <p class="text-gray-500 dark:text-gray-400 text-sm">
+                        {{ loadingText }}
+                    </p>
                 </div>
                 <!-- 实际内容 -->
-                <div v-else class="prose prose-sm md:prose-base dark:prose-invert max-w-none" v-html="renderedContent"></div>
+                <div
+                    v-else
+                    class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
+                    v-html="renderedContent"
+                />
             </div>
         </div>
     </div>

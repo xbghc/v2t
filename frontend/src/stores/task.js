@@ -207,7 +207,6 @@ export const useTaskStore = defineStore('task', () => {
         submitUrl,
         startNew,
         retryTask,
-        copyContent,
-        stopPolling
+        copyContent
     }
 })

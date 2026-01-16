@@ -18,7 +18,8 @@ const {
     currentTab,
     errorMessage,
     progress,
-    result
+    result,
+    currentContent
 } = storeToRefs(taskStore)
 
 // 解构方法
@@ -29,7 +30,10 @@ const { submitUrl, startNew, retryTask, copyContent } = taskStore
     <div class="relative flex min-h-screen w-full flex-col">
         <div class="layout-container flex h-full grow flex-col">
             <!-- Initial Page Layout -->
-            <div v-if="page === 'initial'" class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-20 lg:px-40">
+            <div
+                v-if="page === 'initial'"
+                class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-20 lg:px-40"
+            >
                 <div class="layout-content-container flex w-full flex-col max-w-content flex-1">
                     <AppHeader />
                     <InitialPage
@@ -43,14 +47,19 @@ const { submitUrl, startNew, retryTask, copyContent } = taskStore
 
             <!-- Result Page Layout -->
             <template v-else-if="page === 'result'">
-                <AppHeader variant="result" :show-new-button="true" @new-task="startNew" />
+                <AppHeader
+                    variant="result"
+                    :show-new-button="true"
+                    @new-task="startNew"
+                />
                 <ResultPage
+                    v-model:current-tab="currentTab"
                     :task-id="taskId"
                     :task-status="taskStatus"
                     :error-message="errorMessage"
                     :progress="progress"
                     :result="result"
-                    v-model:current-tab="currentTab"
+                    :current-content="currentContent"
                     @retry="retryTask"
                     @copy="copyContent"
                 />
