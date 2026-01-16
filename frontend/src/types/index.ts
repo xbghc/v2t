@@ -63,6 +63,30 @@ export type StatusMap = Partial<Record<TaskStatus, StatusMapEntry>>
 export interface CreateTaskRequest {
     url: string
     download_only: boolean
+    outline_system_prompt?: string
+    outline_user_prompt?: string
+    article_system_prompt?: string
+    article_user_prompt?: string
+}
+
+/**
+ * GET /api/prompts 响应 - 默认提示词
+ */
+export interface PromptsResponse {
+    outline_system: string
+    outline_user: string
+    article_system: string
+    article_user: string
+}
+
+/**
+ * 自定义提示词参数
+ */
+export interface CustomPrompts {
+    outlineSystem: string
+    outlineUser: string
+    articleSystem: string
+    articleUser: string
 }
 
 /**

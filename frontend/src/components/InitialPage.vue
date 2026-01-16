@@ -1,10 +1,20 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { useTaskStore } from '@/stores/task'
+
 const url = defineModel<string>('url', { default: '' })
 const downloadOnly = defineModel<boolean>('downloadOnly', { default: false })
 
 defineEmits<{
     submit: []
 }>()
+
+const taskStore = useTaskStore()
+const showAdvanced = ref(false)
+
+onMounted(() => {
+    taskStore.loadPrompts()
+})
 </script>
 
 <template>
@@ -50,6 +60,106 @@ defineEmits<{
                     >
                     <span class="text-sm text-gray-600 dark:text-gray-400">仅下载音视频，不转录</span>
                 </label>
+
+                <!-- 高级选项 -->
+                <button
+                    type="button"
+                    class="text-sm text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary flex items-center gap-1 cursor-pointer transition-colors duration-200"
+                    @click="showAdvanced = !showAdvanced"
+                >
+                    <span
+                        class="material-symbols-outlined text-base transition-transform duration-200"
+                        :class="{ 'rotate-90': showAdvanced }"
+                    >chevron_right</span>
+                    <span>高级选项 - 自定义提示词</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 高级选项面板 -->
+        <div
+            v-if="showAdvanced && taskStore.promptsLoaded"
+            class="px-4 pb-8"
+        >
+            <div class="max-w-2xl mx-auto space-y-6">
+                <!-- 大纲提示词 -->
+                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            大纲生成提示词
+                        </h4>
+                        <button
+                            type="button"
+                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
+                            @click="taskStore.resetOutlinePrompts()"
+                        >
+                            重置为默认
+                        </button>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
+                            <textarea
+                                v-model="taskStore.prompts.outlineSystem"
+                                rows="8"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
+                            <textarea
+                                v-model="taskStore.prompts.outlineUser"
+                                rows="3"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 文章提示词 -->
+                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            文章生成提示词
+                        </h4>
+                        <button
+                            type="button"
+                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
+                            @click="taskStore.resetArticlePrompts()"
+                        >
+                            重置为默认
+                        </button>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
+                            <textarea
+                                v-model="taskStore.prompts.articleSystem"
+                                rows="8"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
+                            <textarea
+                                v-model="taskStore.prompts.articleUser"
+                                rows="3"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 重置所有 -->
+                <div class="text-center">
+                    <button
+                        type="button"
+                        class="text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 cursor-pointer transition-colors"
+                        @click="taskStore.resetPrompts()"
+                    >
+                        重置所有提示词为默认值
+                    </button>
+                </div>
             </div>
         </div>
         <!-- SectionHeader -->

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { createTask, getTask } from '@/api/task'
+import { createTask, getTask, getDefaultPrompts } from '@/api/task'
 import type {
     PageState,
     TaskStatus,
@@ -9,7 +9,8 @@ import type {
     ProgressInfo,
     TaskResult,
     StatusMap,
-    TaskResponse
+    TaskResponse,
+    CustomPrompts
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
@@ -44,9 +45,22 @@ export const useTaskStore = defineStore('task', () => {
         transcript: ''
     })
 
+    // 提示词状态
+    const promptsLoaded: Ref<boolean> = ref(false)
+    const prompts: CustomPrompts = reactive({
+        outlineSystem: '',
+        outlineUser: '',
+        articleSystem: '',
+        articleUser: ''
+    })
+
+    // localStorage key
+    const PROMPTS_STORAGE_KEY = 'v2t_custom_prompts'
+
     // 保存最后一次提交的参数，用于重试
     let lastUrl: string = ''
     let lastDownloadOnly: boolean = false
+    let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '' }
     let pollTimer: ReturnType<typeof setInterval> | null = null
 
     // 状态映射
@@ -72,6 +86,91 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
         Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+    }
+
+    // 从 localStorage 加载提示词
+    const loadPromptsFromStorage = (): CustomPrompts | null => {
+        try {
+            const stored = localStorage.getItem(PROMPTS_STORAGE_KEY)
+            if (stored) {
+                return JSON.parse(stored) as CustomPrompts
+            }
+        } catch (error) {
+            console.error('读取 localStorage 失败:', error)
+        }
+        return null
+    }
+
+    // 保存提示词到 localStorage
+    const savePromptsToStorage = (): void => {
+        try {
+            localStorage.setItem(PROMPTS_STORAGE_KEY, JSON.stringify(prompts))
+        } catch (error) {
+            console.error('保存到 localStorage 失败:', error)
+        }
+    }
+
+    // 初始化提示词：优先从 localStorage 读取，否则使用后端默认值
+    const loadPrompts = async (): Promise<void> => {
+        if (promptsLoaded.value) return
+
+        // 先尝试从 localStorage 读取
+        const stored = loadPromptsFromStorage()
+        if (stored) {
+            Object.assign(prompts, stored)
+            promptsLoaded.value = true
+            return
+        }
+
+        // 否则从后端获取默认值
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.outlineSystem = defaults.outline_system
+            prompts.outlineUser = defaults.outline_user
+            prompts.articleSystem = defaults.article_system
+            prompts.articleUser = defaults.article_user
+            promptsLoaded.value = true
+        } catch (error) {
+            console.error('加载默认提示词失败:', error)
+        }
+    }
+
+    // 重置所有提示词为默认值
+    const resetPrompts = async (): Promise<void> => {
+        localStorage.removeItem(PROMPTS_STORAGE_KEY)
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.outlineSystem = defaults.outline_system
+            prompts.outlineUser = defaults.outline_user
+            prompts.articleSystem = defaults.article_system
+            prompts.articleUser = defaults.article_user
+        } catch (error) {
+            console.error('重置提示词失败:', error)
+        }
+    }
+
+    // 重置大纲提示词
+    const resetOutlinePrompts = async (): Promise<void> => {
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.outlineSystem = defaults.outline_system
+            prompts.outlineUser = defaults.outline_user
+            savePromptsToStorage()
+        } catch (error) {
+            console.error('重置大纲提示词失败:', error)
+        }
+    }
+
+    // 重置文章提示词
+    const resetArticlePrompts = async (): Promise<void> => {
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.articleSystem = defaults.article_system
+            prompts.articleUser = defaults.article_user
+            savePromptsToStorage()
+        } catch (error) {
+            console.error('重置文章提示词失败:', error)
+        }
     }
 
     // 停止轮询
@@ -158,11 +257,14 @@ export const useTaskStore = defineStore('task', () => {
 
         lastUrl = url.value
         lastDownloadOnly = downloadOnly.value
+        lastPrompts = { ...prompts }
+        // 保存当前提示词到 localStorage
+        savePromptsToStorage()
         resetState()
         page.value = 'result'
 
         try {
-            const data = await createTask(url.value, lastDownloadOnly)
+            const data = await createTask(url.value, lastDownloadOnly, lastPrompts)
             startPolling(data.task_id)
         } catch (error) {
             errorMessage.value = (error as Error).message
@@ -184,6 +286,7 @@ export const useTaskStore = defineStore('task', () => {
         resetState()
         url.value = lastUrl
         downloadOnly.value = lastDownloadOnly
+        Object.assign(prompts, lastPrompts)
         submitUrl()
     }
 
@@ -208,12 +311,19 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage,
         progress,
         result,
+        promptsLoaded,
+        prompts,
 
         // 计算属性
         currentContent,
 
         // 方法
         resetState,
+        loadPrompts,
+        savePromptsToStorage,
+        resetPrompts,
+        resetOutlinePrompts,
+        resetArticlePrompts,
         submitUrl,
         startNew,
         retryTask,

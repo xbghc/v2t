@@ -20,7 +20,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.gitcode_ai import GitCodeAIError, generate_article, generate_outline
+from app.services.gitcode_ai import (
+    DEFAULT_ARTICLE_SYSTEM_PROMPT,
+    DEFAULT_ARTICLE_USER_PROMPT,
+    DEFAULT_OUTLINE_SYSTEM_PROMPT,
+    DEFAULT_OUTLINE_USER_PROMPT,
+    GitCodeAIError,
+    generate_article,
+    generate_outline,
+)
 from app.services.transcribe import TranscribeError, extract_audio_async
 from app.services.video_downloader import DownloadError, download_video
 
@@ -67,6 +75,19 @@ if static_path.exists():
 class ProcessRequest(BaseModel):
     url: str
     download_only: bool = False  # 仅下载，不转录
+    # 自定义提示词，空字符串表示使用默认
+    outline_system_prompt: str = ""
+    outline_user_prompt: str = ""
+    article_system_prompt: str = ""
+    article_user_prompt: str = ""
+
+
+class PromptsResponse(BaseModel):
+    """默认提示词响应"""
+    outline_system: str
+    outline_user: str
+    article_system: str
+    article_user: str
 
 
 class TaskResponse(BaseModel):
@@ -105,7 +126,15 @@ def cleanup_old_tasks():
                     pass
 
 
-async def process_video_task(task_id: str, url: str, download_only: bool = False):
+async def process_video_task(
+    task_id: str,
+    url: str,
+    download_only: bool = False,
+    outline_system_prompt: str = "",
+    outline_user_prompt: str = "",
+    article_system_prompt: str = "",
+    article_user_prompt: str = "",
+):
     """后台处理视频任务"""
     task = tasks.get(task_id)
     if not task:
@@ -165,7 +194,11 @@ async def process_video_task(task_id: str, url: str, download_only: bool = False
         # 生成大纲
         task.progress = "正在生成大纲..."
         try:
-            outline = await generate_outline(transcript)
+            outline = await generate_outline(
+                transcript,
+                system_prompt=outline_system_prompt or None,
+                user_prompt=outline_user_prompt or None,
+            )
             if outline and len(outline.strip()) >= 50:
                 task.outline = outline
         except GitCodeAIError:
@@ -174,7 +207,11 @@ async def process_video_task(task_id: str, url: str, download_only: bool = False
         # 生成详细文章
         task.progress = "正在生成详细内容..."
         try:
-            article = await generate_article(transcript)
+            article = await generate_article(
+                transcript,
+                system_prompt=article_system_prompt or None,
+                user_prompt=article_user_prompt or None,
+            )
             if article and len(article.strip()) >= 50:
                 task.article = article
         except GitCodeAIError:
@@ -202,6 +239,17 @@ async def process_video_task(task_id: str, url: str, download_only: bool = False
         logger.exception("任务 %s 处理异常", task_id)
 
 
+@app.get("/api/prompts", response_model=PromptsResponse)
+async def get_prompts():
+    """获取默认提示词"""
+    return PromptsResponse(
+        outline_system=DEFAULT_OUTLINE_SYSTEM_PROMPT,
+        outline_user=DEFAULT_OUTLINE_USER_PROMPT,
+        article_system=DEFAULT_ARTICLE_SYSTEM_PROMPT,
+        article_user=DEFAULT_ARTICLE_USER_PROMPT,
+    )
+
+
 @app.post("/api/process", response_model=TaskResponse)
 async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks):
     """创建视频处理任务"""
@@ -214,7 +262,16 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
     tasks[task_id] = task
 
     # 在后台执行处理
-    background_tasks.add_task(process_video_task, task_id, request.url, request.download_only)
+    background_tasks.add_task(
+        process_video_task,
+        task_id,
+        request.url,
+        request.download_only,
+        request.outline_system_prompt,
+        request.outline_user_prompt,
+        request.article_system_prompt,
+        request.article_user_prompt,
+    )
 
     return TaskResponse(
         task_id=task_id,
