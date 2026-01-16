@@ -37,8 +37,8 @@ test-results/
 Thumbs.db
 
 # Frontend build output
-app/static/assets/
-app/static/index.html
+backend/app/static/assets/
+backend/app/static/index.html
 
 # Node modules
 node_modules/

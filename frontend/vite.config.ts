@@ -11,7 +11,7 @@ export default defineConfig({
         }
     },
     build: {
-        outDir: '../app/static',
+        outDir: '../backend/app/static',
         emptyOutDir: true,
     },
     server: {

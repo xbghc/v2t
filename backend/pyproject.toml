@@ -2,7 +2,6 @@
 name = "v2t"
 version = "0.1.0"
 description = "视频摘要工具 - 下载视频、转写字幕、AI 处理"
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",

@@ -21,8 +21,8 @@ ENV PATH="/root/.local/bin:$PATH"
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # 复制项目文件
-COPY pyproject.toml README.md ./
-COPY app/ ./app/
+COPY backend/pyproject.toml ./
+COPY backend/app/ ./app/
 
 # 安装 Python 依赖
 RUN uv pip install .

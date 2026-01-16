@@ -6,31 +6,63 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 v2t 是一个视频转文字工具，提供视频下载、音频转录、AI内容生成功能。支持 B站、抖音、小红书等多平台，提供 CLI 和 Web 两种使用方式。
 
+## 项目结构 (Monorepo)
+
+```
+v2t/
+├── backend/                    # Python 后端
+│   ├── app/
+│   │   ├── cli.py
+│   │   ├── web.py
+│   │   ├── config.py
+│   │   ├── static/            # 前端构建输出
+│   │   └── services/
+│   ├── tests/
+│   ├── pyproject.toml
+│   └── pytest.ini
+├── frontend/                   # Vue 前端
+│   ├── src/
+│   ├── package.json
+│   └── vite.config.ts
+├── Makefile                    # 根级构建脚本
+├── Dockerfile
+├── docker-compose.yml
+└── deploy/
+```
+
 ## 常用命令
 
-### Python (uv 包管理器)
+### 使用 Makefile（推荐）
 
 ```bash
+make install              # 安装所有依赖
+make dev                  # 同时启动前后端开发服务器
+make dev-backend          # 仅启动后端 (端口 8100)
+make dev-frontend         # 仅启动前端开发服务器
+make build                # 构建前端到 backend/app/static/
+make test                 # 运行测试
+make lint                 # 运行 lint 检查
+make lint-fix             # 自动修复 lint 问题
+```
+
+### 后端 (backend/)
+
+```bash
+cd backend
 uv sync                          # 安装依赖
 uv run v2t <url>                 # CLI处理视频
 uv run v2t config                # 交互式配置
 uv run v2t-web                   # 启动Web服务 (端口8100)
+pytest                           # 运行测试
 ```
 
 ### 前端 (frontend/)
 
 ```bash
+cd frontend
 npm install                      # 安装依赖
 npm run dev                      # 开发服务器 (Vite，代理 /api 到 8100)
-npm run build                    # 构建到 app/static/
-```
-
-### 测试
-
-```bash
-pytest                           # 运行所有测试
-pytest tests/test_downloader.py  # 运行单个测试文件
-pytest -v                        # 详细输出
+npm run build                    # 构建到 backend/app/static/
 ```
 
 ### Docker
@@ -45,7 +77,7 @@ docker-compose up -d
 ### 后端分层 (Python)
 
 ```
-app/
+backend/app/
 ├── cli.py          # CLI入口 (Typer)
 ├── web.py          # Web入口 (FastAPI)，后台任务+内存存储
 ├── config.py       # 配置管理 (环境变量 > JSON文件 > 默认值)
@@ -67,8 +99,8 @@ PENDING → DOWNLOADING → TRANSCRIBING → GENERATING → COMPLETED/FAILED
 
 ```
 frontend/src/
-├── stores/task.js    # Pinia状态管理 (集中管理所有任务状态)
-├── api/task.js       # API调用模块
+├── stores/task.ts    # Pinia状态管理 (集中管理所有任务状态)
+├── api/task.ts       # API调用模块
 └── components/       # Vue组件
 ```
 
