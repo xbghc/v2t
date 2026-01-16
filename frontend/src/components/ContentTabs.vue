@@ -1,26 +1,25 @@
-<script setup>
-defineProps({
-    currentTab: {
-        type: String,
-        required: true
-    },
-    isLoading: {
-        type: Boolean,
-        default: false
-    },
-    loadingText: {
-        type: String,
-        default: '加载中...'
-    },
-    renderedContent: {
-        type: String,
-        default: ''
-    }
+<script setup lang="ts">
+import type { CurrentTab, TabDefinition } from '@/types'
+
+interface Props {
+    currentTab: CurrentTab
+    isLoading?: boolean
+    loadingText?: string
+    renderedContent?: string
+}
+
+withDefaults(defineProps<Props>(), {
+    isLoading: false,
+    loadingText: '加载中...',
+    renderedContent: ''
 })
 
-defineEmits(['update:currentTab', 'copy'])
+defineEmits<{
+    'update:currentTab': [value: CurrentTab]
+    copy: []
+}>()
 
-const tabs = [
+const tabs: TabDefinition[] = [
     { key: 'article', label: '详细内容' },
     { key: 'outline', label: '大纲' },
     { key: 'transcript', label: '原始转录' }

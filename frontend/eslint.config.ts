@@ -1,13 +1,23 @@
-import js from '@eslint/js';
-import pluginVue from 'eslint-plugin-vue';
-import globals from 'globals';
+import js from '@eslint/js'
+import pluginVue from 'eslint-plugin-vue'
+import globals from 'globals'
+import tseslint from 'typescript-eslint'
 
-export default [
+export default tseslint.config(
     {
         ignores: ['dist/**', 'node_modules/**']
     },
     js.configs.recommended,
+    ...tseslint.configs.recommended,
     ...pluginVue.configs['flat/recommended'],
+    {
+        files: ['**/*.vue'],
+        languageOptions: {
+            parserOptions: {
+                parser: tseslint.parser
+            }
+        }
+    },
     {
         languageOptions: {
             ecmaVersion: 'latest',
@@ -23,7 +33,7 @@ export default [
             'vue/script-indent': ['error', 4, { baseIndent: 0 }],
             'vue/multi-word-component-names': 'off',
             'vue/no-v-html': 'off',
-            'no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
+            '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }]
         }
     }
-];
+)

@@ -1,34 +1,28 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
+import type { MediaType } from '@/types'
 
-const props = defineProps({
-    type: {
-        type: String,
-        required: true,
-        validator: (value) => ['video', 'audio'].includes(value)
-    },
-    available: {
-        type: Boolean,
-        default: false
-    },
-    isProcessing: {
-        type: Boolean,
-        default: false
-    },
-    downloadUrl: {
-        type: String,
-        default: ''
-    }
+interface Props {
+    type: MediaType
+    available?: boolean
+    isProcessing?: boolean
+    downloadUrl?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    available: false,
+    isProcessing: false,
+    downloadUrl: ''
 })
 
-const icon = computed(() => {
+const icon = computed<string>(() => {
     if (props.type === 'video') {
         return props.available ? 'videocam' : (props.isProcessing ? 'hourglass_empty' : 'videocam_off')
     }
     return props.available ? 'audiotrack' : (props.isProcessing ? 'hourglass_empty' : 'music_off')
 })
 
-const label = computed(() => {
+const label = computed<string>(() => {
     if (props.type === 'video') {
         if (props.available) return '下载视频'
         return props.isProcessing ? '下载中...' : '视频不可用'
@@ -37,7 +31,7 @@ const label = computed(() => {
     return props.isProcessing ? '转录中...' : '音频不可用'
 })
 
-const showPulse = computed(() => !props.available && props.isProcessing)
+const showPulse = computed<boolean>(() => !props.available && props.isProcessing)
 </script>
 
 <template>

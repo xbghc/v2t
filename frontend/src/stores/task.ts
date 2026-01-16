@@ -1,23 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
-import { createTask, getTask } from '../api/task'
+import type { Ref, ComputedRef } from 'vue'
+import { createTask, getTask } from '@/api/task'
+import type {
+    PageState,
+    TaskStatus,
+    CurrentTab,
+    ProgressInfo,
+    TaskResult,
+    StatusMap,
+    TaskResponse
+} from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
     // 页面状态
-    const page = ref('initial') // 'initial' | 'result'
+    const page: Ref<PageState> = ref('initial')
 
     // 表单输入
-    const url = ref('')
-    const downloadOnly = ref(false)
+    const url: Ref<string> = ref('')
+    const downloadOnly: Ref<boolean> = ref(false)
 
     // 任务状态
-    const taskId = ref(null)
-    const taskStatus = ref('pending') // 'pending' | 'downloading' | 'transcribing' | 'generating' | 'completed' | 'failed'
-    const currentTab = ref('article') // 'article' | 'outline' | 'transcript'
-    const errorMessage = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
+    const taskId: Ref<string | null> = ref(null)
+    const taskStatus: Ref<TaskStatus> = ref('pending')
+    const currentTab: Ref<CurrentTab> = ref('article')
+    const errorMessage: Ref<string> = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
 
     // 进度信息
-    const progress = reactive({
+    const progress: ProgressInfo = reactive({
         title: '',
         text: '准备中...',
         percent: 10,
@@ -25,7 +35,7 @@ export const useTaskStore = defineStore('task', () => {
     })
 
     // 处理结果
-    const result = reactive({
+    const result: TaskResult = reactive({
         title: '',
         has_video: false,
         has_audio: false,
@@ -35,12 +45,12 @@ export const useTaskStore = defineStore('task', () => {
     })
 
     // 保存最后一次提交的参数，用于重试
-    let lastUrl = ''
-    let lastDownloadOnly = false
-    let pollTimer = null
+    let lastUrl: string = ''
+    let lastDownloadOnly: boolean = false
+    let pollTimer: ReturnType<typeof setInterval> | null = null
 
     // 状态映射
-    const statusMap = {
+    const statusMap: StatusMap = {
         'pending': { text: '等待处理...', percent: 10, step: '步骤 1/3' },
         'downloading': { text: '正在下载视频...', percent: 33, step: '步骤 1/3' },
         'transcribing': { text: '正在转录音频...', percent: 55, step: '步骤 2/3' },
@@ -49,14 +59,14 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 计算属性：当前内容（用于复制）
-    const currentContent = computed(() => {
+    const currentContent: ComputedRef<string> = computed(() => {
         if (currentTab.value === 'article') return result.article || ''
         if (currentTab.value === 'outline') return result.outline || ''
         return result.transcript || ''
     })
 
     // 重置状态
-    const resetState = () => {
+    const resetState = (): void => {
         taskStatus.value = 'pending'
         currentTab.value = 'article'
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
@@ -65,7 +75,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 停止轮询
-    const stopPolling = () => {
+    const stopPolling = (): void => {
         if (pollTimer) {
             clearInterval(pollTimer)
             pollTimer = null
@@ -73,7 +83,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 轮询任务状态
-    const poll = async () => {
+    const poll = async (): Promise<void> => {
         if (!taskId.value) return
 
         try {
@@ -93,7 +103,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 开始轮询
-    const startPolling = (id) => {
+    const startPolling = (id: string): void => {
         taskId.value = id
         stopPolling()
         pollTimer = setInterval(poll, 2000)
@@ -101,7 +111,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 处理任务更新
-    const handleTaskUpdate = (data) => {
+    const handleTaskUpdate = (data: TaskResponse): void => {
         taskStatus.value = data.status
 
         // 渐进更新数据
@@ -116,11 +126,11 @@ export const useTaskStore = defineStore('task', () => {
         if (data.article) result.article = data.article
 
         // 更新进度条
-        if (statusMap[data.status]) {
-            const s = statusMap[data.status]
-            progress.text = data.progress || s.text
-            progress.percent = s.percent
-            progress.step = s.step
+        const statusInfo = statusMap[data.status]
+        if (statusInfo) {
+            progress.text = data.progress || statusInfo.text
+            progress.percent = statusInfo.percent
+            progress.step = statusInfo.step
         }
 
         // 自动切换到有内容的 tab
@@ -130,17 +140,17 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 处理任务完成
-    const handleTaskComplete = () => {
+    const handleTaskComplete = (): void => {
         currentTab.value = result.article ? 'article' : (result.outline ? 'outline' : 'transcript')
     }
 
     // 处理任务失败
-    const handleTaskFailed = (data) => {
+    const handleTaskFailed = (data: TaskResponse): void => {
         errorMessage.value = data.error || '处理失败'
     }
 
     // 提交 URL
-    const submitUrl = async () => {
+    const submitUrl = async (): Promise<void> => {
         if (!url.value.trim()) {
             alert('请输入视频链接')
             return
@@ -155,13 +165,13 @@ export const useTaskStore = defineStore('task', () => {
             const data = await createTask(url.value, lastDownloadOnly)
             startPolling(data.task_id)
         } catch (error) {
-            errorMessage.value = error.message
+            errorMessage.value = (error as Error).message
             taskStatus.value = 'failed'
         }
     }
 
     // 开始新任务
-    const startNew = () => {
+    const startNew = (): void => {
         stopPolling()
         resetState()
         url.value = ''
@@ -169,7 +179,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 重试任务
-    const retryTask = () => {
+    const retryTask = (): void => {
         stopPolling()
         resetState()
         url.value = lastUrl
@@ -178,7 +188,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 复制当前内容
-    const copyContent = () => {
+    const copyContent = (): void => {
         if (!currentContent.value) return
         navigator.clipboard.writeText(currentContent.value).then(() => {
             alert('已复制到剪贴板')
@@ -210,3 +220,5 @@ export const useTaskStore = defineStore('task', () => {
         copyContent
     }
 })
+
+export type TaskStore = ReturnType<typeof useTaskStore>

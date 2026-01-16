@@ -1,18 +1,11 @@
-<script setup>
-defineProps({
-    step: {
-        type: String,
-        required: true
-    },
-    text: {
-        type: String,
-        required: true
-    },
-    percent: {
-        type: Number,
-        required: true
-    }
-})
+<script setup lang="ts">
+interface Props {
+    step: string
+    text: string
+    percent: number
+}
+
+defineProps<Props>()
 </script>
 
 <template>

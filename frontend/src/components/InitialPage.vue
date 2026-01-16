@@ -1,8 +1,10 @@
-<script setup>
-const url = defineModel('url', { type: String, default: '' })
-const downloadOnly = defineModel('downloadOnly', { type: Boolean, default: false })
+<script setup lang="ts">
+const url = defineModel<string>('url', { default: '' })
+const downloadOnly = defineModel<boolean>('downloadOnly', { default: false })
 
-defineEmits(['submit'])
+defineEmits<{
+    submit: []
+}>()
 </script>
 
 <template>

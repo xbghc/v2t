@@ -1,54 +1,48 @@
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
+import type { ComputedRef } from 'vue'
 import { marked } from 'marked'
 import ProgressBar from './ProgressBar.vue'
 import MediaDownload from './MediaDownload.vue'
 import ContentTabs from './ContentTabs.vue'
+import type { TaskStatus, CurrentTab, ProgressInfo, TaskResult } from '@/types'
 
-const props = defineProps({
-    taskId: {
-        type: String,
-        default: null
-    },
-    taskStatus: {
-        type: String,
-        default: 'pending'
-    },
-    errorMessage: {
-        type: String,
-        default: ''
-    },
-    progress: {
-        type: Object,
-        required: true
-    },
-    result: {
-        type: Object,
-        required: true
-    },
-    currentContent: {
-        type: String,
-        default: ''
-    }
+interface Props {
+    taskId: string | null
+    taskStatus?: TaskStatus
+    errorMessage?: string
+    progress: ProgressInfo
+    result: TaskResult
+    currentContent?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    taskId: null,
+    taskStatus: 'pending',
+    errorMessage: '',
+    currentContent: ''
 })
 
-const currentTab = defineModel('currentTab', { type: String, default: 'article' })
+const currentTab = defineModel<CurrentTab>('currentTab', { default: 'article' })
 
-defineEmits(['retry', 'copy'])
+defineEmits<{
+    retry: []
+    copy: []
+}>()
 
-const isProcessing = computed(() => {
+const isProcessing: ComputedRef<boolean> = computed(() => {
     return props.taskStatus !== 'completed' && props.taskStatus !== 'failed'
 })
 
-const isFailed = computed(() => {
+const isFailed: ComputedRef<boolean> = computed(() => {
     return props.taskStatus === 'failed'
 })
 
-const hasTextContent = computed(() => {
+const hasTextContent: ComputedRef<boolean> = computed(() => {
     return !!(props.result.transcript || props.result.outline || props.result.article)
 })
 
-const isContentLoading = computed(() => {
+const isContentLoading: ComputedRef<boolean> = computed(() => {
     if (!isProcessing.value && !isFailed.value) {
         return false
     }
@@ -64,7 +58,7 @@ const isContentLoading = computed(() => {
     return false
 })
 
-const contentLoadingText = computed(() => {
+const contentLoadingText: ComputedRef<string> = computed(() => {
     if (currentTab.value === 'transcript') {
         if (props.taskStatus === 'downloading') return '正在下载视频，转录内容稍后显示...'
         if (props.taskStatus === 'transcribing') return '正在转录音频...'
@@ -79,7 +73,7 @@ const contentLoadingText = computed(() => {
     return '加载中...'
 })
 
-const renderedContent = computed(() => {
+const renderedContent: ComputedRef<string> = computed(() => {
     if (!props.currentContent) {
         if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
         if (!isProcessing.value) {
@@ -89,23 +83,23 @@ const renderedContent = computed(() => {
         }
         return ''
     }
-    return marked.parse(props.currentContent)
+    return marked.parse(props.currentContent) as string
 })
 
-const statusTitle = computed(() => {
+const statusTitle: ComputedRef<string> = computed(() => {
     if (isFailed.value) return '转换失败'
     if (isProcessing.value) return '正在处理'
     return '转换完成'
 })
 
-const statusDescription = computed(() => {
+const statusDescription: ComputedRef<string> = computed(() => {
     if (isFailed.value) return props.errorMessage
     if (isProcessing.value) return '请勿关闭页面，内容将逐步显示'
     return '查看生成的内容，复制或下载原始媒体文件'
 })
 
-const videoDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}/video` : '')
-const audioDownloadUrl = computed(() => props.taskId ? `api/task/${props.taskId}/audio` : '')
+const videoDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/video` : '')
+const audioDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/audio` : '')
 </script>
 
 <template>

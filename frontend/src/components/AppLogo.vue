@@ -1,9 +1,10 @@
-<script setup>
-defineProps({
-    size: {
-        type: String,
-        default: '5'
-    }
+<script setup lang="ts">
+interface Props {
+    size?: string
+}
+
+withDefaults(defineProps<Props>(), {
+    size: '5'
 })
 </script>
 

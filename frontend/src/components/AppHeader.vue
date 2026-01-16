@@ -1,18 +1,20 @@
-<script setup>
+<script setup lang="ts">
 import AppLogo from './AppLogo.vue'
+import type { HeaderVariant } from '@/types'
 
-defineProps({
-    showNewButton: {
-        type: Boolean,
-        default: false
-    },
-    variant: {
-        type: String,
-        default: 'default' // 'default' | 'result'
-    }
+interface Props {
+    showNewButton?: boolean
+    variant?: HeaderVariant
+}
+
+withDefaults(defineProps<Props>(), {
+    showNewButton: false,
+    variant: 'default'
 })
 
-defineEmits(['new-task'])
+defineEmits<{
+    'new-task': []
+}>()
 </script>
 
 <template>

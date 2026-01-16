@@ -1,10 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { useTaskStore } from './stores/task'
-import AppHeader from './components/AppHeader.vue'
-import AppFooter from './components/AppFooter.vue'
-import InitialPage from './components/InitialPage.vue'
-import ResultPage from './components/ResultPage.vue'
+import { useTaskStore } from '@/stores/task'
+import AppHeader from '@/components/AppHeader.vue'
+import AppFooter from '@/components/AppFooter.vue'
+import InitialPage from '@/components/InitialPage.vue'
+import ResultPage from '@/components/ResultPage.vue'
 
 const taskStore = useTaskStore()
 
