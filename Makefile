@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend dev dev-backend dev-frontend build test lint lint-fix clean help
+.PHONY: install install-backend install-frontend backend frontend build test lint lint-fix clean help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -15,16 +15,10 @@ install-frontend: ## 安装前端依赖
 
 # ==================== 开发 ====================
 
-dev: ## 同时启动后端和前端开发服务器
-	@echo "启动后端服务 (端口 8100)..."
-	@cd backend && uv run v2t-web &
-	@echo "启动前端服务..."
-	@cd frontend && npm run dev
-
-dev-backend: ## 启动后端开发服务器
+backend: ## 启动后端开发服务器
 	cd backend && uv run v2t-web
 
-dev-frontend: ## 启动前端开发服务器
+frontend: ## 启动前端开发服务器
 	cd frontend && npm run dev
 
 # ==================== 构建 ====================
