@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "make lint"
+            "command": "cd $CLAUDE_PROJECT_DIR && make lint && make test"
           }
         ]
       }
