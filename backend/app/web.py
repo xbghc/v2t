@@ -1,15 +1,19 @@
 """v2t Web API 服务"""
 
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-# 配置日志
+# 配置日志（支持 LOG_LEVEL 环境变量：DEBUG/INFO/WARNING/ERROR）
+log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_name, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)

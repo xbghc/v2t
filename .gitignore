@@ -42,3 +42,6 @@ backend/app/static/index.html
 
 # Node modules
 node_modules/
+
+# TypeScript build cache
+*.tsbuildinfo
