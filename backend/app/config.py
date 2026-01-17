@@ -10,8 +10,9 @@ CONFIG_PATH = Path.home() / ".config" / "v2t" / "config.json"
 # 环境变量映射
 ENV_MAPPING = {
     "groq_api_key": "GROQ_API_KEY",
-    "gitcode_ai_token": "GITCODE_AI_TOKEN",
+    "deepseek_api_key": "DEEPSEEK_API_KEY",
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
+    "dashscope_api_key": "DASHSCOPE_API_KEY",
 }
 
 
@@ -21,14 +22,15 @@ class Settings:
 
     # API Keys
     groq_api_key: str = ""
-    gitcode_ai_token: str = ""
+    deepseek_api_key: str = ""
     xiazaitool_token: str = ""
+    dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
 
     # API URLs (固定值)
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_whisper_model: str = "whisper-large-v3"
-    gitcode_ai_base_url: str = "https://api.gitcode.com/api/v5"
-    gitcode_ai_model: str = "deepseek-ai/DeepSeek-V3.2-Exp"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
 
     # 用户可配置

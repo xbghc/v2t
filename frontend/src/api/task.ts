@@ -1,4 +1,4 @@
-import type { CreateTaskResponse, CustomPrompts, PromptsResponse, TaskResponse } from '@/types'
+import type { CreateTaskResponse, CustomPrompts, GenerateOptions, PromptsResponse, TaskResponse } from '@/types'
 
 /**
  * 获取默认提示词
@@ -16,7 +16,7 @@ export async function getDefaultPrompts(): Promise<PromptsResponse> {
  */
 export async function createTask(
     url: string,
-    downloadOnly: boolean = false,
+    generateOptions: GenerateOptions,
     prompts?: CustomPrompts
 ): Promise<CreateTaskResponse> {
     const response = await fetch('api/process', {
@@ -24,11 +24,15 @@ export async function createTask(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             url,
-            download_only: downloadOnly,
+            generate_outline: generateOptions.outline,
+            generate_article: generateOptions.article,
+            generate_podcast: generateOptions.podcast,
             outline_system_prompt: prompts?.outlineSystem || '',
             outline_user_prompt: prompts?.outlineUser || '',
             article_system_prompt: prompts?.articleSystem || '',
             article_user_prompt: prompts?.articleUser || '',
+            podcast_system_prompt: prompts?.podcastSystem || '',
+            podcast_user_prompt: prompts?.podcastUser || '',
         })
     })
     const data = await response.json() as CreateTaskResponse | { detail: string }

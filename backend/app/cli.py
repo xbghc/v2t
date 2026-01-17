@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from app.config import CONFIG_PATH, get_settings, load_config, save_config
-from app.services.gitcode_ai import GitCodeAIError, generate_article, generate_outline
+from app.services.deepseek import DeepSeekError, generate_article, generate_outline
 from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_video
 from app.services.video_downloader import DownloadError, download_video
 
@@ -131,11 +131,11 @@ def process_video(
         try:
             outline = run_async(generate_outline(transcript))
             if not outline or len(outline.strip()) < 50:
-                raise GitCodeAIError("内容被拦截或生成失败")
+                raise DeepSeekError("内容被拦截或生成失败")
             output_path = Path(f"{output_name}_提纲.md")
             output_path.write_text(outline, encoding="utf-8")
             console.print(f"[green]✓[/green] 已保存: {output_path}")
-        except GitCodeAIError as e:
+        except DeepSeekError as e:
             console.print(f"[yellow]⚠[/yellow] AI 生成失败: {e}")
             console.print("[yellow]⚠[/yellow] 回退到原始转录")
             output_path = Path(f"{output_name}.txt")
@@ -147,11 +147,11 @@ def process_video(
         try:
             article = run_async(generate_article(transcript))
             if not article or len(article.strip()) < 50:
-                raise GitCodeAIError("内容被拦截或生成失败")
+                raise DeepSeekError("内容被拦截或生成失败")
             output_path = Path(f"{output_name}.md")
             output_path.write_text(article, encoding="utf-8")
             console.print(f"[green]✓[/green] 已保存: {output_path}")
-        except GitCodeAIError as e:
+        except DeepSeekError as e:
             console.print(f"[yellow]⚠[/yellow] AI 生成失败: {e}")
             console.print("[yellow]⚠[/yellow] 回退到原始转录")
             output_path = Path(f"{output_name}.txt")
@@ -212,12 +212,12 @@ def config_cmd():
         show_default=bool(config.get("groq_api_key")),
     )
 
-    console.print("\n[cyan]GitCode AI API Key[/cyan] (用于AI总结，必需)")
-    console.print("获取地址: https://ai.gitcode.com/")
-    gitcode_key = Prompt.ask(
-        "gitcode_ai_token",
-        default=config.get("gitcode_ai_token", ""),
-        show_default=bool(config.get("gitcode_ai_token")),
+    console.print("\n[cyan]DeepSeek API Key[/cyan] (用于AI总结，必需)")
+    console.print("获取地址: https://platform.deepseek.com/")
+    deepseek_key = Prompt.ask(
+        "deepseek_api_key",
+        default=config.get("deepseek_api_key", ""),
+        show_default=bool(config.get("deepseek_api_key")),
     )
 
     console.print("\n[cyan]Xiazaitool Token[/cyan] (备用下载，可选)")
@@ -228,7 +228,7 @@ def config_cmd():
     )
 
     config["groq_api_key"] = groq_key
-    config["gitcode_ai_token"] = gitcode_key
+    config["deepseek_api_key"] = deepseek_key
     if xiazai_key:
         config["xiazaitool_token"] = xiazai_key
 

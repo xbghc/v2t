@@ -19,6 +19,9 @@ const icon = computed<string>(() => {
     if (props.type === 'video') {
         return props.available ? 'videocam' : (props.isProcessing ? 'hourglass_empty' : 'videocam_off')
     }
+    if (props.type === 'podcast') {
+        return props.available ? 'podcasts' : (props.isProcessing ? 'hourglass_empty' : 'podcasts')
+    }
     return props.available ? 'audiotrack' : (props.isProcessing ? 'hourglass_empty' : 'music_off')
 })
 
@@ -26,6 +29,10 @@ const label = computed<string>(() => {
     if (props.type === 'video') {
         if (props.available) return '下载视频'
         return props.isProcessing ? '下载中...' : '视频不可用'
+    }
+    if (props.type === 'podcast') {
+        if (props.available) return '下载播客音频'
+        return props.isProcessing ? '合成中...' : '播客音频不可用'
     }
     if (props.available) return '下载音频'
     return props.isProcessing ? '转录中...' : '音频不可用'

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { useTaskStore } from '@/stores/task'
 
 const url = defineModel<string>('url', { default: '' })
-const downloadOnly = defineModel<boolean>('downloadOnly', { default: false })
 
 defineEmits<{
     submit: []
@@ -11,6 +10,9 @@ defineEmits<{
 
 const taskStore = useTaskStore()
 const showAdvanced = ref(false)
+
+// 提示文字：当所有选项都未勾选时显示
+const showDownloadOnlyHint = computed(() => taskStore.isDownloadOnly)
 
 onMounted(() => {
     taskStore.loadPrompts()
@@ -51,15 +53,42 @@ onMounted(() => {
                         </div>
                     </div>
                 </label>
-                <!-- 仅下载选项 -->
-                <label class="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                        v-model="downloadOnly"
-                        type="checkbox"
-                        class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
+                <!-- 生成选项多选组 -->
+                <div class="flex flex-col items-center gap-2">
+                    <div class="flex items-center gap-4">
+                        <span class="text-sm text-gray-600 dark:text-gray-400">生成内容：</span>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                                v-model="taskStore.generateOptions.outline"
+                                type="checkbox"
+                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
+                            >
+                            <span class="text-sm text-gray-700 dark:text-gray-300">大纲</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                                v-model="taskStore.generateOptions.article"
+                                type="checkbox"
+                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
+                            >
+                            <span class="text-sm text-gray-700 dark:text-gray-300">文章</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+                            <input
+                                v-model="taskStore.generateOptions.podcast"
+                                type="checkbox"
+                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
+                            >
+                            <span class="text-sm text-gray-700 dark:text-gray-300">播客</span>
+                        </label>
+                    </div>
+                    <p
+                        v-if="showDownloadOnlyHint"
+                        class="text-xs text-gray-500 dark:text-gray-400"
                     >
-                    <span class="text-sm text-gray-600 dark:text-gray-400">仅下载音视频，不转录</span>
-                </label>
+                        未选择任何生成选项，将仅下载音视频
+                    </p>
+                </div>
 
                 <!-- 高级选项 -->
                 <button
@@ -143,6 +172,40 @@ onMounted(() => {
                             <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
                             <textarea
                                 v-model="taskStore.prompts.articleUser"
+                                rows="3"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 播客提示词 -->
+                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
+                            播客脚本生成提示词
+                        </h4>
+                        <button
+                            type="button"
+                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
+                            @click="taskStore.resetPodcastPrompts()"
+                        >
+                            重置为默认
+                        </button>
+                    </div>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
+                            <textarea
+                                v-model="taskStore.prompts.podcastSystem"
+                                rows="8"
+                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
+                            <textarea
+                                v-model="taskStore.prompts.podcastUser"
                                 rows="3"
                                 class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
                             />

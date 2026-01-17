@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { CurrentTab, TabDefinition } from '@/types'
 
 interface Props {
@@ -6,12 +7,14 @@ interface Props {
     isLoading?: boolean
     loadingText?: string
     renderedContent?: string
+    showPodcast?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
     isLoading: false,
     loadingText: '加载中...',
-    renderedContent: ''
+    renderedContent: '',
+    showPodcast: false
 })
 
 defineEmits<{
@@ -19,11 +22,18 @@ defineEmits<{
     copy: []
 }>()
 
-const tabs: TabDefinition[] = [
-    { key: 'article', label: '详细内容' },
-    { key: 'outline', label: '大纲' },
-    { key: 'transcript', label: '原始转录' }
-]
+// 动态 tabs 列表
+const tabs = computed<TabDefinition[]>(() => {
+    const baseTabs: TabDefinition[] = [
+        { key: 'article', label: '详细内容' },
+        { key: 'outline', label: '大纲' },
+        { key: 'transcript', label: '原始转录' }
+    ]
+    if (props.showPodcast) {
+        baseTabs.push({ key: 'podcast', label: '播客脚本' })
+    }
+    return baseTabs
+})
 </script>
 
 <template>

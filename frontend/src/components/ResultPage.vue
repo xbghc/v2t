@@ -39,7 +39,11 @@ const isFailed: ComputedRef<boolean> = computed(() => {
 })
 
 const hasTextContent: ComputedRef<boolean> = computed(() => {
-    return !!(props.result.transcript || props.result.outline || props.result.article)
+    return !!(props.result.transcript || props.result.outline || props.result.article || props.result.podcast_script)
+})
+
+const showPodcast: ComputedRef<boolean> = computed(() => {
+    return !!(props.result.podcast_script || props.result.has_podcast_audio)
 })
 
 const isContentLoading: ComputedRef<boolean> = computed(() => {
@@ -54,6 +58,9 @@ const isContentLoading: ComputedRef<boolean> = computed(() => {
     }
     if (currentTab.value === 'article') {
         return !props.result.article && isProcessing.value
+    }
+    if (currentTab.value === 'podcast') {
+        return !props.result.podcast_script && isProcessing.value
     }
     return false
 })
@@ -70,6 +77,14 @@ const contentLoadingText: ComputedRef<string> = computed(() => {
         if (props.taskStatus === 'generating') return '正在生成内容...'
         return '准备中...'
     }
+    if (currentTab.value === 'podcast') {
+        if (props.taskStatus === 'downloading') return '正在下载视频...'
+        if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        if (props.taskStatus === 'generating') return '正在生成内容...'
+        if (props.taskStatus === 'generating_podcast') return '正在生成播客脚本...'
+        if (props.taskStatus === 'synthesizing') return '正在合成播客音频...'
+        return '准备中...'
+    }
     return '加载中...'
 })
 
@@ -79,6 +94,7 @@ const renderedContent: ComputedRef<string> = computed(() => {
         if (!isProcessing.value) {
             if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
             if (currentTab.value === 'outline') return '<p class="text-gray-500">(大纲生成失败)</p>'
+            if (currentTab.value === 'podcast') return '<p class="text-gray-500">(播客脚本生成失败)</p>'
             return '<p class="text-gray-500">(无转录内容)</p>'
         }
         return ''
@@ -100,6 +116,7 @@ const statusDescription: ComputedRef<string> = computed(() => {
 
 const videoDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/video` : '')
 const audioDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/audio` : '')
+const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/podcast` : '')
 </script>
 
 <template>
@@ -158,6 +175,13 @@ const audioDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api
                                 :is-processing="isProcessing"
                                 :download-url="audioDownloadUrl"
                             />
+                            <MediaDownload
+                                v-if="showPodcast || (taskStatus === 'generating_podcast' || taskStatus === 'synthesizing')"
+                                type="podcast"
+                                :available="result.has_podcast_audio"
+                                :is-processing="taskStatus === 'generating_podcast' || taskStatus === 'synthesizing'"
+                                :download-url="podcastDownloadUrl"
+                            />
                         </div>
                     </div>
                 </aside>
@@ -169,6 +193,7 @@ const audioDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api
                     :is-loading="isContentLoading"
                     :loading-text="contentLoadingText"
                     :rendered-content="renderedContent"
+                    :show-podcast="showPodcast"
                     @copy="$emit('copy')"
                 />
 

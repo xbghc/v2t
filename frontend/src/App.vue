@@ -12,7 +12,6 @@ const taskStore = useTaskStore()
 const {
     page,
     url,
-    downloadOnly,
     taskId,
     taskStatus,
     currentTab,
@@ -38,7 +37,6 @@ const { submitUrl, startNew, retryTask, copyContent } = taskStore
                     <AppHeader />
                     <InitialPage
                         v-model:url="url"
-                        v-model:download-only="downloadOnly"
                         @submit="submitUrl"
                     />
                     <AppFooter />

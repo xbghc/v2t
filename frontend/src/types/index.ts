@@ -6,13 +6,15 @@ export type TaskStatus =
     | 'downloading'
     | 'transcribing'
     | 'generating'
+    | 'generating_podcast'
+    | 'synthesizing'
     | 'completed'
     | 'failed'
 
 /**
  * 内容标签标识符
  */
-export type CurrentTab = 'article' | 'outline' | 'transcript'
+export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
 
 /**
  * 页面状态
@@ -39,6 +41,8 @@ export interface TaskResult {
     article: string
     outline: string
     transcript: string
+    podcast_script: string
+    has_podcast_audio: boolean
 }
 
 /**
@@ -62,11 +66,24 @@ export type StatusMap = Partial<Record<TaskStatus, StatusMapEntry>>
  */
 export interface CreateTaskRequest {
     url: string
-    download_only: boolean
+    generate_outline: boolean
+    generate_article: boolean
+    generate_podcast: boolean
     outline_system_prompt?: string
     outline_user_prompt?: string
     article_system_prompt?: string
     article_user_prompt?: string
+    podcast_system_prompt?: string
+    podcast_user_prompt?: string
+}
+
+/**
+ * 生成选项
+ */
+export interface GenerateOptions {
+    outline: boolean
+    article: boolean
+    podcast: boolean
 }
 
 /**
@@ -77,6 +94,8 @@ export interface PromptsResponse {
     outline_user: string
     article_system: string
     article_user: string
+    podcast_system: string
+    podcast_user: string
 }
 
 /**
@@ -87,6 +106,8 @@ export interface CustomPrompts {
     outlineUser: string
     articleSystem: string
     articleUser: string
+    podcastSystem: string
+    podcastUser: string
 }
 
 /**
@@ -111,6 +132,8 @@ export interface TaskResponse {
     transcript: string
     outline: string
     article: string
+    podcast_script: string
+    has_podcast_audio: boolean
     error: string
 }
 
@@ -124,7 +147,7 @@ export type HeaderVariant = 'default' | 'result'
 /**
  * MediaDownload 媒体类型
  */
-export type MediaType = 'video' | 'audio'
+export type MediaType = 'video' | 'audio' | 'podcast'
 
 /**
  * Tab 定义

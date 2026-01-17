@@ -1,9 +1,9 @@
-"""GitCode AI API 测试"""
+"""DeepSeek API 测试"""
 
 import pytest
 
-from app.services.gitcode_ai import (
-    GitCodeAIError,
+from app.services.deepseek import (
+    DeepSeekError,
     chat,
     generate_article,
     generate_outline,
@@ -21,7 +21,7 @@ async def test_chat():
         print(f"响应: {result}")
         assert result
         assert len(result) > 0
-    except GitCodeAIError as e:
+    except DeepSeekError as e:
         pytest.skip(f"跳过测试: {e}")
 
 
@@ -39,7 +39,7 @@ async def test_generate_outline():
         result = await generate_outline(content)
         print(f"大纲:\n{result}")
         assert result
-    except GitCodeAIError as e:
+    except DeepSeekError as e:
         pytest.skip(f"跳过测试: {e}")
 
 
@@ -56,5 +56,5 @@ async def test_generate_article():
         result = await generate_article(content)
         print(f"文章:\n{result}")
         assert result
-    except GitCodeAIError as e:
+    except DeepSeekError as e:
         pytest.skip(f"跳过测试: {e}")

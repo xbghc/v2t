@@ -10,7 +10,8 @@ import type {
     TaskResult,
     StatusMap,
     TaskResponse,
-    CustomPrompts
+    CustomPrompts,
+    GenerateOptions
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
@@ -19,7 +20,18 @@ export const useTaskStore = defineStore('task', () => {
 
     // 表单输入
     const url: Ref<string> = ref('')
-    const downloadOnly: Ref<boolean> = ref(false)
+
+    // 生成选项（替代 downloadOnly）
+    const generateOptions: GenerateOptions = reactive({
+        outline: true,
+        article: true,
+        podcast: false
+    })
+
+    // 计算属性：是否仅下载（所有选项都未勾选）
+    const isDownloadOnly: ComputedRef<boolean> = computed(() =>
+        !generateOptions.outline && !generateOptions.article && !generateOptions.podcast
+    )
 
     // 任务状态
     const taskId: Ref<string | null> = ref(null)
@@ -42,7 +54,9 @@ export const useTaskStore = defineStore('task', () => {
         has_audio: false,
         article: '',
         outline: '',
-        transcript: ''
+        transcript: '',
+        podcast_script: '',
+        has_podcast_audio: false
     })
 
     // 提示词状态
@@ -51,7 +65,9 @@ export const useTaskStore = defineStore('task', () => {
         outlineSystem: '',
         outlineUser: '',
         articleSystem: '',
-        articleUser: ''
+        articleUser: '',
+        podcastSystem: '',
+        podcastUser: ''
     })
 
     // localStorage key
@@ -59,23 +75,44 @@ export const useTaskStore = defineStore('task', () => {
 
     // 保存最后一次提交的参数，用于重试
     let lastUrl: string = ''
-    let lastDownloadOnly: boolean = false
-    let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '' }
+    let lastGenerateOptions: GenerateOptions = { outline: true, article: true, podcast: false }
+    let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '', podcastSystem: '', podcastUser: '' }
     let pollTimer: ReturnType<typeof setInterval> | null = null
 
-    // 状态映射
-    const statusMap: StatusMap = {
-        'pending': { text: '等待处理...', percent: 10, step: '步骤 1/3' },
-        'downloading': { text: '正在下载视频...', percent: 33, step: '步骤 1/3' },
-        'transcribing': { text: '正在转录音频...', percent: 55, step: '步骤 2/3' },
-        'generating': { text: '正在生成内容...', percent: 80, step: '步骤 3/3' },
-        'completed': { text: '处理完成', percent: 100, step: '完成' }
+    // 动态计算总步骤数
+    const getTotalSteps = (): number => {
+        // 基础步骤：下载 + 转录
+        let steps = 2
+        // 生成内容（大纲/文章）
+        if (generateOptions.outline || generateOptions.article) steps++
+        // 播客生成
+        if (generateOptions.podcast) steps += 2  // 脚本 + 合成
+        return steps
     }
+
+    // 状态映射（根据生成选项动态调整）
+    const getStatusMap = (): StatusMap => {
+        const total = getTotalSteps()
+        const hasPodcast = generateOptions.podcast
+        const hasGenerate = generateOptions.outline || generateOptions.article
+
+        return {
+            'pending': { text: '等待处理...', percent: 5, step: `步骤 1/${total}` },
+            'downloading': { text: '正在下载视频...', percent: 20, step: `步骤 1/${total}` },
+            'transcribing': { text: '正在转录音频...', percent: 40, step: `步骤 2/${total}` },
+            'generating': { text: '正在生成内容...', percent: hasGenerate ? 60 : 40, step: `步骤 3/${total}` },
+            'generating_podcast': { text: '正在生成播客脚本...', percent: hasPodcast ? 75 : 60, step: `步骤 ${hasGenerate ? 4 : 3}/${total}` },
+            'synthesizing': { text: '正在合成播客音频...', percent: 90, step: `步骤 ${hasGenerate ? 5 : 4}/${total}` },
+            'completed': { text: '处理完成', percent: 100, step: '完成' }
+        }
+    }
+
 
     // 计算属性：当前内容（用于复制）
     const currentContent: ComputedRef<string> = computed(() => {
         if (currentTab.value === 'article') return result.article || ''
         if (currentTab.value === 'outline') return result.outline || ''
+        if (currentTab.value === 'podcast') return result.podcast_script || ''
         return result.transcript || ''
     })
 
@@ -85,7 +122,7 @@ export const useTaskStore = defineStore('task', () => {
         currentTab.value = 'article'
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
-        Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '' })
+        Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false })
     }
 
     // 从 localStorage 加载提示词
@@ -129,6 +166,8 @@ export const useTaskStore = defineStore('task', () => {
             prompts.outlineUser = defaults.outline_user
             prompts.articleSystem = defaults.article_system
             prompts.articleUser = defaults.article_user
+            prompts.podcastSystem = defaults.podcast_system
+            prompts.podcastUser = defaults.podcast_user
             promptsLoaded.value = true
         } catch (error) {
             console.error('加载默认提示词失败:', error)
@@ -144,6 +183,8 @@ export const useTaskStore = defineStore('task', () => {
             prompts.outlineUser = defaults.outline_user
             prompts.articleSystem = defaults.article_system
             prompts.articleUser = defaults.article_user
+            prompts.podcastSystem = defaults.podcast_system
+            prompts.podcastUser = defaults.podcast_user
         } catch (error) {
             console.error('重置提示词失败:', error)
         }
@@ -170,6 +211,18 @@ export const useTaskStore = defineStore('task', () => {
             savePromptsToStorage()
         } catch (error) {
             console.error('重置文章提示词失败:', error)
+        }
+    }
+
+    // 重置播客提示词
+    const resetPodcastPrompts = async (): Promise<void> => {
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.podcastSystem = defaults.podcast_system
+            prompts.podcastUser = defaults.podcast_user
+            savePromptsToStorage()
+        } catch (error) {
+            console.error('重置播客提示词失败:', error)
         }
     }
 
@@ -223,9 +276,12 @@ export const useTaskStore = defineStore('task', () => {
         if (data.transcript) result.transcript = data.transcript
         if (data.outline) result.outline = data.outline
         if (data.article) result.article = data.article
+        if (data.podcast_script) result.podcast_script = data.podcast_script
+        if (data.has_podcast_audio) result.has_podcast_audio = true
 
-        // 更新进度条
-        const statusInfo = statusMap[data.status]
+        // 更新进度条（使用动态状态映射）
+        const dynamicStatusMap = getStatusMap()
+        const statusInfo = dynamicStatusMap[data.status]
         if (statusInfo) {
             progress.text = data.progress || statusInfo.text
             progress.percent = statusInfo.percent
@@ -233,14 +289,23 @@ export const useTaskStore = defineStore('task', () => {
         }
 
         // 自动切换到有内容的 tab
-        if (result.transcript && !result.outline && !result.article && currentTab.value !== 'transcript') {
+        if (result.transcript && !result.outline && !result.article && !result.podcast_script && currentTab.value !== 'transcript') {
             currentTab.value = 'transcript'
         }
     }
 
     // 处理任务完成
     const handleTaskComplete = (): void => {
-        currentTab.value = result.article ? 'article' : (result.outline ? 'outline' : 'transcript')
+        // 优先显示有内容的 tab
+        if (result.article) {
+            currentTab.value = 'article'
+        } else if (result.outline) {
+            currentTab.value = 'outline'
+        } else if (result.podcast_script) {
+            currentTab.value = 'podcast'
+        } else {
+            currentTab.value = 'transcript'
+        }
     }
 
     // 处理任务失败
@@ -256,7 +321,7 @@ export const useTaskStore = defineStore('task', () => {
         }
 
         lastUrl = url.value
-        lastDownloadOnly = downloadOnly.value
+        lastGenerateOptions = { ...generateOptions }
         lastPrompts = { ...prompts }
         // 保存当前提示词到 localStorage
         savePromptsToStorage()
@@ -264,7 +329,7 @@ export const useTaskStore = defineStore('task', () => {
         page.value = 'result'
 
         try {
-            const data = await createTask(url.value, lastDownloadOnly, lastPrompts)
+            const data = await createTask(url.value, lastGenerateOptions, lastPrompts)
             startPolling(data.task_id)
         } catch (error) {
             errorMessage.value = (error as Error).message
@@ -285,7 +350,7 @@ export const useTaskStore = defineStore('task', () => {
         stopPolling()
         resetState()
         url.value = lastUrl
-        downloadOnly.value = lastDownloadOnly
+        Object.assign(generateOptions, lastGenerateOptions)
         Object.assign(prompts, lastPrompts)
         submitUrl()
     }
@@ -304,7 +369,8 @@ export const useTaskStore = defineStore('task', () => {
         // 状态
         page,
         url,
-        downloadOnly,
+        generateOptions,
+        isDownloadOnly,
         taskId,
         taskStatus,
         currentTab,
@@ -324,6 +390,7 @@ export const useTaskStore = defineStore('task', () => {
         resetPrompts,
         resetOutlinePrompts,
         resetArticlePrompts,
+        resetPodcastPrompts,
         submitUrl,
         startNew,
         retryTask,

@@ -20,15 +20,19 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.gitcode_ai import (
+from app.services.deepseek import (
     DEFAULT_ARTICLE_SYSTEM_PROMPT,
     DEFAULT_ARTICLE_USER_PROMPT,
     DEFAULT_OUTLINE_SYSTEM_PROMPT,
     DEFAULT_OUTLINE_USER_PROMPT,
-    GitCodeAIError,
+    DEFAULT_PODCAST_SYSTEM_PROMPT,
+    DEFAULT_PODCAST_USER_PROMPT,
+    DeepSeekError,
     generate_article,
     generate_outline,
+    generate_podcast_script,
 )
+from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
 from app.services.transcribe import TranscribeError, extract_audio_async
 from app.services.video_downloader import DownloadError, download_video
 
@@ -38,6 +42,8 @@ class TaskStatus(str, Enum):
     DOWNLOADING = "downloading"
     TRANSCRIBING = "transcribing"
     GENERATING = "generating"
+    GENERATING_PODCAST = "generating_podcast"
+    SYNTHESIZING = "synthesizing"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -54,6 +60,8 @@ class TaskResult:
     transcript: str = ""
     outline: str = ""
     article: str = ""
+    podcast_script: str = ""
+    podcast_audio_path: Path | None = None
     error: str = ""
     created_at: float = field(default_factory=time.time)
 
@@ -74,12 +82,17 @@ if static_path.exists():
 
 class ProcessRequest(BaseModel):
     url: str
-    download_only: bool = False  # 仅下载，不转录
+    # 生成选项（替代 download_only）
+    generate_outline: bool = True
+    generate_article: bool = True
+    generate_podcast: bool = False
     # 自定义提示词，空字符串表示使用默认
     outline_system_prompt: str = ""
     outline_user_prompt: str = ""
     article_system_prompt: str = ""
     article_user_prompt: str = ""
+    podcast_system_prompt: str = ""
+    podcast_user_prompt: str = ""
 
 
 class PromptsResponse(BaseModel):
@@ -88,6 +101,8 @@ class PromptsResponse(BaseModel):
     outline_user: str
     article_system: str
     article_user: str
+    podcast_system: str
+    podcast_user: str
 
 
 class TaskResponse(BaseModel):
@@ -100,6 +115,8 @@ class TaskResponse(BaseModel):
     transcript: str = ""
     outline: str = ""
     article: str = ""
+    podcast_script: str = ""
+    has_podcast_audio: bool = False
     error: str = ""
 
 
@@ -124,23 +141,37 @@ def cleanup_old_tasks():
                     task.audio_path.unlink()
                 except OSError:
                     pass
+            if task.podcast_audio_path and task.podcast_audio_path.exists():
+                try:
+                    task.podcast_audio_path.unlink()
+                except OSError:
+                    pass
 
 
 async def process_video_task(
     task_id: str,
     url: str,
-    download_only: bool = False,
+    generate_outline_flag: bool = True,
+    generate_article_flag: bool = True,
+    generate_podcast_flag: bool = False,
     outline_system_prompt: str = "",
     outline_user_prompt: str = "",
     article_system_prompt: str = "",
     article_user_prompt: str = "",
+    podcast_system_prompt: str = "",
+    podcast_user_prompt: str = "",
 ):
     """后台处理视频任务"""
     task = tasks.get(task_id)
     if not task:
         return
 
-    logger.info("任务 %s 开始处理: %s (仅下载: %s)", task_id, url, download_only)
+    # 判断是否需要转录（任一生成选项开启则需要转录）
+    need_transcribe = generate_outline_flag or generate_article_flag or generate_podcast_flag
+    logger.info(
+        "任务 %s 开始处理: %s (大纲: %s, 文章: %s, 播客: %s)",
+        task_id, url, generate_outline_flag, generate_article_flag, generate_podcast_flag
+    )
 
     settings = get_settings()
     output_dir = settings.temp_path
@@ -156,13 +187,14 @@ async def process_video_task(
         task.video_path = video_result.path
         task.progress = f"下载完成: {video_result.title}"
 
-        # 仅下载模式：提取音频后直接完成
-        if download_only:
-            task.status = TaskStatus.TRANSCRIBING
-            task.progress = "正在提取音频..."
-            audio_path = await extract_audio_async(video_result.path)
-            task.audio_path = audio_path
+        # 2. 提取音频（始终执行）
+        task.status = TaskStatus.TRANSCRIBING
+        task.progress = "正在提取音频..."
+        audio_path = await extract_audio_async(video_result.path)
+        task.audio_path = audio_path
 
+        # 仅下载模式：不需要转录，直接完成
+        if not need_transcribe:
             task.status = TaskStatus.COMPLETED
             task.progress = "下载完成"
             logger.info("任务 %s 下载完成: %s", task_id, task.title)
@@ -174,48 +206,75 @@ async def process_video_task(
             video_min = video_result.duration // 60
             raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
 
-        # 2. 提取音频
-        task.status = TaskStatus.TRANSCRIBING
-        task.progress = "正在提取音频..."
-
-        audio_path = await extract_audio_async(video_result.path)
-        task.audio_path = audio_path
-        task.progress = "正在转录音频..."
-
         # 3. 转录音频
+        task.progress = "正在转录音频..."
         from app.services.transcribe import transcribe_audio
         transcript = await transcribe_audio(audio_path)
         task.transcript = transcript
         task.progress = "转录完成"
 
-        # 4. 生成 AI 内容
+        # 4. 条件生成 AI 内容
         task.status = TaskStatus.GENERATING
 
         # 生成大纲
-        task.progress = "正在生成大纲..."
-        try:
-            outline = await generate_outline(
-                transcript,
-                system_prompt=outline_system_prompt or None,
-                user_prompt=outline_user_prompt or None,
-            )
-            if outline and len(outline.strip()) >= 50:
-                task.outline = outline
-        except GitCodeAIError:
-            task.outline = ""  # 大纲生成失败，跳过
+        if generate_outline_flag:
+            task.progress = "正在生成大纲..."
+            try:
+                outline = await generate_outline(
+                    transcript,
+                    system_prompt=outline_system_prompt or None,
+                    user_prompt=outline_user_prompt or None,
+                )
+                if outline and len(outline.strip()) >= 50:
+                    task.outline = outline
+            except DeepSeekError:
+                task.outline = ""  # 大纲生成失败，跳过
 
         # 生成详细文章
-        task.progress = "正在生成详细内容..."
-        try:
-            article = await generate_article(
-                transcript,
-                system_prompt=article_system_prompt or None,
-                user_prompt=article_user_prompt or None,
-            )
-            if article and len(article.strip()) >= 50:
-                task.article = article
-        except GitCodeAIError:
-            task.article = ""  # 文章生成失败，跳过
+        if generate_article_flag:
+            task.progress = "正在生成详细内容..."
+            try:
+                article = await generate_article(
+                    transcript,
+                    system_prompt=article_system_prompt or None,
+                    user_prompt=article_user_prompt or None,
+                )
+                if article and len(article.strip()) >= 50:
+                    task.article = article
+            except DeepSeekError:
+                task.article = ""  # 文章生成失败，跳过
+
+        # 生成播客
+        if generate_podcast_flag:
+            # 生成播客脚本
+            task.status = TaskStatus.GENERATING_PODCAST
+            task.progress = "正在生成播客脚本..."
+            try:
+                podcast_script = await generate_podcast_script(
+                    transcript,
+                    system_prompt=podcast_system_prompt or None,
+                    user_prompt=podcast_user_prompt or None,
+                )
+                if podcast_script and len(podcast_script.strip()) >= 50:
+                    task.podcast_script = podcast_script
+
+                    # 合成播客音频
+                    task.status = TaskStatus.SYNTHESIZING
+                    task.progress = "正在合成播客音频..."
+                    try:
+                        podcast_audio_path = output_dir / f"{task_id}_podcast.mp3"
+                        await generate_podcast_audio(
+                            podcast_script,
+                            podcast_audio_path,
+                            temp_dir=output_dir,
+                        )
+                        task.podcast_audio_path = podcast_audio_path
+                    except PodcastTTSError as e:
+                        # TTS 失败，保留脚本，记录日志
+                        logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
+            except DeepSeekError as e:
+                # 播客脚本生成失败，记录日志
+                logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
 
         # 完成
         task.status = TaskStatus.COMPLETED
@@ -247,6 +306,8 @@ async def get_prompts():
         outline_user=DEFAULT_OUTLINE_USER_PROMPT,
         article_system=DEFAULT_ARTICLE_SYSTEM_PROMPT,
         article_user=DEFAULT_ARTICLE_USER_PROMPT,
+        podcast_system=DEFAULT_PODCAST_SYSTEM_PROMPT,
+        podcast_user=DEFAULT_PODCAST_USER_PROMPT,
     )
 
 
@@ -266,11 +327,15 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
         process_video_task,
         task_id,
         request.url,
-        request.download_only,
+        request.generate_outline,
+        request.generate_article,
+        request.generate_podcast,
         request.outline_system_prompt,
         request.outline_user_prompt,
         request.article_system_prompt,
         request.article_user_prompt,
+        request.podcast_system_prompt,
+        request.podcast_user_prompt,
     )
 
     return TaskResponse(
@@ -297,6 +362,8 @@ async def get_task(task_id: str):
         transcript=task.transcript,
         outline=task.outline,
         article=task.article,
+        podcast_script=task.podcast_script,
+        has_podcast_audio=task.podcast_audio_path is not None and task.podcast_audio_path.exists(),
         error=task.error,
     )
 
@@ -329,6 +396,22 @@ async def download_task_audio(task_id: str):
     return FileResponse(
         task.audio_path,
         filename=f"{task.title}.mp3" if task.title else "audio.mp3",
+        media_type="audio/mpeg",
+    )
+
+
+@app.get("/api/task/{task_id}/podcast")
+async def download_task_podcast(task_id: str):
+    """下载播客音频文件"""
+    task = tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.podcast_audio_path or not task.podcast_audio_path.exists():
+        raise HTTPException(status_code=404, detail="播客音频文件不存在")
+
+    return FileResponse(
+        task.podcast_audio_path,
+        filename=f"{task.title}_podcast.mp3" if task.title else "podcast.mp3",
         media_type="audio/mpeg",
     )
 
