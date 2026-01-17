@@ -85,7 +85,8 @@ backend/app/
     ├── xiazaitool.py       # 视频链接解析 (外部API)
     ├── video_downloader.py # 视频下载 (aria2c)
     ├── transcribe.py       # 音频转录 (Groq Whisper)
-    └── gitcode_ai.py       # AI生成 (GitCode API)
+    ├── deepseek.py         # AI生成 (DeepSeek API)
+    └── podcast_tts.py      # 播客音频合成 (阿里云百炼 TTS)
 ```
 
 **全异步架构**：所有 I/O 操作使用 `async/await`，外部命令通过 `asyncio.create_subprocess_exec` 执行。
@@ -111,13 +112,14 @@ frontend/src/
 ### 关键依赖
 
 - **系统**：ffmpeg (音频提取)、aria2c (多线程下载)
-- **外部服务**：Groq Whisper (转录)、GitCode AI (内容生成)、Xiazaitool (链接解析)
+- **外部服务**：Groq Whisper (转录)、DeepSeek (内容生成)、阿里云百炼 (TTS)、Xiazaitool (链接解析)
 
 ## 环境变量
 
 ```bash
-GROQ_API_KEY         # Groq Whisper API
-GITCODE_AI_TOKEN     # GitCode AI API
+GROQ_API_KEY         # Groq Whisper API (语音转录)
+DEEPSEEK_API_KEY     # DeepSeek API (AI 内容生成)
+DASHSCOPE_API_KEY    # 阿里云百炼 API (TTS 语音合成)
 XIAZAITOOL_TOKEN     # 视频链接解析 API
 ```
 

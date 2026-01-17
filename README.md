@@ -76,9 +76,10 @@ uv run v2t config
 ```
 
 需要以下凭证：
-- **Xiazaitool Token** - 用于解析视频链接（必需）
-- **Groq API Key** - https://console.groq.com/keys （用于语音转录）
-- **GitCode AI Token** - https://ai.gitcode.com/ （用于 AI 摘要）
+- **Groq API Key** - https://console.groq.com/keys （语音转录）
+- **DeepSeek API Key** - https://platform.deepseek.com/ （AI 内容生成）
+- **DashScope API Key** - https://dashscope.console.aliyun.com/ （TTS 语音合成，可选）
+- **Xiazaitool Token** - 用于解析视频链接（可选）
 
 ## 使用方法
 
