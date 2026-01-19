@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import httpx
+from aiolimiter import AsyncLimiter
 
 from app.config import get_settings
 
@@ -23,6 +24,8 @@ DEFAULT_TTS_MODEL = "qwen3-tts-flash"
 # TTS 限制
 TTS_MAX_CHARS = 600  # 单次最大字符数（300 字 = 600 字符，中文）
 
+# 全局限流器：每 60 秒最多 180 次请求（百炼 TTS API 限制）
+_tts_rate_limiter = AsyncLimiter(180, 60)
 
 
 class PodcastTTSError(Exception):
@@ -163,15 +166,17 @@ async def call_dashscope_tts(
     voice: str = DEFAULT_TTS_VOICE,
     model: str = DEFAULT_TTS_MODEL,
     timeout: float = 60.0,
+    max_retries: int = 3,
 ) -> str:
     """
-    调用阿里云百炼 TTS API
+    调用阿里云百炼 TTS API（带限流和重试）
 
     Args:
         text: 要合成的文本
         voice: 发音人（默认 Maia）
         model: 模型（默认 qwen3-tts-flash）
         timeout: 请求超时时间（秒）
+        max_retries: 最大重试次数
 
     Returns:
         str: 生成的音频文件 URL
@@ -192,25 +197,66 @@ async def call_dashscope_tts(
         "input": {"text": text, "voice": voice},
     }
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
-            response = await client.post(
-                DASHSCOPE_API_URL,
-                headers=headers,
-                json=payload,
-            )
-            result = response.json()
+    for attempt in range(max_retries):
+        # 主动限流：等待获取令牌
+        async with _tts_rate_limiter, httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                response = await client.post(
+                    DASHSCOPE_API_URL,
+                    headers=headers,
+                    json=payload,
+                )
+                result = response.json()
 
-            if "output" in result and "audio" in result["output"]:
-                return result["output"]["audio"]["url"]
-            else:
+                # 检查限流响应
+                if response.status_code == 429:
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            "触发限流 (HTTP 429)，30 秒后重试 (%d/%d)",
+                            attempt + 1,
+                            max_retries,
+                        )
+                        await asyncio.sleep(30)
+                        continue
+                    raise PodcastTTSError("百炼 TTS API 限流，重试失败")
+
+                if "output" in result and "audio" in result["output"]:
+                    return result["output"]["audio"]["url"]
+
                 error_msg = result.get("message", str(result))
+
+                # 检查响应内容中的限流错误
+                if "Rate Limit" in error_msg or "rate limit" in error_msg.lower():
+                    if attempt < max_retries - 1:
+                        logger.warning(
+                            "触发限流 (%s)，30 秒后重试 (%d/%d)",
+                            error_msg,
+                            attempt + 1,
+                            max_retries,
+                        )
+                        await asyncio.sleep(30)
+                        continue
+                    raise PodcastTTSError("百炼 TTS API 限流，重试失败")
+
                 raise PodcastTTSError(f"百炼 TTS API 错误: {error_msg}")
 
-        except httpx.TimeoutException:
-            raise PodcastTTSError("百炼 TTS API 请求超时")
-        except httpx.RequestError as e:
-            raise PodcastTTSError(f"百炼 TTS API 连接失败: {e}")
+            except httpx.TimeoutException:
+                if attempt < max_retries - 1:
+                    logger.warning("TTS 请求超时，1 秒后重试 (%d/%d)", attempt + 1, max_retries)
+                    await asyncio.sleep(1)
+                    continue
+                raise PodcastTTSError("百炼 TTS API 请求超时")
+            except httpx.RequestError as e:
+                if attempt < max_retries - 1:
+                    logger.warning("TTS 连接失败 (%s)，1 秒后重试 (%d/%d)", e, attempt + 1, max_retries)
+                    await asyncio.sleep(1)
+                    continue
+                raise PodcastTTSError(f"百炼 TTS API 连接失败: {e}")
+            except PodcastTTSError:
+                raise
+
+    # 不应该到达这里，但作为安全保障
+    raise PodcastTTSError("百炼 TTS API 调用失败")
 
 
 async def download_audio(url: str, output_path: Path, timeout: float = 30.0) -> Path:

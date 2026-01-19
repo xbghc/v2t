@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { createTask, getTask, getDefaultPrompts } from '@/api/task'
+import { createTask, getTask, getDefaultPrompts, textToPodcast } from '@/api/task'
 import type {
     PageState,
     TaskStatus,
@@ -11,15 +11,23 @@ import type {
     StatusMap,
     TaskResponse,
     CustomPrompts,
-    GenerateOptions
+    GenerateOptions,
+    InputMode
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
     // 页面状态
     const page: Ref<PageState> = ref('initial')
 
+    // 输入模式
+    const inputMode: Ref<InputMode> = ref('url')
+
     // 表单输入
     const url: Ref<string> = ref('')
+
+    // 字幕上传状态
+    const subtitleText: Ref<string> = ref('')
+    const subtitleTitle: Ref<string> = ref('')
 
     // 生成选项（替代 downloadOnly）
     const generateOptions: GenerateOptions = reactive({
@@ -123,6 +131,12 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
         Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false })
+    }
+
+    // 重置字幕状态
+    const resetSubtitleState = (): void => {
+        subtitleText.value = ''
+        subtitleTitle.value = ''
     }
 
     // 从 localStorage 加载提示词
@@ -337,10 +351,42 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
+    // 提交字幕转播客
+    const submitSubtitle = async (): Promise<void> => {
+        if (!subtitleText.value.trim() || subtitleText.value.length < 10) {
+            alert('请上传字幕文件')
+            return
+        }
+
+        lastPrompts = { ...prompts }
+        // 保存当前提示词到 localStorage
+        savePromptsToStorage()
+        resetState()
+        // 设置字幕模式的错误信息
+        errorMessage.value = '生成播客失败，请检查字幕内容是否正确，或尝试其他内容。'
+        // 切换到播客 tab
+        currentTab.value = 'podcast'
+        page.value = 'result'
+
+        try {
+            const data = await textToPodcast(
+                subtitleText.value,
+                subtitleTitle.value,
+                prompts.podcastSystem,
+                prompts.podcastUser
+            )
+            startPolling(data.task_id)
+        } catch (error) {
+            errorMessage.value = (error as Error).message
+            taskStatus.value = 'failed'
+        }
+    }
+
     // 开始新任务
     const startNew = (): void => {
         stopPolling()
         resetState()
+        resetSubtitleState()
         url.value = ''
         page.value = 'initial'
     }
@@ -368,7 +414,10 @@ export const useTaskStore = defineStore('task', () => {
     return {
         // 状态
         page,
+        inputMode,
         url,
+        subtitleText,
+        subtitleTitle,
         generateOptions,
         isDownloadOnly,
         taskId,
@@ -385,6 +434,7 @@ export const useTaskStore = defineStore('task', () => {
 
         // 方法
         resetState,
+        resetSubtitleState,
         loadPrompts,
         savePromptsToStorage,
         resetPrompts,
@@ -392,6 +442,7 @@ export const useTaskStore = defineStore('task', () => {
         resetArticlePrompts,
         resetPodcastPrompts,
         submitUrl,
+        submitSubtitle,
         startNew,
         retryTask,
         copyContent

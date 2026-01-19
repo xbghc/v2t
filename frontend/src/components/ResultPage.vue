@@ -4,6 +4,7 @@ import type { ComputedRef } from 'vue'
 import { marked } from 'marked'
 import ProgressBar from './ProgressBar.vue'
 import MediaDownload from './MediaDownload.vue'
+import PodcastPlayer from './PodcastPlayer.vue'
 import ContentTabs from './ContentTabs.vue'
 import type { TaskStatus, CurrentTab, ProgressInfo, TaskResult } from '@/types'
 
@@ -175,12 +176,11 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `a
                                 :is-processing="isProcessing"
                                 :download-url="audioDownloadUrl"
                             />
-                            <MediaDownload
+                            <PodcastPlayer
                                 v-if="showPodcast || (taskStatus === 'generating_podcast' || taskStatus === 'synthesizing')"
-                                type="podcast"
+                                :src="podcastDownloadUrl"
                                 :available="result.has_podcast_audio"
                                 :is-processing="taskStatus === 'generating_podcast' || taskStatus === 'synthesizing'"
-                                :download-url="podcastDownloadUrl"
                             />
                         </div>
                     </div>

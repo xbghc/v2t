@@ -22,6 +22,11 @@ export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
 export type PageState = 'initial' | 'result'
 
 /**
+ * 输入模式
+ */
+export type InputMode = 'url' | 'subtitle'
+
+/**
  * 进度信息
  */
 export interface ProgressInfo {

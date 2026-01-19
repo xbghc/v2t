@@ -99,6 +99,14 @@ class ProcessRequest(BaseModel):
     podcast_user_prompt: str = ""
 
 
+class TextToPodcastRequest(BaseModel):
+    """文本转播客请求"""
+    text: str
+    title: str = ""
+    podcast_system_prompt: str = ""
+    podcast_user_prompt: str = ""
+
+
 class PromptsResponse(BaseModel):
     """默认提示词响应"""
     outline_system: str
@@ -302,6 +310,77 @@ async def process_video_task(
         logger.exception("任务 %s 处理异常", task_id)
 
 
+async def process_text_task(
+    task_id: str,
+    text: str,
+    title: str = "",
+    podcast_system_prompt: str = "",
+    podcast_user_prompt: str = "",
+):
+    """后台处理文本转播客任务"""
+    task = tasks.get(task_id)
+    if not task:
+        return
+
+    logger.info("任务 %s 开始处理文本转播客", task_id)
+
+    settings = get_settings()
+    output_dir = settings.temp_path
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 设置标题
+    task.title = title or "文本转播客"
+    task.transcript = text
+
+    try:
+        # 1. 生成播客脚本
+        task.status = TaskStatus.GENERATING_PODCAST
+        task.progress = "正在生成播客脚本..."
+
+        podcast_script = await generate_podcast_script(
+            text,
+            system_prompt=podcast_system_prompt or None,
+            user_prompt=podcast_user_prompt or None,
+        )
+        if not podcast_script or len(podcast_script.strip()) < 50:
+            raise DeepSeekError("生成的播客脚本内容过短")
+
+        task.podcast_script = podcast_script
+
+        # 2. 合成播客音频
+        task.status = TaskStatus.SYNTHESIZING
+        task.progress = "正在合成播客音频..."
+
+        podcast_audio_path = output_dir / f"{task_id}_podcast.mp3"
+        await generate_podcast_audio(
+            podcast_script,
+            podcast_audio_path,
+            temp_dir=output_dir,
+        )
+        task.podcast_audio_path = podcast_audio_path
+
+        # 完成
+        task.status = TaskStatus.COMPLETED
+        task.progress = "处理完成"
+        logger.info("任务 %s 文本转播客完成: %s", task_id, task.title)
+
+    except DeepSeekError as e:
+        task.status = TaskStatus.FAILED
+        task.error = f"播客脚本生成失败: {e}"
+        task.progress = task.error
+        logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
+    except PodcastTTSError as e:
+        task.status = TaskStatus.FAILED
+        task.error = f"播客音频合成失败: {e}"
+        task.progress = task.error
+        logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
+    except Exception as e:
+        task.status = TaskStatus.FAILED
+        task.error = str(e)
+        task.progress = f"处理失败: {e}"
+        logger.exception("任务 %s 处理异常", task_id)
+
+
 @app.get("/api/prompts", response_model=PromptsResponse)
 async def get_prompts():
     """获取默认提示词"""
@@ -338,6 +417,38 @@ async def create_task(request: ProcessRequest, background_tasks: BackgroundTasks
         request.outline_user_prompt,
         request.article_system_prompt,
         request.article_user_prompt,
+        request.podcast_system_prompt,
+        request.podcast_user_prompt,
+    )
+
+    return TaskResponse(
+        task_id=task_id,
+        status=task.status.value,
+        progress=task.progress,
+    )
+
+
+@app.post("/api/text-to-podcast", response_model=TaskResponse)
+async def create_text_to_podcast_task(request: TextToPodcastRequest, background_tasks: BackgroundTasks):
+    """创建文本转播客任务"""
+    # 验证文本内容
+    if not request.text or len(request.text.strip()) < 10:
+        raise HTTPException(status_code=400, detail="文本内容过短")
+
+    # 清理过期任务
+    cleanup_old_tasks()
+
+    # 创建新任务
+    task_id = str(uuid.uuid4())[:8]
+    task = TaskResult(task_id=task_id)
+    tasks[task_id] = task
+
+    # 在后台执行处理
+    background_tasks.add_task(
+        process_text_task,
+        task_id,
+        request.text,
+        request.title,
         request.podcast_system_prompt,
         request.podcast_user_prompt,
     )

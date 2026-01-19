@@ -51,3 +51,31 @@ export async function getTask(taskId: string): Promise<TaskResponse> {
     const response = await fetch(`api/task/${taskId}`)
     return response.json() as Promise<TaskResponse>
 }
+
+/**
+ * 文本转播客任务
+ */
+export async function textToPodcast(
+    text: string,
+    title: string = '',
+    podcastSystemPrompt: string = '',
+    podcastUserPrompt: string = ''
+): Promise<CreateTaskResponse> {
+    const response = await fetch('api/text-to-podcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            text,
+            title,
+            podcast_system_prompt: podcastSystemPrompt,
+            podcast_user_prompt: podcastUserPrompt,
+        })
+    })
+    const data = await response.json() as CreateTaskResponse | { detail: string }
+
+    if (!response.ok) {
+        throw new Error((data as { detail: string }).detail || '提交失败')
+    }
+
+    return data as CreateTaskResponse
+}
