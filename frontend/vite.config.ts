@@ -17,9 +17,10 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            '/api': {
+            '/v2t/api': {
                 target: 'http://localhost:8100',
                 changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/v2t/, ''),
             },
         },
     },
