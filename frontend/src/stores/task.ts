@@ -64,7 +64,8 @@ export const useTaskStore = defineStore('task', () => {
         outline: '',
         transcript: '',
         podcast_script: '',
-        has_podcast_audio: false
+        has_podcast_audio: false,
+        podcast_error: ''
     })
 
     // 提示词状态
@@ -292,6 +293,7 @@ export const useTaskStore = defineStore('task', () => {
         if (data.article) result.article = data.article
         if (data.podcast_script) result.podcast_script = data.podcast_script
         if (data.has_podcast_audio) result.has_podcast_audio = true
+        if (data.podcast_error) result.podcast_error = data.podcast_error
 
         // 更新进度条（使用动态状态映射）
         const dynamicStatusMap = getStatusMap()

@@ -48,6 +48,7 @@ export interface TaskResult {
     transcript: string
     podcast_script: string
     has_podcast_audio: boolean
+    podcast_error: string
 }
 
 /**
@@ -139,6 +140,7 @@ export interface TaskResponse {
     article: string
     podcast_script: string
     has_podcast_audio: boolean
+    podcast_error: string
     error: string
 }
 

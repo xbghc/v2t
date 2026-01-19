@@ -66,6 +66,7 @@ class TaskResult:
     article: str = ""
     podcast_script: str = ""
     podcast_audio_path: Path | None = None
+    podcast_error: str = ""  # 播客生成失败的错误信息
     error: str = ""
     created_at: float = field(default_factory=time.time)
 
@@ -129,6 +130,7 @@ class TaskResponse(BaseModel):
     article: str = ""
     podcast_script: str = ""
     has_podcast_audio: bool = False
+    podcast_error: str = ""  # 播客生成失败的错误信息
     error: str = ""
 
 
@@ -282,8 +284,9 @@ async def process_video_task(
                         )
                         task.podcast_audio_path = podcast_audio_path
                     except PodcastTTSError as e:
-                        # TTS 失败，保留脚本，记录日志
+                        # TTS 失败，保留脚本，记录错误信息
                         logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
+                        task.podcast_error = str(e)
             except DeepSeekError as e:
                 # 播客脚本生成失败，记录日志
                 logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
@@ -479,6 +482,7 @@ async def get_task(task_id: str):
         article=task.article,
         podcast_script=task.podcast_script,
         has_podcast_audio=task.podcast_audio_path is not None and task.podcast_audio_path.exists(),
+        podcast_error=task.podcast_error,
         error=task.error,
     )
 

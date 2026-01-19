@@ -5,11 +5,13 @@ interface Props {
     src: string
     available?: boolean
     isProcessing?: boolean
+    error?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
     available: false,
-    isProcessing: false
+    isProcessing: false,
+    error: ''
 })
 
 const audioRef = ref<HTMLAudioElement | null>(null)
@@ -111,7 +113,7 @@ onUnmounted(() => {
             class="flex items-center justify-center gap-2 py-4"
         >
             <span class="material-symbols-outlined text-gray-400 dark:text-gray-600">podcasts</span>
-            <span class="text-sm text-gray-400 dark:text-gray-600">播客音频不可用</span>
+            <span class="text-sm text-gray-400 dark:text-gray-600">{{ error || '播客音频不可用' }}</span>
         </div>
 
         <!-- Player -->

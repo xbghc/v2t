@@ -197,15 +197,23 @@ async def call_dashscope_tts(
         "input": {"text": text, "voice": voice},
     }
 
+    retry_delay = 0.0  # 重试前等待时间（在限流器外部等待）
+
     for attempt in range(max_retries):
+        # 重试前等待（在限流器外部，不占用令牌）
+        if retry_delay > 0:
+            await asyncio.sleep(retry_delay)
+            retry_delay = 0.0
+
         # 主动限流：等待获取令牌
-        async with _tts_rate_limiter, httpx.AsyncClient(timeout=timeout) as client:
+        async with _tts_rate_limiter:
             try:
-                response = await client.post(
-                    DASHSCOPE_API_URL,
-                    headers=headers,
-                    json=payload,
-                )
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(
+                        DASHSCOPE_API_URL,
+                        headers=headers,
+                        json=payload,
+                    )
                 result = response.json()
 
                 # 检查限流响应
@@ -216,7 +224,7 @@ async def call_dashscope_tts(
                             attempt + 1,
                             max_retries,
                         )
-                        await asyncio.sleep(30)
+                        retry_delay = 30.0
                         continue
                     raise PodcastTTSError("百炼 TTS API 限流，重试失败")
 
@@ -234,7 +242,7 @@ async def call_dashscope_tts(
                             attempt + 1,
                             max_retries,
                         )
-                        await asyncio.sleep(30)
+                        retry_delay = 30.0
                         continue
                     raise PodcastTTSError("百炼 TTS API 限流，重试失败")
 
@@ -243,13 +251,13 @@ async def call_dashscope_tts(
             except httpx.TimeoutException:
                 if attempt < max_retries - 1:
                     logger.warning("TTS 请求超时，1 秒后重试 (%d/%d)", attempt + 1, max_retries)
-                    await asyncio.sleep(1)
+                    retry_delay = 1.0
                     continue
                 raise PodcastTTSError("百炼 TTS API 请求超时")
             except httpx.RequestError as e:
                 if attempt < max_retries - 1:
                     logger.warning("TTS 连接失败 (%s)，1 秒后重试 (%d/%d)", e, attempt + 1, max_retries)
-                    await asyncio.sleep(1)
+                    retry_delay = 1.0
                     continue
                 raise PodcastTTSError(f"百炼 TTS API 连接失败: {e}")
             except PodcastTTSError:

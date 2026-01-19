@@ -181,6 +181,7 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `a
                                 :src="podcastDownloadUrl"
                                 :available="result.has_podcast_audio"
                                 :is-processing="taskStatus === 'generating_podcast' || taskStatus === 'synthesizing'"
+                                :error="result.podcast_error"
                             />
                         </div>
                     </div>
