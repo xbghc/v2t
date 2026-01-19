@@ -5,10 +5,39 @@ import pytest
 from app.services.podcast_tts import (
     TTS_MAX_CHARS,
     PodcastTTSError,
+    _split_long_segment,
+    iter_safe_segments,
     parse_segments,
-    split_by_sentence,
-    validate_and_fix_segments,
+    tts_char_count,
 )
+
+
+class TestTtsCharCount:
+    """测试 tts_char_count 函数"""
+
+    def test_chinese_chars(self):
+        """中文字符算 2"""
+        assert tts_char_count("你好") == 4
+        assert tts_char_count("中文测试") == 8
+
+    def test_english_chars(self):
+        """英文字符算 1"""
+        assert tts_char_count("hello") == 5
+        assert tts_char_count("abc") == 3
+
+    def test_mixed_chars(self):
+        """中英混合"""
+        assert tts_char_count("你好world") == 4 + 5  # 9
+        assert tts_char_count("a中b") == 1 + 2 + 1  # 4
+
+    def test_empty(self):
+        """空字符串"""
+        assert tts_char_count("") == 0
+
+    def test_punctuation(self):
+        """标点符号"""
+        assert tts_char_count("。") == 2  # 中文标点
+        assert tts_char_count(".") == 1  # 英文标点
 
 
 class TestParseSegments:
@@ -61,104 +90,116 @@ class TestParseSegments:
         assert result[1] == "第二段"
 
 
-class TestSplitBySentence:
-    """测试 split_by_sentence 函数"""
+class TestSplitLongSegment:
+    """测试 _split_long_segment 函数"""
 
-    def test_split_by_sentence_period(self):
-        """按句号分割"""
-        text = "第一句话。第二句话。第三句话。"
-        result = split_by_sentence(text)
-        assert len(result) >= 1
-        # 内容应该完整保留
-        assert "".join(result) == text
+    def test_split_short_text(self):
+        """短文本不分割"""
+        text = "这是短文本。"  # 12 TTS 字符
+        result = _split_long_segment(text, TTS_MAX_CHARS)
+        assert result == [text]
 
-    def test_split_by_sentence_mixed(self):
-        """混合标点分割"""
-        text = "这是陈述句。这是疑问句？这是感叹句！"
-        result = split_by_sentence(text)
-        assert len(result) >= 1
-        assert "".join(result) == text
-
-    def test_split_by_sentence_empty(self):
-        """空文本返回空列表"""
-        assert split_by_sentence("") == []
-        assert split_by_sentence("   ") == []
-
-    def test_split_by_sentence_english(self):
-        """英文标点分割"""
-        text = "First sentence. Second sentence! Third sentence?"
-        result = split_by_sentence(text)
-        assert len(result) >= 1
-        assert "".join(result) == text
-
-    def test_split_by_sentence_long_text(self):
-        """长文本分割不超过限制"""
-        # 创建超长文本
-        text = "这是一个测试句子。" * 100  # 约 900 字符
-        result = split_by_sentence(text)
+    def test_split_by_period(self):
+        """优先按句号分割"""
+        # 每个"句子。"= 6 字符 (4+2)，30 个 = 180 TTS 字符
+        text = "句子。" * 30
+        result = _split_long_segment(text, 100)
+        assert len(result) >= 2
         for segment in result:
-            assert len(segment) <= TTS_MAX_CHARS
+            assert tts_char_count(segment) <= 100
+
+    def test_split_by_comma(self):
+        """其次按逗号分割"""
+        # 没有句号，只有逗号
+        text = "部分，" * 30  # 每个 6 TTS 字符
+        result = _split_long_segment(text, 100)
+        assert len(result) >= 2
+        for segment in result:
+            assert tts_char_count(segment) <= 100
+
+    def test_split_force_cut(self):
+        """无标点时强制截断"""
+        # 350 中文字 = 700 TTS 字符，超过 600 限制
+        text = "这" * 350
+        result = _split_long_segment(text, TTS_MAX_CHARS)
+        assert len(result) >= 2
+        for segment in result:
+            assert tts_char_count(segment) <= TTS_MAX_CHARS
+        # 内容完整保留
+        assert "".join(result) == text
+
+    def test_split_mixed_punctuation(self):
+        """混合标点分割"""
+        text = "陈述。疑问？感叹！" * 20  # 每组 18 TTS 字符
+        result = _split_long_segment(text, 100)
+        assert len(result) >= 2
+        for segment in result:
+            assert tts_char_count(segment) <= 100
+
+    def test_split_english_text(self):
+        """英文文本分割（每字符算 1）"""
+        text = "Word. " * 150  # 每个 6 字符，共 900 字符
+        result = _split_long_segment(text, TTS_MAX_CHARS)
+        assert len(result) >= 2
+        for segment in result:
+            assert tts_char_count(segment) <= TTS_MAX_CHARS
+
+    def test_split_empty_text(self):
+        """空文本返回空列表"""
+        assert _split_long_segment("", TTS_MAX_CHARS) == []
 
 
-class TestValidateAndFixSegments:
-    """测试 validate_and_fix_segments 函数"""
+class TestIterSafeSegments:
+    """测试 iter_safe_segments 函数"""
 
-    def test_validate_segments_all_valid(self):
-        """所有段落合规"""
+    def test_short_segments_pass_through(self):
+        """短段落直接通过"""
         segments = ["短段落一。", "短段落二。", "短段落三。"]
-        result = validate_and_fix_segments(segments)
+        result = list(iter_safe_segments(segments))
         assert result == segments
 
-    def test_validate_segments_warning_fallback(self):
-        """超长段落触发警告和 fallback"""
-        # 创建一个超长段落，但可以按句号分割
-        long_segment = "这是一个句子。" * 100  # 约 900 字符
-        segments = [long_segment]
-        result = validate_and_fix_segments(segments)
-        # 应该被分割成多段
+    def test_long_segment_split(self):
+        """超长段落自动分割"""
+        # 100 个中文句子 = 约 1800 TTS 字符
+        long_segment = "这是一个句子。" * 100
+        result = list(iter_safe_segments([long_segment]))
         assert len(result) > 1
-        # 每段不超过限制
         for segment in result:
-            assert len(segment) <= TTS_MAX_CHARS
+            assert tts_char_count(segment) <= TTS_MAX_CHARS
 
-    def test_validate_segments_fallback_success(self):
-        """fallback 成功分割"""
-        # 构造一个刚好超过限制但可分割的段落
-        long_segment = "第一句话很长很长。" * 50 + "第二句话也很长。" * 50
-        segments = [long_segment]
-        result = validate_and_fix_segments(segments)
-        assert len(result) >= 1
-        for segment in result:
-            assert len(segment) <= TTS_MAX_CHARS
-
-    def test_validate_segments_fallback_fail(self):
-        """fallback 后仍超长抛异常"""
-        # 创建一个超长且无标点的段落
-        long_segment = "这" * 700  # 700 字符，无标点
-        segments = [long_segment]
-        with pytest.raises(PodcastTTSError) as exc_info:
-            validate_and_fix_segments(segments)
-        assert "段落过长且无法分割" in str(exc_info.value)
-
-    def test_validate_segments_mixed(self):
+    def test_mixed_segments(self):
         """混合长短段落"""
         short = "这是短段落。"
-        long = "这是一个句子。" * 100  # 超长，可分割
+        long = "这是一个句子。" * 100  # 超长
         segments = [short, long, short]
-        result = validate_and_fix_segments(segments)
-        # 短段落保持不变，长段落被分割
+        result = list(iter_safe_segments(segments))
+        # 短段落保持不变
         assert result[0] == short
         assert result[-1] == short
+        # 所有段落不超过限制
         for segment in result:
-            assert len(segment) <= TTS_MAX_CHARS
+            assert tts_char_count(segment) <= TTS_MAX_CHARS
 
-    def test_validate_segments_empty(self):
-        """空列表返回空列表"""
-        assert validate_and_fix_segments([]) == []
+    def test_empty_list(self):
+        """空列表返回空"""
+        assert list(iter_safe_segments([])) == []
 
-    def test_validate_segments_at_limit(self):
+    def test_at_limit(self):
         """刚好在限制边界的段落"""
-        segment = "测" * TTS_MAX_CHARS  # 刚好 600 字符
-        result = validate_and_fix_segments([segment])
+        # 300 中文字 = 600 TTS 字符，刚好等于限制
+        segment = "测" * 300
+        assert tts_char_count(segment) == TTS_MAX_CHARS
+        result = list(iter_safe_segments([segment]))
         assert len(result) == 1
         assert result[0] == segment
+
+    def test_force_cut_fallback(self):
+        """无标点超长段落强制截断"""
+        # 350 中文字 = 700 TTS 字符，超过限制
+        long_segment = "这" * 350
+        result = list(iter_safe_segments([long_segment]))
+        assert len(result) >= 2
+        for segment in result:
+            assert tts_char_count(segment) <= TTS_MAX_CHARS
+        # 内容完整保留
+        assert "".join(result) == long_segment

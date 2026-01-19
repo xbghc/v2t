@@ -21,11 +21,74 @@ DASHSCOPE_API_URL = (
 DEFAULT_TTS_VOICE = "Maia"
 DEFAULT_TTS_MODEL = "qwen3-tts-flash"
 
-# TTS 限制
-TTS_MAX_CHARS = 600  # 单次最大字符数（300 字 = 600 字符，中文）
+# TTS 限制（中文算 2 字符，英文算 1 字符）
+TTS_MAX_CHARS = 600  # 单次最大 TTS 字符数（约 300 中文字）
 
 # 全局限流器：每 60 秒最多 180 次请求（百炼 TTS API 限制）
 _tts_rate_limiter = AsyncLimiter(180, 60)
+
+
+def tts_char_count(text: str) -> int:
+    """计算 TTS 字符数（中文算 2，ASCII 算 1）"""
+    count = 0
+    for char in text:
+        if ord(char) > 127:
+            count += 2
+        else:
+            count += 1
+    return count
+
+
+def _split_long_segment(text: str, max_chars: int) -> list[str]:
+    """将超长文本按标点分割成多个短段落（基于 TTS 字符数）"""
+    result = []
+    remaining = text
+
+    while remaining:
+        if tts_char_count(remaining) <= max_chars:
+            result.append(remaining)
+            break
+
+        # 找到不超过 max_chars 的最大切分点
+        cut_pos = 0
+        current_count = 0
+        for i, char in enumerate(remaining):
+            char_cost = 2 if ord(char) > 127 else 1
+            if current_count + char_cost > max_chars:
+                break
+            current_count += char_cost
+            cut_pos = i + 1
+
+        chunk = remaining[:cut_pos]
+        # 优先找句号
+        pos = max(chunk.rfind('。'), chunk.rfind('！'), chunk.rfind('？'),
+                  chunk.rfind('.'), chunk.rfind('!'), chunk.rfind('?'))
+        # 其次找逗号
+        if pos == -1:
+            pos = max(chunk.rfind('，'), chunk.rfind(','),
+                      chunk.rfind('；'), chunk.rfind(';'))
+        # 强制截断
+        if pos == -1:
+            pos = cut_pos - 1
+
+        result.append(remaining[:pos + 1].strip())
+        remaining = remaining[pos + 1:].strip()
+
+    return [s for s in result if s]
+
+
+def iter_safe_segments(segments: list[str], max_chars: int = TTS_MAX_CHARS):
+    """
+    迭代 segments，自动分割超长段落
+
+    Yields:
+        str: TTS 字符数不超过 max_chars 的文本段落
+    """
+    for segment in segments:
+        if tts_char_count(segment) <= max_chars:
+            yield segment
+        else:
+            yield from _split_long_segment(segment, max_chars)
 
 
 class PodcastTTSError(Exception):
@@ -74,91 +137,6 @@ def parse_segments(script: str) -> list[str]:
             pass
 
     raise PodcastTTSError(f"无法解析播客脚本 JSON 格式: {script[:100]}...")
-
-
-def split_by_sentence(text: str) -> list[str]:
-    """
-    按句号/问号/感叹号分割超长段落
-
-    Args:
-        text: 要分割的文本
-
-    Returns:
-        list[str]: 分割后的句子列表
-    """
-    if not text or not text.strip():
-        return []
-
-    # 按句号/问号/感叹号分割，保留标点
-    sentences = re.split(r'([。！？.!?])', text)
-
-    # 重新组合句子和标点
-    result = []
-    current = ""
-
-    for i in range(0, len(sentences) - 1, 2):
-        sentence = sentences[i]
-        punctuation = sentences[i + 1] if i + 1 < len(sentences) else ""
-        combined = sentence + punctuation
-
-        # 累积句子，直到接近限制
-        if len(current) + len(combined) <= TTS_MAX_CHARS:
-            current += combined
-        else:
-            if current:
-                result.append(current.strip())
-            current = combined
-
-    # 处理最后一个（如果没有标点）
-    if len(sentences) % 2 == 1 and sentences[-1]:
-        if len(current) + len(sentences[-1]) <= TTS_MAX_CHARS:
-            current += sentences[-1]
-        else:
-            if current:
-                result.append(current.strip())
-            current = sentences[-1]
-
-    if current:
-        result.append(current.strip())
-
-    return [s for s in result if s]
-
-
-def validate_and_fix_segments(segments: list[str]) -> list[str]:
-    """
-    验证并修复超长段落
-
-    Args:
-        segments: 分段列表
-
-    Returns:
-        list[str]: 修复后的分段列表
-
-    Raises:
-        PodcastTTSError: 段落过长且无法分割
-    """
-    result = []
-
-    for segment in segments:
-        if len(segment) <= TTS_MAX_CHARS:
-            result.append(segment)
-        else:
-            # 警告 + 按句号分割 fallback
-            logger.warning(
-                "段落超过 %d 字符，尝试按句号分割: %s...",
-                TTS_MAX_CHARS,
-                segment[:50]
-            )
-            sub_segments = split_by_sentence(segment)
-
-            for sub in sub_segments:
-                if len(sub) > TTS_MAX_CHARS:
-                    raise PodcastTTSError(
-                        f"段落过长且无法分割: {len(sub)} 字符"
-                    )
-                result.append(sub)
-
-    return result
 
 
 async def call_dashscope_tts(
@@ -427,10 +405,10 @@ async def generate_podcast_audio(
     if not segments:
         raise PodcastTTSError("文本分段失败")
 
-    # 验证并修复超长段落
-    segments = validate_and_fix_segments(segments)
+    # 安全分割：确保所有段落不超过 TTS_MAX_CHARS
+    safe_segments = list(iter_safe_segments(segments))
 
-    logger.info("播客脚本分为 %d 段进行合成", len(segments))
+    logger.info("播客脚本分为 %d 段进行合成", len(safe_segments))
 
     # 确定临时目录
     if temp_dir is None:
@@ -443,13 +421,13 @@ async def generate_podcast_audio(
         # 并发合成所有段落
         async def synthesize_with_index(i: int, text: str) -> Path:
             segment_path = temp_dir / f"podcast_segment_{i:04d}.wav"
-            logger.debug("合成第 %d/%d 段: %s...", i + 1, len(segments), text[:30])
+            logger.debug("合成第 %d/%d 段: %s...", i + 1, len(safe_segments), text[:30])
             await synthesize_segment(text, segment_path)
             return segment_path
 
         tasks = [
             synthesize_with_index(i, text)
-            for i, text in enumerate(segments)
+            for i, text in enumerate(safe_segments)
         ]
         segment_paths = list(await asyncio.gather(*tasks))
 
