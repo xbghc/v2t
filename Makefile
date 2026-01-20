@@ -1,7 +1,13 @@
-.PHONY: install install-backend install-frontend backend frontend build test lint lint-fix clean help
+.PHONY: install install-backend install-frontend backend frontend build test lint lint-fix clean deploy help
 
 # 默认目标
 .DEFAULT_GOAL := help
+
+# 本地配置（可选，不提交到 git）
+-include Makefile.local
+
+# 部署目录（可在 Makefile.local 中覆盖）
+DEPLOY_DIR ?=
 
 # ==================== 安装 ====================
 
@@ -25,8 +31,13 @@ frontend: ## 启动前端开发服务器
 
 build: build-frontend ## 构建项目
 
-build-frontend: ## 构建前端到 frontend/dist/
+build-frontend: ## 构建前端
+ifeq ($(DEPLOY_DIR),)
 	cd frontend && npm run build
+else
+	@echo "构建到 $(DEPLOY_DIR)..."
+	cd frontend && npm run build -- --outDir $(DEPLOY_DIR) --emptyOutDir
+endif
 
 # ==================== 测试 ====================
 

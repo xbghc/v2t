@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { createTask, getTask, getDefaultPrompts, textToPodcast, streamOutline, streamArticle, streamPodcast } from '@/api/task'
+import { createTask, getTask, getDefaultPrompts, textToPodcast, streamOutline, streamArticle, streamPodcast, streamTaskStatus } from '@/api/task'
 import type {
     TaskStatus,
     CurrentTab,
@@ -9,7 +9,8 @@ import type {
     TaskResponse,
     CustomPrompts,
     GenerateOptions,
-    InputMode
+    InputMode,
+    StatusStreamData
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
@@ -48,8 +49,9 @@ export const useTaskStore = defineStore('task', () => {
     // 处理结果
     const result: TaskResult = reactive({
         title: '',
-        has_video: false,
-        has_audio: false,
+        resource_id: null,
+        video_url: null,
+        audio_url: null,
         article: '',
         outline: '',
         transcript: '',
@@ -76,7 +78,8 @@ export const useTaskStore = defineStore('task', () => {
     let lastUrl: string = ''
     let lastGenerateOptions: GenerateOptions = { outline: true, article: true, podcast: false }
     let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '', podcastSystem: '', podcastUser: '' }
-    let pollTimer: ReturnType<typeof setInterval> | null = null
+    // SSE 状态流清理函数
+    let statusStreamCleanup: (() => void) | null = null
 
     // 每种内容的流式状态独立管理
     const outlineStreaming: Ref<boolean> = ref(false)
@@ -126,7 +129,7 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         progressText.value = '准备中...'
         progressTitle.value = ''
-        Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false, podcast_error: '' })
+        Object.assign(result, { title: '', resource_id: null, video_url: null, audio_url: null, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false, podcast_error: '' })
         // 重置流式状态
         outlineStreaming.value = false
         articleStreaming.value = false
@@ -244,11 +247,11 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 停止轮询
-    const stopPolling = (): void => {
-        if (pollTimer) {
-            clearInterval(pollTimer)
-            pollTimer = null
+    // 停止状态流
+    const stopStatusStream = (): void => {
+        if (statusStreamCleanup) {
+            statusStreamCleanup()
+            statusStreamCleanup = null
         }
     }
 
@@ -361,36 +364,50 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 轮询任务状态
-    const poll = async (): Promise<void> => {
-        if (!taskId.value) return
+    // 处理 SSE 状态更新
+    const handleStatusStreamUpdate = (data: StatusStreamData): void => {
+        taskStatus.value = data.status
 
-        try {
-            const data = await getTask(taskId.value)
-            handleTaskUpdate(data)
+        // 渐进更新数据
+        if (data.title) {
+            progressTitle.value = data.title
+            result.title = data.title
+        }
+        if (data.resource_id) result.resource_id = data.resource_id
+        if (data.video_url) result.video_url = data.video_url
+        if (data.audio_url) result.audio_url = data.audio_url
+        if (data.transcript) result.transcript = data.transcript
 
-            if (data.status === 'ready') {
-                // 检测到准备状态，停止轮询，并行启动所有流
-                stopPolling()
+        // 更新进度文本
+        progressText.value = data.progress || getProgressText(data.status)
+
+        // 根据状态处理
+        if (data.status === 'ready') {
+            // 转录完成，启动流式生成
+            stopStatusStream()
+            if (taskId.value) {
                 startGenerating(taskId.value)
-            } else if (data.status === 'completed') {
-                stopPolling()
-                handleTaskComplete()
-            } else if (data.status === 'failed') {
-                stopPolling()
-                handleTaskFailed(data)
             }
-        } catch (error) {
-            console.error('轮询失败:', error)
+        } else if (data.status === 'completed') {
+            stopStatusStream()
+            handleTaskComplete()
+        } else if (data.status === 'failed') {
+            stopStatusStream()
+            errorMessage.value = data.error || '处理失败'
         }
     }
 
-    // 开始轮询
-    const startPolling = (id: string): void => {
+    // 启动状态流监听
+    const startStatusStream = (id: string): void => {
         taskId.value = id
-        stopPolling()
-        pollTimer = setInterval(poll, 2000)
-        poll()
+        stopStatusStream()
+        statusStreamCleanup = streamTaskStatus(
+            id,
+            handleStatusStreamUpdate,
+            (err) => {
+                console.error('状态流错误:', err)
+            }
+        )
     }
 
     // 处理任务更新
@@ -402,8 +419,9 @@ export const useTaskStore = defineStore('task', () => {
             progressTitle.value = data.title
             result.title = data.title
         }
-        if (data.has_video) result.has_video = true
-        if (data.has_audio) result.has_audio = true
+        if (data.resource_id) result.resource_id = data.resource_id
+        if (data.video_url) result.video_url = data.video_url
+        if (data.audio_url) result.audio_url = data.audio_url
         if (data.transcript) result.transcript = data.transcript
         if (data.outline) result.outline = data.outline
         if (data.article) result.article = data.article
@@ -468,7 +486,7 @@ export const useTaskStore = defineStore('task', () => {
 
         try {
             const data = await createTask(url.value, lastGenerateOptions, lastPrompts)
-            startPolling(data.task_id)
+            startStatusStream(data.task_id)
             return data.task_id
         } catch (error) {
             errorMessage.value = (error as Error).message
@@ -500,7 +518,7 @@ export const useTaskStore = defineStore('task', () => {
                 prompts.podcastSystem,
                 prompts.podcastUser
             )
-            startPolling(data.task_id)
+            startStatusStream(data.task_id)
             return data.task_id
         } catch (error) {
             errorMessage.value = (error as Error).message
@@ -511,7 +529,7 @@ export const useTaskStore = defineStore('task', () => {
 
     // 开始新任务（重置状态，不处理路由）
     const startNew = (): void => {
-        stopPolling()
+        stopStatusStream()
         stopAllStreaming()
         resetState()
         resetSubtitleState()
@@ -520,7 +538,7 @@ export const useTaskStore = defineStore('task', () => {
 
     // 重试任务，返回 task_id 或 null
     const retryTask = async (): Promise<string | null> => {
-        stopPolling()
+        stopStatusStream()
         stopAllStreaming()
         resetState()
         url.value = lastUrl
@@ -547,7 +565,7 @@ export const useTaskStore = defineStore('task', () => {
         }
 
         // 停止之前的轮询和流式
-        stopPolling()
+        stopStatusStream()
         stopAllStreaming()
 
         try {
@@ -561,7 +579,7 @@ export const useTaskStore = defineStore('task', () => {
                 startGenerating(id)
             } else if (data.status !== 'completed' && data.status !== 'failed') {
                 // 任务仍在进行中，启动轮询
-                startPolling(id)
+                startStatusStream(id)
             } else if (data.status === 'completed') {
                 handleTaskComplete()
             } else if (data.status === 'failed') {

@@ -145,9 +145,17 @@ const statusDescription: ComputedRef<string> = computed(() => {
     return '查看生成的内容，复制或下载原始媒体文件'
 })
 
-const videoDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/video` : '')
-const audioDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/audio` : '')
-const podcastDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/podcast` : '')
+// 资源 URL 需要加上 BASE_URL 前缀
+const BASE_URL = import.meta.env.BASE_URL
+const videoDownloadUrl: ComputedRef<string> = computed(() =>
+    result.value.video_url ? `${BASE_URL}${result.value.video_url.replace(/^\//, '')}` : ''
+)
+const audioDownloadUrl: ComputedRef<string> = computed(() =>
+    result.value.audio_url ? `${BASE_URL}${result.value.audio_url.replace(/^\//, '')}` : ''
+)
+const podcastDownloadUrl: ComputedRef<string> = computed(() =>
+    taskId.value ? `${BASE_URL}api/task/${taskId.value}/podcast` : ''
+)
 </script>
 
 <template>
@@ -201,13 +209,13 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `a
                         <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
                             <MediaDownload
                                 type="video"
-                                :available="result.has_video"
+                                :available="!!result.video_url"
                                 :is-processing="isProcessing"
                                 :download-url="videoDownloadUrl"
                             />
                             <MediaDownload
                                 type="audio"
-                                :available="result.has_audio"
+                                :available="!!result.audio_url"
                                 :is-processing="isProcessing"
                                 :download-url="audioDownloadUrl"
                             />

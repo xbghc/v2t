@@ -1,11 +1,14 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
-import type { CreateTaskResponse, CustomPrompts, GenerateOptions, PromptsResponse, TaskResponse } from '@/types'
+import type { CreateTaskResponse, CustomPrompts, GenerateOptions, PromptsResponse, StatusStreamData, TaskResponse } from '@/types'
+
+// API 基础路径，使用 Vite 的 base 配置
+const API_BASE = `${import.meta.env.BASE_URL}api`
 
 /**
  * 获取默认提示词
  */
 export async function getDefaultPrompts(): Promise<PromptsResponse> {
-    const response = await fetch('api/prompts')
+    const response = await fetch(`${API_BASE}/prompts`)
     if (!response.ok) {
         throw new Error('获取默认提示词失败')
     }
@@ -20,7 +23,7 @@ export async function createTask(
     generateOptions: GenerateOptions,
     prompts?: CustomPrompts
 ): Promise<CreateTaskResponse> {
-    const response = await fetch('api/process', {
+    const response = await fetch(`${API_BASE}/process`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -49,8 +52,53 @@ export async function createTask(
  * 获取任务状态
  */
 export async function getTask(taskId: string): Promise<TaskResponse> {
-    const response = await fetch(`api/task/${taskId}`)
+    const response = await fetch(`${API_BASE}/task/${taskId}`)
     return response.json() as Promise<TaskResponse>
+}
+
+/**
+ * SSE 流式监听任务状态变化
+ * @returns 清理函数
+ */
+export function streamTaskStatus(
+    taskId: string,
+    onStatusChange: (data: StatusStreamData) => void,
+    onError: (error: string) => void
+): () => void {
+    const ctrl = new AbortController()
+
+    fetchEventSource(`${API_BASE}/task/${taskId}/status-stream`, {
+        signal: ctrl.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+                return
+            }
+            const contentType = response.headers.get('content-type')
+            if (contentType?.includes('application/json')) {
+                const data = await response.json() as { detail?: string }
+                throw new Error(data.detail || `HTTP ${response.status}`)
+            }
+            throw new Error(`HTTP ${response.status}`)
+        },
+        onmessage(ev) {
+            const data = JSON.parse(ev.data) as StatusStreamData
+            onStatusChange(data)
+            // 终态自动关闭连接
+            if (data.status === 'completed' || data.status === 'failed' || data.status === 'ready') {
+                ctrl.abort()
+            }
+        },
+        onerror(err) {
+            onError(err instanceof Error ? err.message : '连接错误')
+            throw err
+        },
+        onclose() {
+            // SSE 连接正常关闭（到达终态后）
+        },
+    })
+
+    return () => ctrl.abort()
 }
 
 /**
@@ -62,7 +110,7 @@ export async function textToPodcast(
     podcastSystemPrompt: string = '',
     podcastUserPrompt: string = ''
 ): Promise<CreateTaskResponse> {
-    const response = await fetch('api/text-to-podcast', {
+    const response = await fetch(`${API_BASE}/text-to-podcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -93,7 +141,7 @@ export function streamOutline(
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`api/task/${taskId}/stream/outline`, {
+    fetchEventSource(`${API_BASE}/task/${taskId}/stream/outline`, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {
@@ -143,7 +191,7 @@ export function streamArticle(
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`api/task/${taskId}/stream/article`, {
+    fetchEventSource(`${API_BASE}/task/${taskId}/stream/article`, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {
@@ -208,7 +256,7 @@ export function streamPodcast(
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`api/task/${taskId}/stream/podcast`, {
+    fetchEventSource(`${API_BASE}/task/${taskId}/stream/podcast`, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {

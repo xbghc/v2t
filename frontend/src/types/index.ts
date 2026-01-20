@@ -24,8 +24,9 @@ export type InputMode = 'url' | 'subtitle'
  */
 export interface TaskResult {
     title: string
-    has_video: boolean
-    has_audio: boolean
+    resource_id: string | null
+    video_url: string | null
+    audio_url: string | null
     article: string
     outline: string
     transcript: string
@@ -102,14 +103,29 @@ export interface TaskResponse {
     status: TaskStatus
     progress: string
     title: string
-    has_video: boolean
-    has_audio: boolean
+    resource_id: string | null
+    video_url: string | null
+    audio_url: string | null
     transcript: string
     outline: string
     article: string
     podcast_script: string
     has_podcast_audio: boolean
     podcast_error: string
+    error: string
+}
+
+/**
+ * SSE 状态流事件数据
+ */
+export interface StatusStreamData {
+    status: TaskStatus
+    progress: string
+    title: string
+    resource_id: string | null
+    video_url: string | null
+    audio_url: string | null
+    transcript: string
     error: string
 }
 

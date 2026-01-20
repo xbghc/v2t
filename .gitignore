@@ -45,3 +45,4 @@ node_modules/
 
 # TypeScript build cache
 *.tsbuildinfo
+Makefile.local
