@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
+from pathvalidate import sanitize_filename as _sanitize_filename
 from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 
 from app.config import get_settings
@@ -25,12 +26,9 @@ class VideoResult:
     duration: int | None = None  # 秒
 
 
-def sanitize_filename(filename: str) -> str:
+def sanitize_filename(filename: str, max_len: int = 200) -> str:
     """清理文件名，移除非法字符"""
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-    if len(filename) > 200:
-        filename = filename[:200]
-    return filename.strip()
+    return _sanitize_filename(filename, max_len=max_len, replacement_text="_")
 
 
 def get_referer(url: str) -> str:
