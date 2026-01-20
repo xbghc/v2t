@@ -99,6 +99,19 @@ def get_client() -> AsyncOpenAI:
     )
 
 
+async def check_llm_api() -> tuple[bool, str]:
+    """检测 LLM API 是否可用"""
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return False, "OPENAI_API_KEY 未配置"
+    try:
+        client = get_client()
+        await client.models.list()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
 async def chat(
     messages: list[dict],
     max_tokens: int = 4096,

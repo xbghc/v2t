@@ -646,8 +646,34 @@ async def index():
     return HTMLResponse("<h1>v2t Web</h1><p>前端文件未找到</p>")
 
 
+async def check_api_connections() -> bool:
+    """检测所有 API 连接，返回是否全部成功"""
+    from app.services.llm import check_llm_api
+    from app.services.podcast_tts import check_tts_api
+    from app.services.transcribe import check_whisper_api
+
+    checks = [
+        ("LLM", check_llm_api()),
+        ("Whisper", check_whisper_api()),
+        ("TTS", check_tts_api()),
+    ]
+
+    all_ok = True
+    for name, coro in checks:
+        ok, msg = await coro
+        if ok:
+            logger.info("✓ %s API: %s", name, msg)
+        else:
+            logger.error("✗ %s API: %s", name, msg)
+            all_ok = False
+
+    return all_ok
+
+
 def run_server(host: str = "0.0.0.0", port: int = 8100):
     """启动服务器"""
+    import asyncio
+
     from app.deps import check_dependencies, get_install_hint
 
     missing = check_dependencies()
@@ -655,6 +681,11 @@ def run_server(host: str = "0.0.0.0", port: int = 8100):
         deps_str = ", ".join(f"{cmd} ({desc})" for cmd, desc in missing)
         logger.error("缺少系统依赖: %s", deps_str)
         logger.error(get_install_hint())
+        raise SystemExit(1)
+
+    # 检测 API 连接
+    if not asyncio.run(check_api_connections()):
+        logger.error("API 检测失败，服务无法启动")
         raise SystemExit(1)
 
     import uvicorn

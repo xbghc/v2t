@@ -102,6 +102,19 @@ class PodcastTTSError(Exception):
     pass
 
 
+async def check_tts_api() -> tuple[bool, str]:
+    """检测 TTS API 是否可用"""
+    settings = get_settings()
+    if not settings.dashscope_api_key:
+        return False, "DASHSCOPE_API_KEY 未配置"
+    try:
+        # 实际调用 TTS API 转录"你好"来测试连通性
+        await call_dashscope_tts("你好", max_retries=1)
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
 def parse_segments(script: str) -> list[str]:
     """
     解析 LLM 返回的 JSON 格式分段脚本

@@ -146,6 +146,19 @@ def get_whisper_client() -> AsyncOpenAI:
     )
 
 
+async def check_whisper_api() -> tuple[bool, str]:
+    """检测 Whisper API 是否可用"""
+    settings = get_settings()
+    if not settings.whisper_api_key:
+        return False, "WHISPER_API_KEY 未配置"
+    try:
+        client = get_whisper_client()
+        await client.models.list()
+        return True, "OK"
+    except Exception as e:
+        return False, str(e)
+
+
 def format_timestamp(seconds: float) -> str:
     """格式化时间戳为 MM:SS 格式"""
     minutes = int(seconds // 60)
