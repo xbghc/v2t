@@ -4,11 +4,14 @@ import asyncio
 import json
 import logging
 import re
-import tempfile
+import shutil
+from functools import partial
 from pathlib import Path
 
 import httpx
+import numpy as np
 from aiolimiter import AsyncLimiter
+from pedalboard.io import AudioFile
 
 from app.config import get_settings
 
@@ -311,16 +314,18 @@ async def synthesize_segment(
     return output_path
 
 
-async def merge_audio_segments(
+def merge_audio_segments(
     segment_paths: list[Path],
     output_path: Path,
+    gap_ms: int = 500,
 ) -> Path:
     """
-    使用 ffmpeg concat 合并多个音频文件
+    使用 pedalboard 合并多个音频文件，片段之间添加静音间隔
 
     Args:
         segment_paths: 音频片段文件路径列表
         output_path: 输出文件路径
+        gap_ms: 片段之间的静音间隔（毫秒），默认 500ms
 
     Returns:
         Path: 合并后的音频文件路径
@@ -332,53 +337,38 @@ async def merge_audio_segments(
         raise PodcastTTSError("没有音频片段可合并")
 
     if len(segment_paths) == 1:
-        # 只有一个片段，直接复制
-        import shutil
         shutil.copy(segment_paths[0], output_path)
         return output_path
 
-    # 创建 concat 列表文件
-    with tempfile.NamedTemporaryFile(
-        mode='w',
-        suffix='.txt',
-        delete=False,
-        encoding='utf-8'
-    ) as f:
-        for path in segment_paths:
-            # ffmpeg concat 需要转义单引号
-            escaped_path = str(path).replace("'", "'\\''")
-            f.write(f"file '{escaped_path}'\n")
-        concat_list_path = Path(f.name)
+    audio_segments = []
+    sample_rate = None
 
-    try:
-        # 使用 ffmpeg concat demuxer 合并并转码为 MP3
-        process = await asyncio.create_subprocess_exec(
-            "ffmpeg",
-            "-y",  # 覆盖输出
-            "-f", "concat",
-            "-safe", "0",
-            "-i", str(concat_list_path),
-            "-c:a", "libmp3lame",  # 转码为 MP3
-            "-q:a", "2",  # 高质量 VBR
-            str(output_path),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+    for path in segment_paths:
+        with AudioFile(str(path)) as f:
+            audio = f.read(f.frames)
+            if sample_rate is None:
+                sample_rate = f.samplerate
+        audio_segments.append(audio)
 
-        _, stderr = await process.communicate()
+    # 创建静音（shape: channels x samples）
+    silence_samples = int(sample_rate * gap_ms / 1000)
+    num_channels = audio_segments[0].shape[0]
+    silence = np.zeros((num_channels, silence_samples), dtype=np.float32)
 
-        if process.returncode != 0:
-            error_msg = stderr.decode() if stderr else "未知错误"
-            raise PodcastTTSError(f"音频合并失败: {error_msg}")
+    # 拼接：音频 + 静音 + 音频 + 静音 + ...
+    parts = []
+    for i, audio in enumerate(audio_segments):
+        parts.append(audio)
+        if i < len(audio_segments) - 1:
+            parts.append(silence)
 
-        return output_path
+    combined = np.concatenate(parts, axis=1)
 
-    finally:
-        # 清理临时文件
-        try:
-            concat_list_path.unlink()
-        except OSError:
-            pass
+    # 写入 MP3
+    with AudioFile(str(output_path), "w", sample_rate, num_channels) as f:
+        f.write(combined)
+
+    return output_path
 
 
 async def generate_podcast_audio(
@@ -436,9 +426,12 @@ async def generate_podcast_audio(
         ]
         segment_paths = list(await asyncio.gather(*tasks))
 
-        # 合并所有片段
+        # 合并所有片段（pedalboard 是同步 API，使用 run_in_executor 避免阻塞事件循环）
         logger.info("合并 %d 个音频片段", len(segment_paths))
-        await merge_audio_segments(segment_paths, output_path)
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            partial(merge_audio_segments, segment_paths, output_path)
+        )
 
         logger.info("播客音频生成完成: %s", output_path)
         return output_path
