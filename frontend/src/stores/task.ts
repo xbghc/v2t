@@ -3,7 +3,6 @@ import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import { createTask, getTask, getDefaultPrompts, textToPodcast, streamTaskContent } from '@/api/task'
 import type {
-    PageState,
     TaskStatus,
     CurrentTab,
     ProgressInfo,
@@ -16,9 +15,6 @@ import type {
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
-    // 页面状态
-    const page: Ref<PageState> = ref('initial')
-
     // 输入模式
     const inputMode: Ref<InputMode> = ref('url')
 
@@ -142,6 +138,7 @@ export const useTaskStore = defineStore('task', () => {
 
     // 重置状态
     const resetState = (): void => {
+        taskId.value = null
         taskStatus.value = 'pending'
         currentTab.value = 'article'
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
@@ -417,11 +414,11 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = data.error || '处理失败'
     }
 
-    // 提交 URL
-    const submitUrl = async (): Promise<void> => {
+    // 提交 URL，返回 task_id 或 null（失败时）
+    const submitUrl = async (): Promise<string | null> => {
         if (!url.value.trim()) {
             alert('请输入视频链接')
-            return
+            return null
         }
 
         lastUrl = url.value
@@ -430,22 +427,23 @@ export const useTaskStore = defineStore('task', () => {
         // 保存当前提示词到 localStorage
         savePromptsToStorage()
         resetState()
-        page.value = 'result'
 
         try {
             const data = await createTask(url.value, lastGenerateOptions, lastPrompts)
             startPolling(data.task_id)
+            return data.task_id
         } catch (error) {
             errorMessage.value = (error as Error).message
             taskStatus.value = 'failed'
+            return null
         }
     }
 
-    // 提交字幕转播客
-    const submitSubtitle = async (): Promise<void> => {
+    // 提交字幕转播客，返回 task_id 或 null（失败时）
+    const submitSubtitle = async (): Promise<string | null> => {
         if (!subtitleText.value.trim() || subtitleText.value.length < 10) {
             alert('请上传字幕文件')
-            return
+            return null
         }
 
         lastPrompts = { ...prompts }
@@ -456,7 +454,6 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '生成播客失败，请检查字幕内容是否正确，或尝试其他内容。'
         // 切换到播客 tab
         currentTab.value = 'podcast'
-        page.value = 'result'
 
         try {
             const data = await textToPodcast(
@@ -466,31 +463,32 @@ export const useTaskStore = defineStore('task', () => {
                 prompts.podcastUser
             )
             startPolling(data.task_id)
+            return data.task_id
         } catch (error) {
             errorMessage.value = (error as Error).message
             taskStatus.value = 'failed'
+            return null
         }
     }
 
-    // 开始新任务
+    // 开始新任务（重置状态，不处理路由）
     const startNew = (): void => {
         stopPolling()
         stopStreaming()
         resetState()
         resetSubtitleState()
         url.value = ''
-        page.value = 'initial'
     }
 
-    // 重试任务
-    const retryTask = (): void => {
+    // 重试任务，返回 task_id 或 null
+    const retryTask = async (): Promise<string | null> => {
         stopPolling()
         stopStreaming()
         resetState()
         url.value = lastUrl
         Object.assign(generateOptions, lastGenerateOptions)
         Object.assign(prompts, lastPrompts)
-        submitUrl()
+        return submitUrl()
     }
 
     // 复制当前内容
@@ -503,9 +501,44 @@ export const useTaskStore = defineStore('task', () => {
         })
     }
 
+    // 从 URL 加载任务（支持刷新页面和分享链接）
+    const loadTaskById = async (id: string): Promise<boolean> => {
+        // 如果当前已有相同任务在处理中，不重复加载
+        if (taskId.value === id) {
+            return true
+        }
+
+        // 停止之前的轮询和流式
+        stopPolling()
+        stopStreaming()
+
+        try {
+            const data = await getTask(id)
+            taskId.value = id
+            handleTaskUpdate(data)
+
+            // 根据任务状态决定后续操作
+            if (data.status === 'ready_to_stream') {
+                // 需要启动流式连接
+                startStreaming(id)
+            } else if (data.status !== 'completed' && data.status !== 'failed') {
+                // 任务仍在进行中，启动轮询
+                startPolling(id)
+            } else if (data.status === 'completed') {
+                handleTaskComplete()
+            } else if (data.status === 'failed') {
+                handleTaskFailed(data)
+            }
+
+            return true
+        } catch (error) {
+            console.error('加载任务失败:', error)
+            return false
+        }
+    }
+
     return {
         // 状态
-        page,
         inputMode,
         url,
         subtitleText,
@@ -543,7 +576,8 @@ export const useTaskStore = defineStore('task', () => {
         submitSubtitle,
         startNew,
         retryTask,
-        copyContent
+        copyContent,
+        loadTaskById
     }
 })
 

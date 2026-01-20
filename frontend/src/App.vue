@@ -1,29 +1,22 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useTaskStore } from '@/stores/task'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
-import InitialPage from '@/components/InitialPage.vue'
-import ResultPage from '@/components/ResultPage.vue'
 
+const route = useRoute()
+const router = useRouter()
 const taskStore = useTaskStore()
 
-// 解构响应式状态
-const {
-    page,
-    url,
-    taskId,
-    taskStatus,
-    currentTab,
-    errorMessage,
-    progress,
-    result,
-    currentContent,
-    isStreaming
-} = storeToRefs(taskStore)
+// 判断是否为结果页
+const isResultPage = computed(() => route.name === 'task')
 
-// 解构方法
-const { submitUrl, startNew, retryTask, copyContent } = taskStore
+// 新建任务并导航
+const handleNewTask = () => {
+    taskStore.startNew()
+    router.push({ name: 'home' })
+}
 </script>
 
 <template>
@@ -31,38 +24,24 @@ const { submitUrl, startNew, retryTask, copyContent } = taskStore
         <div class="layout-container flex h-full grow flex-col">
             <!-- Initial Page Layout -->
             <div
-                v-if="page === 'initial'"
+                v-if="!isResultPage"
                 class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-20 lg:px-40"
             >
                 <div class="layout-content-container flex w-full flex-col max-w-content flex-1">
                     <AppHeader />
-                    <InitialPage
-                        v-model:url="url"
-                        @submit="submitUrl"
-                    />
+                    <router-view />
                     <AppFooter />
                 </div>
             </div>
 
             <!-- Result Page Layout -->
-            <template v-else-if="page === 'result'">
+            <template v-else>
                 <AppHeader
                     variant="result"
                     :show-new-button="true"
-                    @new-task="startNew"
+                    @new-task="handleNewTask"
                 />
-                <ResultPage
-                    v-model:current-tab="currentTab"
-                    :task-id="taskId"
-                    :task-status="taskStatus"
-                    :error-message="errorMessage"
-                    :progress="progress"
-                    :result="result"
-                    :current-content="currentContent"
-                    :is-streaming="isStreaming"
-                    @retry="retryTask"
-                    @copy="copyContent"
-                />
+                <router-view />
             </template>
         </div>
     </div>

@@ -37,11 +37,6 @@ export interface StreamEventData {
 export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
 
 /**
- * 页面状态
- */
-export type PageState = 'initial' | 'result'
-
-/**
  * 输入模式
  */
 export type InputMode = 'url' | 'subtitle'

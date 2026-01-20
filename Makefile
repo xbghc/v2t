@@ -25,7 +25,7 @@ frontend: ## 启动前端开发服务器
 
 build: build-frontend ## 构建项目
 
-build-frontend: ## 构建前端到 backend/app/static/
+build-frontend: ## 构建前端到 frontend/dist/
 	cd frontend && npm run build
 
 # ==================== 测试 ====================
@@ -57,7 +57,6 @@ lint-fix-frontend: ## 自动修复前端 lint 问题
 # ==================== 清理 ====================
 
 clean: ## 清理构建产物和缓存
-	rm -rf backend/app/static/*
 	rm -rf frontend/dist
 	rm -rf backend/.pytest_cache
 	rm -rf backend/__pycache__

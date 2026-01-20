@@ -10,23 +10,26 @@ v2t 是一个视频转文字 Web 应用，提供视频下载、音频转录、AI
 
 ```
 v2t/
-├── backend/                    # Python 后端
+├── backend/                    # Python 后端 (仅 API)
 │   ├── app/
 │   │   ├── web.py
 │   │   ├── config.py
-│   │   ├── static/            # 前端构建输出
 │   │   └── services/
 │   ├── tests/
 │   ├── pyproject.toml
 │   └── pytest.ini
 ├── frontend/                   # Vue 前端
 │   ├── src/
+│   │   └── router/            # Vue Router 路由
+│   ├── dist/                  # 前端构建输出
 │   ├── package.json
 │   └── vite.config.ts
 ├── Makefile                    # 根级构建脚本
 ├── Dockerfile
 ├── docker-compose.yml
 └── deploy/
+    ├── v2t.service            # systemd 服务
+    └── nginx-local.conf       # 本地 nginx 配置
 ```
 
 ## 常用命令
@@ -36,9 +39,9 @@ v2t/
 ```bash
 make install              # 安装所有依赖
 make dev                  # 同时启动前后端开发服务器
-make dev-backend          # 仅启动后端 (端口 8100)
+make dev-backend          # 仅启动后端 (端口 8101)
 make dev-frontend         # 仅启动前端开发服务器
-make build                # 构建前端到 backend/app/static/
+make build                # 构建前端到 frontend/dist/
 make test                 # 运行测试
 make lint                 # 运行 lint 检查
 make lint-fix             # 自动修复 lint 问题
@@ -49,7 +52,7 @@ make lint-fix             # 自动修复 lint 问题
 ```bash
 cd backend
 uv sync                          # 安装依赖
-uv run v2t-web                   # 启动Web服务 (端口8100)
+uv run v2t-web                   # 启动Web服务 (端口8101，仅API)
 pytest                           # 运行测试
 ```
 
@@ -59,7 +62,7 @@ pytest                           # 运行测试
 cd frontend
 npm install                      # 安装依赖
 npm run dev                      # 开发服务器 (Vite，代理 /api 到 8100)
-npm run build                    # 构建到 backend/app/static/
+npm run build                    # 构建到 frontend/dist/
 ```
 
 ### Docker
@@ -92,16 +95,17 @@ backend/app/
 PENDING → DOWNLOADING → TRANSCRIBING → GENERATING → COMPLETED/FAILED
 ```
 
-### 前端架构 (Vue 3 + Vite)
+### 前端架构 (Vue 3 + Vite + Vue Router)
 
 ```
 frontend/src/
-├── stores/task.ts    # Pinia状态管理 (集中管理所有任务状态)
+├── router/index.ts   # Vue Router 路由配置
+├── stores/task.ts    # Pinia状态管理 (集中管理所有任务状态，不操作路由)
 ├── api/task.ts       # API调用模块
 └── components/       # Vue组件
 ```
 
-**页面切换**：`page: 'initial' | 'result'`，通过 `v-if` 条件渲染。
+**路由**：使用 Vue Router，路径 `/` (首页) 和 `/task/:id` (结果页)。
 
 **轮询机制**：任务创建后，2 秒间隔轮询 `/api/task/{id}` 直到完成或失败。
 
@@ -144,3 +148,16 @@ GET  /api/task/{task_id}/audio  # 下载音频
 每个服务模块定义自己的异常类：`DownloadError`、`TranscribeError`、`LLMError`、`XiazaitoolError`。
 
 AI 生成失败时自动降级到原始转录内容。
+
+## 部署架构
+
+```
+浏览器 → nginx(8100) → 后端API(8101)
+              ↓
+     静态文件 (frontend/dist/)
+```
+
+- **nginx** (端口 8100)：提供静态文件 + SPA fallback，代理 `/api/` 到后端
+- **后端** (端口 8101)：仅提供 API 服务，不处理静态文件
+
+配置文件：`deploy/nginx-local.conf`

@@ -1,57 +1,74 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import type { ComputedRef } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
+import { useTaskStore } from '@/stores/task'
 import ProgressBar from './ProgressBar.vue'
 import MediaDownload from './MediaDownload.vue'
 import PodcastPlayer from './PodcastPlayer.vue'
 import ContentTabs from './ContentTabs.vue'
-import type { TaskStatus, CurrentTab, ProgressInfo, TaskResult } from '@/types'
 
-interface Props {
-    taskId: string | null
-    taskStatus?: TaskStatus
-    errorMessage?: string
-    progress: ProgressInfo
-    result: TaskResult
-    currentContent?: string
-    isStreaming?: boolean
+const route = useRoute()
+const router = useRouter()
+const taskStore = useTaskStore()
+
+// 重试并导航
+const handleRetry = async () => {
+    const taskId = await taskStore.retryTask()
+    if (taskId) {
+        router.push({ name: 'task', params: { id: taskId } })
+    }
 }
 
-const props = withDefaults(defineProps<Props>(), {
-    taskId: null,
-    taskStatus: 'pending',
-    errorMessage: '',
-    currentContent: '',
-    isStreaming: false
+// 从 store 获取响应式状态
+const {
+    taskId,
+    taskStatus,
+    errorMessage,
+    progress,
+    result,
+    currentContent,
+    isStreaming,
+    currentTab
+} = storeToRefs(taskStore)
+
+// 从 URL 参数加载任务
+onMounted(async () => {
+    const urlTaskId = route.params.id as string
+    if (urlTaskId && urlTaskId !== 'error') {
+        // 如果 store 中没有此任务，从服务器加载
+        if (!taskId.value || taskId.value !== urlTaskId) {
+            const loaded = await taskStore.loadTaskById(urlTaskId)
+            if (!loaded) {
+                // 任务不存在或加载失败，返回首页
+                // 添加错误提示
+                router.push({ name: 'home' })
+            }
+        }
+    }
 })
 
-const currentTab = defineModel<CurrentTab>('currentTab', { default: 'article' })
-
-defineEmits<{
-    retry: []
-    copy: []
-}>()
-
 const isProcessing: ComputedRef<boolean> = computed(() => {
-    return props.taskStatus !== 'completed' && props.taskStatus !== 'failed'
+    return taskStatus.value !== 'completed' && taskStatus.value !== 'failed'
 })
 
 // 是否正在流式生成（有流式内容或正在streaming）
 const isStreamingContent: ComputedRef<boolean> = computed(() => {
-    return props.isStreaming && !!props.currentContent
+    return isStreaming.value && !!currentContent.value
 })
 
 const isFailed: ComputedRef<boolean> = computed(() => {
-    return props.taskStatus === 'failed'
+    return taskStatus.value === 'failed'
 })
 
 const hasTextContent: ComputedRef<boolean> = computed(() => {
-    return !!(props.result.transcript || props.result.outline || props.result.article || props.result.podcast_script)
+    return !!(result.value.transcript || result.value.outline || result.value.article || result.value.podcast_script)
 })
 
 const showPodcast: ComputedRef<boolean> = computed(() => {
-    return !!(props.result.podcast_script || props.result.has_podcast_audio)
+    return !!(result.value.podcast_script || result.value.has_podcast_audio)
 })
 
 const isContentLoading: ComputedRef<boolean> = computed(() => {
@@ -59,51 +76,51 @@ const isContentLoading: ComputedRef<boolean> = computed(() => {
         return false
     }
     // 如果有流式内容正在显示，不显示加载状态
-    if (props.currentContent && props.isStreaming) {
+    if (currentContent.value && isStreaming.value) {
         return false
     }
     if (currentTab.value === 'transcript') {
-        return !props.result.transcript
+        return !result.value.transcript
     }
     if (currentTab.value === 'outline') {
-        return !props.result.outline && !props.currentContent && isProcessing.value
+        return !result.value.outline && !currentContent.value && isProcessing.value
     }
     if (currentTab.value === 'article') {
-        return !props.result.article && !props.currentContent && isProcessing.value
+        return !result.value.article && !currentContent.value && isProcessing.value
     }
     if (currentTab.value === 'podcast') {
-        return !props.result.podcast_script && isProcessing.value
+        return !result.value.podcast_script && isProcessing.value
     }
     return false
 })
 
 const contentLoadingText: ComputedRef<string> = computed(() => {
     if (currentTab.value === 'transcript') {
-        if (props.taskStatus === 'downloading') return '正在下载视频，转录内容稍后显示...'
-        if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        if (taskStatus.value === 'downloading') return '正在下载视频，转录内容稍后显示...'
+        if (taskStatus.value === 'transcribing') return '正在转录音频...'
         return '准备中...'
     }
     if (currentTab.value === 'outline' || currentTab.value === 'article') {
-        if (props.taskStatus === 'downloading') return '正在下载视频...'
-        if (props.taskStatus === 'transcribing') return '正在转录音频...'
-        if (props.taskStatus === 'ready_to_stream') return '准备生成内容...'
-        if (props.taskStatus === 'generating') return '正在生成内容...'
+        if (taskStatus.value === 'downloading') return '正在下载视频...'
+        if (taskStatus.value === 'transcribing') return '正在转录音频...'
+        if (taskStatus.value === 'ready_to_stream') return '准备生成内容...'
+        if (taskStatus.value === 'generating') return '正在生成内容...'
         return '准备中...'
     }
     if (currentTab.value === 'podcast') {
-        if (props.taskStatus === 'downloading') return '正在下载视频...'
-        if (props.taskStatus === 'transcribing') return '正在转录音频...'
-        if (props.taskStatus === 'ready_to_stream') return '准备生成内容...'
-        if (props.taskStatus === 'generating') return '正在生成内容...'
-        if (props.taskStatus === 'generating_podcast') return '正在生成播客脚本...'
-        if (props.taskStatus === 'synthesizing') return '正在合成播客音频...'
+        if (taskStatus.value === 'downloading') return '正在下载视频...'
+        if (taskStatus.value === 'transcribing') return '正在转录音频...'
+        if (taskStatus.value === 'ready_to_stream') return '准备生成内容...'
+        if (taskStatus.value === 'generating') return '正在生成内容...'
+        if (taskStatus.value === 'generating_podcast') return '正在生成播客脚本...'
+        if (taskStatus.value === 'synthesizing') return '正在合成播客音频...'
         return '准备中...'
     }
     return '加载中...'
 })
 
 const renderedContent: ComputedRef<string> = computed(() => {
-    if (!props.currentContent) {
+    if (!currentContent.value) {
         if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
         if (!isProcessing.value) {
             if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
@@ -113,7 +130,7 @@ const renderedContent: ComputedRef<string> = computed(() => {
         }
         return ''
     }
-    return marked.parse(props.currentContent) as string
+    return marked.parse(currentContent.value) as string
 })
 
 const statusTitle: ComputedRef<string> = computed(() => {
@@ -123,15 +140,15 @@ const statusTitle: ComputedRef<string> = computed(() => {
 })
 
 const statusDescription: ComputedRef<string> = computed(() => {
-    if (isFailed.value) return props.errorMessage
+    if (isFailed.value) return errorMessage.value
     if (isStreamingContent.value) return '内容正在实时生成中...'
     if (isProcessing.value) return '请勿关闭页面，内容将逐步显示'
     return '查看生成的内容，复制或下载原始媒体文件'
 })
 
-const videoDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/video` : '')
-const audioDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/audio` : '')
-const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `api/task/${props.taskId}/podcast` : '')
+const videoDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/video` : '')
+const audioDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/audio` : '')
+const podcastDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `api/task/${taskId.value}/podcast` : '')
 </script>
 
 <template>
@@ -153,7 +170,7 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `a
                 >
                     <button
                         class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
-                        @click="$emit('retry')"
+                        @click="handleRetry"
                     >
                         <span class="truncate">重新尝试</span>
                     </button>
@@ -209,7 +226,7 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => props.taskId ? `a
                     :loading-text="contentLoadingText"
                     :rendered-content="renderedContent"
                     :show-podcast="showPodcast"
-                    @copy="$emit('copy')"
+                    @copy="taskStore.copyContent()"
                 />
 
                 <!-- 仅下载模式提示 -->

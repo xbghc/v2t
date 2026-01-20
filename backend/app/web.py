@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 import json
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import get_settings
@@ -92,12 +91,6 @@ tasks: dict[str, TaskResult] = {}
 TASK_EXPIRE_SECONDS = 3600
 
 app = FastAPI(title="v2t - 视频转文字", description="输入视频链接，获取视频、音频、大纲和详细文字")
-
-# 挂载静态资源目录
-static_path = Path(__file__).parent / "static" / "assets"
-if static_path.exists():
-    app.mount("/assets", StaticFiles(directory=static_path), name="assets")
-
 
 class ProcessRequest(BaseModel):
     url: str
@@ -636,16 +629,6 @@ async def download_task_podcast(task_id: str):
     )
 
 
-# 前端页面
-@app.get("/", response_class=HTMLResponse)
-async def index():
-    """返回前端页面"""
-    html_path = Path(__file__).parent / "static" / "index.html"
-    if html_path.exists():
-        return HTMLResponse(html_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>v2t Web</h1><p>前端文件未找到</p>")
-
-
 async def check_api_connections() -> bool:
     """检测所有 API 连接，返回是否全部成功"""
     from app.services.llm import check_llm_api
@@ -670,7 +653,7 @@ async def check_api_connections() -> bool:
     return all_ok
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8100):
+def run_server(host: str = "0.0.0.0", port: int = 8101):
     """启动服务器"""
     import asyncio
 
