@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useTaskStore } from '@/stores/task'
+import { useToastStore } from '@/stores/toast'
 
 const taskStore = useTaskStore()
+const toastStore = useToastStore()
 
 const isDragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -38,7 +40,7 @@ const processFile = async (file: File) => {
     // 检查文件类型
     const ext = '.' + file.name.split('.').pop()?.toLowerCase()
     if (!acceptedTypes.includes(ext)) {
-        alert(`不支持的文件格式，请上传 ${acceptedTypes.join(', ')} 文件`)
+        toastStore.showToast(`不支持的文件格式，请上传 ${acceptedTypes.join(', ')} 文件`, 'error')
         return
     }
 
@@ -46,7 +48,7 @@ const processFile = async (file: File) => {
     try {
         const text = await file.text()
         if (!text.trim()) {
-            alert('文件内容为空')
+            toastStore.showToast('文件内容为空', 'error')
             return
         }
 
@@ -56,7 +58,7 @@ const processFile = async (file: File) => {
         taskStore.subtitleTitle = file.name.replace(/\.[^.]+$/, '')
     } catch (error) {
         console.error('读取文件失败:', error)
-        alert('读取文件失败')
+        toastStore.showToast('读取文件失败', 'error')
     }
 }
 

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
 import { createTask, getTask, getDefaultPrompts, textToPodcast, streamOutline, streamArticle, streamPodcast, streamTaskStatus } from '@/api/task'
+import { useToastStore } from '@/stores/toast'
 import type {
     TaskStatus,
     CurrentTab,
@@ -472,8 +473,9 @@ export const useTaskStore = defineStore('task', () => {
 
     // 提交 URL，返回 task_id 或 null（失败时）
     const submitUrl = async (): Promise<string | null> => {
+        const toastStore = useToastStore()
         if (!url.value.trim()) {
-            alert('请输入视频链接')
+            toastStore.showToast('请输入视频链接', 'warning')
             return null
         }
 
@@ -497,8 +499,9 @@ export const useTaskStore = defineStore('task', () => {
 
     // 提交字幕转播客，返回 task_id 或 null（失败时）
     const submitSubtitle = async (): Promise<string | null> => {
+        const toastStore = useToastStore()
         if (!subtitleText.value.trim() || subtitleText.value.length < 10) {
-            alert('请上传字幕文件')
+            toastStore.showToast('请上传字幕文件', 'warning')
             return null
         }
 
@@ -550,10 +553,11 @@ export const useTaskStore = defineStore('task', () => {
     // 复制当前内容
     const copyContent = (): void => {
         if (!currentContent.value) return
+        const toastStore = useToastStore()
         navigator.clipboard.writeText(currentContent.value).then(() => {
-            alert('已复制到剪贴板')
+            toastStore.showToast('已复制到剪贴板', 'success')
         }).catch(() => {
-            alert('复制失败，请手动选择复制')
+            toastStore.showToast('复制失败，请手动选择复制', 'error')
         })
     }
 

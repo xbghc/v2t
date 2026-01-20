@@ -25,7 +25,6 @@ const handleRetry = async () => {
 const {
     taskId,
     taskStatus,
-    errorMessage,
     progressText,
     result,
     currentContent,
@@ -53,11 +52,6 @@ onMounted(async () => {
 
 const isProcessing: ComputedRef<boolean> = computed(() => {
     return taskStatus.value !== 'completed' && taskStatus.value !== 'failed'
-})
-
-// 是否正在流式生成（有流式内容或正在streaming）
-const isStreamingContent: ComputedRef<boolean> = computed(() => {
-    return isStreaming.value && !!currentContent.value
 })
 
 const isFailed: ComputedRef<boolean> = computed(() => {
@@ -138,13 +132,6 @@ const statusTitle: ComputedRef<string> = computed(() => {
     return '转换完成'
 })
 
-const statusDescription: ComputedRef<string> = computed(() => {
-    if (isFailed.value) return errorMessage.value
-    if (isStreamingContent.value) return '内容正在实时生成中...'
-    if (isProcessing.value) return '请勿关闭页面，内容将逐步显示'
-    return '查看生成的内容，复制或下载原始媒体文件'
-})
-
 // 资源 URL 需要加上 BASE_URL 前缀
 const BASE_URL = import.meta.env.BASE_URL
 const videoDownloadUrl: ComputedRef<string> = computed(() =>
@@ -166,9 +153,6 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() =>
                 <div class="flex min-w-72 flex-col gap-2">
                     <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-tight-lg">
                         {{ statusTitle }}
-                    </p>
-                    <p class="text-gray-500 dark:text-dark-text-muted text-base font-normal leading-normal">
-                        {{ statusDescription }}
                     </p>
                 </div>
                 <div

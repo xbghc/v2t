@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTaskStore } from '@/stores/task'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
+import GlobalToast from '@/components/GlobalToast.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -20,6 +21,7 @@ const handleNewTask = () => {
 </script>
 
 <template>
+    <GlobalToast />
     <div class="relative flex min-h-screen w-full flex-col">
         <div class="layout-container flex h-full grow flex-col">
             <!-- Initial Page Layout -->
