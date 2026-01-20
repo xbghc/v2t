@@ -37,16 +37,25 @@ uv sync
 
 配置 API Key（通过环境变量或配置文件 `~/.config/v2t/config.json`）：
 
-- **Groq API Key** - https://console.groq.com/keys （语音转录）
-- **DeepSeek API Key** - https://platform.deepseek.com/ （AI 内容生成）
+- **OpenAI 兼容 API** - 用于 AI 内容生成（支持 DeepSeek、OpenAI、Ollama 等）
+- **Whisper 兼容 API** - 用于语音转录（支持 Groq、OpenAI 等）
 - **DashScope API Key** - https://dashscope.console.aliyun.com/ （TTS 语音合成，可选）
 - **Xiazaitool Token** - 用于解析视频链接（可选）
 
 环境变量：
 
 ```bash
-GROQ_API_KEY=xxx
-DEEPSEEK_API_KEY=xxx
+# AI 内容生成
+OPENAI_API_KEY=xxx
+OPENAI_BASE_URL=https://api.deepseek.com  # 可选，默认 DeepSeek
+OPENAI_MODEL=deepseek-reasoner             # 可选
+
+# 语音转录
+WHISPER_API_KEY=xxx
+WHISPER_BASE_URL=https://api.groq.com/openai/v1  # 可选，默认 Groq
+WHISPER_MODEL=whisper-large-v3                    # 可选
+
+# 其他服务
 DASHSCOPE_API_KEY=xxx
 XIAZAITOOL_TOKEN=xxx
 ```

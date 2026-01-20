@@ -1,12 +1,12 @@
-"""DeepSeek API 服务 - 使用 OpenAI 兼容模式"""
+"""AI 内容生成服务 - 使用 OpenAI 兼容 API"""
 
 from openai import AsyncOpenAI
 
 from app.config import get_settings
 
 
-class DeepSeekError(Exception):
-    """DeepSeek API 错误"""
+class LLMError(Exception):
+    """LLM API 错误"""
     pass
 
 
@@ -88,12 +88,12 @@ def get_client() -> AsyncOpenAI:
     """获取 OpenAI 兼容客户端"""
     settings = get_settings()
 
-    if not settings.deepseek_api_key:
-        raise DeepSeekError("DEEPSEEK_API_KEY 未配置")
+    if not settings.openai_api_key:
+        raise LLMError("OPENAI_API_KEY 未配置")
 
     return AsyncOpenAI(
-        base_url=settings.deepseek_base_url,
-        api_key=settings.deepseek_api_key,
+        base_url=settings.openai_base_url,
+        api_key=settings.openai_api_key,
     )
 
 
@@ -120,7 +120,7 @@ async def chat(
 
     # 构建请求参数
     kwargs = {
-        "model": settings.deepseek_model,
+        "model": settings.openai_model,
         "messages": messages,
         "stream": True,
         "max_tokens": max_tokens,

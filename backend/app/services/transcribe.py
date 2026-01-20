@@ -1,4 +1,4 @@
-"""音频转写服务 - 使用 Groq Whisper API"""
+"""音频转写服务 - 使用 OpenAI Whisper 兼容 API"""
 
 import asyncio
 import logging
@@ -133,16 +133,16 @@ async def extract_audio_async(
     return audio_path
 
 
-def get_groq_client() -> AsyncOpenAI:
-    """获取 Groq 客户端"""
+def get_whisper_client() -> AsyncOpenAI:
+    """获取 Whisper 兼容客户端"""
     settings = get_settings()
 
-    if not settings.groq_api_key:
-        raise TranscribeError("GROQ_API_KEY 未配置")
+    if not settings.whisper_api_key:
+        raise TranscribeError("WHISPER_API_KEY 未配置")
 
     return AsyncOpenAI(
-        base_url=settings.groq_base_url,
-        api_key=settings.groq_api_key,
+        base_url=settings.whisper_base_url,
+        api_key=settings.whisper_api_key,
     )
 
 
@@ -179,12 +179,12 @@ async def transcribe_audio(
         str: 带时间戳的转写文本
     """
     settings = get_settings()
-    client = get_groq_client()
+    client = get_whisper_client()
 
     try:
         with open(audio_path, "rb") as f:
             kwargs = {
-                "model": settings.groq_whisper_model,
+                "model": settings.whisper_model,
                 "file": f,
                 "response_format": "verbose_json",
             }
@@ -193,16 +193,13 @@ async def transcribe_audio(
 
             response = await client.audio.transcriptions.create(**kwargs)
     except openai.RateLimitError:
-        raise TranscribeError(
-            "Groq 转录配额已用尽 (每小时限制 2 小时音频)\n"
-            "请等待约 1 小时后重试"
-        )
+        raise TranscribeError("转录 API 配额已用尽，请稍后重试")
     except openai.APIConnectionError:
-        raise TranscribeError("Groq API 连接失败，请检查网络")
+        raise TranscribeError("转录 API 连接失败，请检查网络")
     except openai.APITimeoutError:
-        raise TranscribeError("Groq API 请求超时")
+        raise TranscribeError("转录 API 请求超时")
     except openai.APIError as e:
-        raise TranscribeError(f"Groq API 错误: {e.message}")
+        raise TranscribeError(f"转录 API 错误: {e.message}")
 
     # 格式化为带时间戳的文本
     if hasattr(response, "segments") and response.segments:

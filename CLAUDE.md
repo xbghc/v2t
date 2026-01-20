@@ -80,8 +80,8 @@ backend/app/
 └── services/       # 业务服务层
     ├── xiazaitool.py       # 视频链接解析 (外部API)
     ├── video_downloader.py # 视频下载 (aria2c)
-    ├── transcribe.py       # 音频转录 (Groq Whisper)
-    ├── deepseek.py         # AI生成 (DeepSeek API)
+    ├── transcribe.py       # 音频转录 (Whisper 兼容 API)
+    ├── llm.py              # AI生成 (OpenAI 兼容 API)
     └── podcast_tts.py      # 播客音频合成 (阿里云百炼 TTS)
 ```
 
@@ -108,13 +108,22 @@ frontend/src/
 ### 关键依赖
 
 - **系统**：ffmpeg (音频提取)、aria2c (多线程下载)
-- **外部服务**：Groq Whisper (转录)、DeepSeek (内容生成)、阿里云百炼 (TTS)、Xiazaitool (链接解析)
+- **外部服务**：Whisper 兼容 API (转录)、OpenAI 兼容 API (内容生成)、阿里云百炼 (TTS)、Xiazaitool (链接解析)
 
 ## 环境变量
 
 ```bash
-GROQ_API_KEY         # Groq Whisper API (语音转录)
-DEEPSEEK_API_KEY     # DeepSeek API (AI 内容生成)
+# OpenAI 兼容 API (AI 内容生成)
+OPENAI_API_KEY       # API 密钥
+OPENAI_BASE_URL      # API 端点 (默认: https://api.deepseek.com)
+OPENAI_MODEL         # 模型名称 (默认: deepseek-reasoner)
+
+# Whisper 兼容 API (语音转录)
+WHISPER_API_KEY      # API 密钥
+WHISPER_BASE_URL     # API 端点 (默认: https://api.groq.com/openai/v1)
+WHISPER_MODEL        # 模型名称 (默认: whisper-large-v3)
+
+# 其他服务
 DASHSCOPE_API_KEY    # 阿里云百炼 API (TTS 语音合成)
 XIAZAITOOL_TOKEN     # 视频链接解析 API
 ```
@@ -132,6 +141,6 @@ GET  /api/task/{task_id}/audio  # 下载音频
 
 ## 错误处理
 
-每个服务模块定义自己的异常类：`DownloadError`、`TranscribeError`、`GitCodeAIError`、`XiazaitoolError`。
+每个服务模块定义自己的异常类：`DownloadError`、`TranscribeError`、`LLMError`、`XiazaitoolError`。
 
 AI 生成失败时自动降级到原始转录内容。

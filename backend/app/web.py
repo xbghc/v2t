@@ -24,14 +24,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.deepseek import (
+from app.services.llm import (
     DEFAULT_ARTICLE_SYSTEM_PROMPT,
     DEFAULT_ARTICLE_USER_PROMPT,
     DEFAULT_OUTLINE_SYSTEM_PROMPT,
     DEFAULT_OUTLINE_USER_PROMPT,
     DEFAULT_PODCAST_SYSTEM_PROMPT,
     DEFAULT_PODCAST_USER_PROMPT,
-    DeepSeekError,
+    LLMError,
     generate_article,
     generate_outline,
     generate_podcast_script,
@@ -241,7 +241,7 @@ async def process_video_task(
                 )
                 if outline and len(outline.strip()) >= 50:
                     task.outline = outline
-            except DeepSeekError:
+            except LLMError:
                 task.outline = ""  # 大纲生成失败，跳过
 
         # 生成详细文章
@@ -255,7 +255,7 @@ async def process_video_task(
                 )
                 if article and len(article.strip()) >= 50:
                     task.article = article
-            except DeepSeekError:
+            except LLMError:
                 task.article = ""  # 文章生成失败，跳过
 
         # 生成播客
@@ -287,7 +287,7 @@ async def process_video_task(
                         # TTS 失败，保留脚本，记录错误信息
                         logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
                         task.podcast_error = str(e)
-            except DeepSeekError as e:
+            except LLMError as e:
                 # 播客脚本生成失败，记录日志
                 logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
 
@@ -346,7 +346,7 @@ async def process_text_task(
             user_prompt=podcast_user_prompt or None,
         )
         if not podcast_script or len(podcast_script.strip()) < 50:
-            raise DeepSeekError("生成的播客脚本内容过短")
+            raise LLMError("生成的播客脚本内容过短")
 
         task.podcast_script = podcast_script
 
@@ -367,7 +367,7 @@ async def process_text_task(
         task.progress = "处理完成"
         logger.info("任务 %s 文本转播客完成: %s", task_id, task.title)
 
-    except DeepSeekError as e:
+    except LLMError as e:
         task.status = TaskStatus.FAILED
         task.error = f"播客脚本生成失败: {e}"
         task.progress = task.error

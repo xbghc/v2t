@@ -9,8 +9,15 @@ CONFIG_PATH = Path.home() / ".config" / "v2t" / "config.json"
 
 # 环境变量映射
 ENV_MAPPING = {
-    "groq_api_key": "GROQ_API_KEY",
-    "deepseek_api_key": "DEEPSEEK_API_KEY",
+    # OpenAI 兼容 API（内容生成）
+    "openai_api_key": "OPENAI_API_KEY",
+    "openai_base_url": "OPENAI_BASE_URL",
+    "openai_model": "OPENAI_MODEL",
+    # Whisper 兼容 API（音频转录）
+    "whisper_api_key": "WHISPER_API_KEY",
+    "whisper_base_url": "WHISPER_BASE_URL",
+    "whisper_model": "WHISPER_MODEL",
+    # 其他服务
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
 }
@@ -20,18 +27,20 @@ ENV_MAPPING = {
 class Settings:
     """应用配置"""
 
-    # API Keys
-    groq_api_key: str = ""
-    deepseek_api_key: str = ""
-    xiazaitool_token: str = ""
-    dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
+    # OpenAI 兼容 API（内容生成）
+    openai_api_key: str = ""
+    openai_base_url: str = "https://api.deepseek.com"
+    openai_model: str = "deepseek-reasoner"
 
-    # API URLs (固定值)
-    groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_whisper_model: str = "whisper-large-v3"
-    deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    # Whisper 兼容 API（音频转录）
+    whisper_api_key: str = ""
+    whisper_base_url: str = "https://api.groq.com/openai/v1"
+    whisper_model: str = "whisper-large-v3"
+
+    # 其他服务
+    xiazaitool_token: str = ""
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
+    dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
 
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时
