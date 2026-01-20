@@ -1,40 +1,6 @@
 # v2t - 视频转文字工具
 
-一键下载视频、转录音频、AI 生成摘要
-
-```bash
-$ v2t --summary "https://www.bilibili.com/video/BV1mb42177oQ"
-
-下载视频...
-✓ 【TED科普】为什么我们要跟陌生人闲聊？
-转录音频...
-✓ 转录完成
-生成提纲...
-✓ 已保存: 【TED科普】为什么我们要跟陌生人闲聊？_提纲.md
-```
-
-生成的提纲：
-
-```markdown
-### 视频大纲与时间线
-
-**视频主题：** 日常简短对话的重要性与深层意义
-
-#### 时间线：
-
-- **[00:01 - 00:30]** 对短暂社交的质疑
-  - 提出日常中与陌生人进行简短对话的场景
-  - 质疑为何要在繁忙的生活中花费时间与陌生人交流
-
-- **[00:31 - 00:54]** 简短对话的独特价值
-  - 反驳上述观点，指出忽略简短社交的误区
-  - 比喻：简短对话与长篇友谊的关系
-
-- **[00:55 - 01:28]** 简短对话的情感力量
-  - 指出简短对话对于缓解悲伤、自我怀疑的重要性
-
-...
-```
+一键下载视频、转录音频、AI 生成摘要的 Web 应用。
 
 ## 特性
 
@@ -69,50 +35,23 @@ uv sync
 
 ## 配置
 
-首次使用需配置 API Key：
+配置 API Key（通过环境变量或配置文件 `~/.config/v2t/config.json`）：
 
-```bash
-uv run v2t config
-```
-
-需要以下凭证：
 - **Groq API Key** - https://console.groq.com/keys （语音转录）
 - **DeepSeek API Key** - https://platform.deepseek.com/ （AI 内容生成）
 - **DashScope API Key** - https://dashscope.console.aliyun.com/ （TTS 语音合成，可选）
 - **Xiazaitool Token** - 用于解析视频链接（可选）
 
-## 使用方法
+环境变量：
 
 ```bash
-# 生成 AI 详细总结 → .md
-uv run v2t "视频链接"
-
-# 生成提纲 → .md
-uv run v2t "视频链接" --summary
-
-# 仅输出原始转录 → .txt
-uv run v2t "视频链接" --raw
-
-# 仅下载视频
-uv run v2t "视频链接" --video
-
-# 仅提取音频
-uv run v2t "视频链接" --audio
+GROQ_API_KEY=xxx
+DEEPSEEK_API_KEY=xxx
+DASHSCOPE_API_KEY=xxx
+XIAZAITOOL_TOKEN=xxx
 ```
 
-## 输出说明
-
-| 模式 | 命令 | 输出 |
-|------|------|------|
-| 默认 | `v2t <url>` | `标题.md` - AI 详细总结 |
-| 提纲 | `v2t <url> -s` | `标题_提纲.md` - 结构化提纲 |
-| 原始 | `v2t <url> -r` | `标题.txt` - 带时间戳的转录 |
-| 视频 | `v2t <url> -v` | `标题.mp4` - 仅下载视频 |
-| 音频 | `v2t <url> -a` | `标题.mp3` - 仅提取音频 |
-
-## Web 版本
-
-v2t 支持 Web 界面，可以部署为网站使用。
+## 使用方法
 
 ### 本地运行
 
@@ -147,8 +86,13 @@ uv sync
 
 #### 2. 配置 API
 
-```bash
-uv run v2t config
+设置环境变量或创建配置文件 `~/.config/v2t/config.json`：
+
+```json
+{
+  "groq_api_key": "your-groq-key",
+  "deepseek_api_key": "your-deepseek-key"
+}
 ```
 
 #### 3. 使用 systemd 部署

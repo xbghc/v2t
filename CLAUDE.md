@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-v2t 是一个视频转文字工具，提供视频下载、音频转录、AI内容生成功能。支持 B站、抖音、小红书等多平台，提供 CLI 和 Web 两种使用方式。
+v2t 是一个视频转文字 Web 应用，提供视频下载、音频转录、AI内容生成功能。支持 B站、抖音、小红书等多平台。
 
 ## 项目结构 (Monorepo)
 
@@ -12,7 +12,6 @@ v2t 是一个视频转文字工具，提供视频下载、音频转录、AI内�
 v2t/
 ├── backend/                    # Python 后端
 │   ├── app/
-│   │   ├── cli.py
 │   │   ├── web.py
 │   │   ├── config.py
 │   │   ├── static/            # 前端构建输出
@@ -50,8 +49,6 @@ make lint-fix             # 自动修复 lint 问题
 ```bash
 cd backend
 uv sync                          # 安装依赖
-uv run v2t <url>                 # CLI处理视频
-uv run v2t config                # 交互式配置
 uv run v2t-web                   # 启动Web服务 (端口8100)
 pytest                           # 运行测试
 ```
@@ -78,7 +75,6 @@ docker-compose up -d
 
 ```
 backend/app/
-├── cli.py          # CLI入口 (Typer)
 ├── web.py          # Web入口 (FastAPI)，后台任务+内存存储
 ├── config.py       # 配置管理 (环境变量 > JSON文件 > 默认值)
 └── services/       # 业务服务层
