@@ -27,6 +27,9 @@ TTS_MAX_CHARS = 600  # 单次最大 TTS 字符数（约 300 中文字）
 # 全局限流器：每 60 秒最多 180 次请求（百炼 TTS API 限制）
 _tts_rate_limiter = AsyncLimiter(180, 60)
 
+# 最大并发请求数（避免瞬时压力过大触发服务端限流）
+TTS_MAX_CONCURRENCY = 10
+
 
 def tts_char_count(text: str) -> int:
     """计算 TTS 字符数（中文算 2，ASCII 算 1）"""
@@ -144,7 +147,7 @@ async def call_dashscope_tts(
     voice: str = DEFAULT_TTS_VOICE,
     model: str = DEFAULT_TTS_MODEL,
     timeout: float = 60.0,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> str:
     """
     调用阿里云百炼 TTS API（带限流和重试）
@@ -416,14 +419,16 @@ async def generate_podcast_audio(
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     segment_paths: list[Path] = []
+    semaphore = asyncio.Semaphore(TTS_MAX_CONCURRENCY)
 
     try:
-        # 并发合成所有段落
+        # 使用信号量限制并发，避免瞬时压力过大
         async def synthesize_with_index(i: int, text: str) -> Path:
-            segment_path = temp_dir / f"podcast_segment_{i:04d}.wav"
-            logger.debug("合成第 %d/%d 段: %s...", i + 1, len(safe_segments), text[:30])
-            await synthesize_segment(text, segment_path)
-            return segment_path
+            async with semaphore:
+                segment_path = temp_dir / f"podcast_segment_{i:04d}.wav"
+                logger.debug("合成第 %d/%d 段: %s...", i + 1, len(safe_segments), text[:30])
+                await synthesize_segment(text, segment_path)
+                return segment_path
 
         tasks = [
             synthesize_with_index(i, text)
