@@ -442,5 +442,5 @@ async def generate_podcast_audio(
             try:
                 if path.exists():
                     path.unlink()
-            except OSError:
-                pass
+            except OSError as e:
+                logger.warning("清理临时文件失败 %s: %s", path, e)

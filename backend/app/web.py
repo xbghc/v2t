@@ -148,18 +148,18 @@ def cleanup_old_tasks():
             if task.video_path and task.video_path.exists():
                 try:
                     task.video_path.unlink()
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.warning("清理视频文件失败 %s: %s", task.video_path, e)
             if task.audio_path and task.audio_path.exists():
                 try:
                     task.audio_path.unlink()
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.warning("清理音频文件失败 %s: %s", task.audio_path, e)
             if task.podcast_audio_path and task.podcast_audio_path.exists():
                 try:
                     task.podcast_audio_path.unlink()
-                except OSError:
-                    pass
+                except OSError as e:
+                    logger.warning("清理播客文件失败 %s: %s", task.podcast_audio_path, e)
 
 
 async def process_video_task(

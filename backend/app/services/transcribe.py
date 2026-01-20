@@ -1,6 +1,7 @@
 """音频转写服务 - 使用 Groq Whisper API"""
 
 import asyncio
+import logging
 import re
 import subprocess
 from pathlib import Path
@@ -10,6 +11,8 @@ from openai import AsyncOpenAI
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TimeRemainingColumn
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class TranscribeError(Exception):
@@ -32,8 +35,10 @@ def _get_duration(video_path: Path) -> float | None:
         )
         if result.returncode == 0 and result.stdout.strip():
             return float(result.stdout.strip())
-    except (ValueError, FileNotFoundError):
-        pass
+    except ValueError as e:
+        logger.warning("ffprobe 输出解析失败: %s", e)
+    except FileNotFoundError:
+        logger.warning("ffprobe 未安装，无法获取视频时长")
     return None
 
 
