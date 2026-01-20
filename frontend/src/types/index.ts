@@ -148,3 +148,19 @@ export interface TabDefinition {
     key: CurrentTab
     label: string
 }
+
+/**
+ * 侧边导航项类型
+ */
+export type SideNavKey = 'podcast' | 'article' | 'outline' | 'video' | 'audio' | 'subtitle'
+
+/**
+ * 侧边导航项
+ */
+export interface SideNavItem {
+    key: SideNavKey
+    label: string
+    icon: string
+    hasContent: boolean
+    isLoading: boolean
+}

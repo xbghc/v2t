@@ -561,6 +561,75 @@ export const useTaskStore = defineStore('task', () => {
         })
     }
 
+    // 生成单个内容类型
+    const generateSingleContent = (type: 'outline' | 'article' | 'podcast'): void => {
+        if (!taskId.value) return
+
+        const id = taskId.value
+
+        if (type === 'outline' && !outlineStreaming.value) {
+            generateOptions.outline = true
+            outlineStreaming.value = true
+            streamingOutline.value = ''
+            outlineCleanup = streamOutline(
+                id,
+                (chunk) => { streamingOutline.value += chunk },
+                () => {
+                    result.outline = streamingOutline.value
+                    outlineStreaming.value = false
+                },
+                (err) => {
+                    console.error('大纲生成失败:', err)
+                    outlineStreaming.value = false
+                }
+            )
+        }
+
+        if (type === 'article' && !articleStreaming.value) {
+            generateOptions.article = true
+            articleStreaming.value = true
+            streamingArticle.value = ''
+            articleCleanup = streamArticle(
+                id,
+                (chunk) => { streamingArticle.value += chunk },
+                () => {
+                    result.article = streamingArticle.value
+                    articleStreaming.value = false
+                },
+                (err) => {
+                    console.error('文章生成失败:', err)
+                    articleStreaming.value = false
+                }
+            )
+        }
+
+        if (type === 'podcast' && !podcastStreaming.value) {
+            generateOptions.podcast = true
+            podcastStreaming.value = true
+            streamingPodcast.value = ''
+            podcastCleanup = streamPodcast(
+                id,
+                (chunk) => { streamingPodcast.value += chunk },
+                () => { /* script done, wait for audio */ },
+                () => {
+                    podcastSynthesizing.value = true
+                },
+                (hasAudio, audioError) => {
+                    result.podcast_script = streamingPodcast.value
+                    result.has_podcast_audio = hasAudio
+                    if (audioError) result.podcast_error = audioError
+                    podcastStreaming.value = false
+                    podcastSynthesizing.value = false
+                },
+                (err) => {
+                    console.error('播客生成失败:', err)
+                    podcastStreaming.value = false
+                    podcastSynthesizing.value = false
+                }
+            )
+        }
+    }
+
     // 从 URL 加载任务（支持刷新页面和分享链接）
     const loadTaskById = async (id: string): Promise<boolean> => {
         // 如果当前已有相同任务在处理中，不重复加载
@@ -644,7 +713,8 @@ export const useTaskStore = defineStore('task', () => {
         startNew,
         retryTask,
         copyContent,
-        loadTaskById
+        loadTaskById,
+        generateSingleContent
     }
 })
 

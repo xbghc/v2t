@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
-import MediaDownload from './MediaDownload.vue'
+import { useToastStore } from '@/stores/toast'
+import type { SideNavItem, SideNavKey } from '@/types'
+import SideNavigation from './SideNavigation.vue'
+import ContentSection from './ContentSection.vue'
+import VideoSection from './VideoSection.vue'
+import AudioSection from './AudioSection.vue'
+import SubtitleSection from './SubtitleSection.vue'
 import PodcastPlayer from './PodcastPlayer.vue'
-import ContentTabs from './ContentTabs.vue'
 
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
+const toastStore = useToastStore()
 
 // 重试并导航
 const handleRetry = async () => {
@@ -27,29 +33,33 @@ const {
     taskStatus,
     progressText,
     result,
-    currentContent,
-    isStreaming,
+    generateOptions,
     podcastStreaming,
     podcastSynthesizing,
-    currentTab
+    outlineStreaming,
+    articleStreaming,
+    displayOutline,
+    displayArticle,
+    displayPodcast
 } = storeToRefs(taskStore)
+
+// 聚焦模式状态
+const focusedSection = ref<SideNavKey | null>(null)
 
 // 从 URL 参数加载任务
 onMounted(async () => {
     const urlTaskId = route.params.id as string
     if (urlTaskId && urlTaskId !== 'error') {
-        // 如果 store 中没有此任务，从服务器加载
         if (!taskId.value || taskId.value !== urlTaskId) {
             const loaded = await taskStore.loadTaskById(urlTaskId)
             if (!loaded) {
-                // 任务不存在或加载失败，返回首页
-                // 添加错误提示
                 router.push({ name: 'home' })
             }
         }
     }
 })
 
+// 计算属性
 const isProcessing: ComputedRef<boolean> = computed(() => {
     return taskStatus.value !== 'completed' && taskStatus.value !== 'failed'
 })
@@ -58,81 +68,13 @@ const isFailed: ComputedRef<boolean> = computed(() => {
     return taskStatus.value === 'failed'
 })
 
-const hasTextContent: ComputedRef<boolean> = computed(() => {
-    return !!(result.value.transcript || result.value.outline || result.value.article || result.value.podcast_script)
-})
-
-const showPodcast: ComputedRef<boolean> = computed(() => {
-    return !!(result.value.podcast_script || result.value.has_podcast_audio)
-})
-
-const isContentLoading: ComputedRef<boolean> = computed(() => {
-    if (!isProcessing.value && !isFailed.value) {
-        return false
-    }
-    // 如果有流式内容正在显示，不显示加载状态
-    if (currentContent.value && isStreaming.value) {
-        return false
-    }
-    if (currentTab.value === 'transcript') {
-        return !result.value.transcript
-    }
-    if (currentTab.value === 'outline') {
-        return !result.value.outline && !currentContent.value && isProcessing.value
-    }
-    if (currentTab.value === 'article') {
-        return !result.value.article && !currentContent.value && isProcessing.value
-    }
-    if (currentTab.value === 'podcast') {
-        return !result.value.podcast_script && isProcessing.value
-    }
-    return false
-})
-
-const contentLoadingText: ComputedRef<string> = computed(() => {
-    if (currentTab.value === 'transcript') {
-        if (taskStatus.value === 'downloading') return '正在下载视频，转录内容稍后显示...'
-        if (taskStatus.value === 'transcribing') return '正在转录音频...'
-        return '准备中...'
-    }
-    if (currentTab.value === 'outline' || currentTab.value === 'article') {
-        if (taskStatus.value === 'downloading') return '正在下载视频...'
-        if (taskStatus.value === 'transcribing') return '正在转录音频...'
-        if (taskStatus.value === 'ready') return '准备生成内容...'
-        return '准备中...'
-    }
-    if (currentTab.value === 'podcast') {
-        if (taskStatus.value === 'downloading') return '正在下载视频...'
-        if (taskStatus.value === 'transcribing') return '正在转录音频...'
-        if (taskStatus.value === 'ready') return '准备生成内容...'
-        if (podcastSynthesizing.value) return '正在合成播客音频...'
-        if (podcastStreaming.value) return '正在生成播客脚本...'
-        return '准备中...'
-    }
-    return '加载中...'
-})
-
-const renderedContent: ComputedRef<string> = computed(() => {
-    if (!currentContent.value) {
-        if (isFailed.value) return '<p class="text-gray-500">(处理失败，无法生成内容)</p>'
-        if (!isProcessing.value) {
-            if (currentTab.value === 'article') return '<p class="text-gray-500">(详细内容生成失败)</p>'
-            if (currentTab.value === 'outline') return '<p class="text-gray-500">(大纲生成失败)</p>'
-            if (currentTab.value === 'podcast') return '<p class="text-gray-500">(播客脚本生成失败)</p>'
-            return '<p class="text-gray-500">(无转录内容)</p>'
-        }
-        return ''
-    }
-    return marked.parse(currentContent.value) as string
-})
-
 const statusTitle: ComputedRef<string> = computed(() => {
     if (isFailed.value) return '转换失败'
     if (isProcessing.value) return '正在处理'
     return '转换完成'
 })
 
-// 资源 URL 需要加上 BASE_URL 前缀
+// 资源 URL
 const BASE_URL = import.meta.env.BASE_URL
 const videoDownloadUrl: ComputedRef<string> = computed(() =>
     result.value.video_url ? `${BASE_URL}${result.value.video_url.replace(/^\//, '')}` : ''
@@ -143,100 +85,405 @@ const audioDownloadUrl: ComputedRef<string> = computed(() =>
 const podcastDownloadUrl: ComputedRef<string> = computed(() =>
     taskId.value ? `${BASE_URL}api/task/${taskId.value}/podcast` : ''
 )
+
+// 内容渲染
+const renderedArticle: ComputedRef<string> = computed(() => {
+    if (!displayArticle.value) return ''
+    return marked.parse(displayArticle.value) as string
+})
+
+const renderedOutline: ComputedRef<string> = computed(() => {
+    if (!displayOutline.value) return ''
+    return marked.parse(displayOutline.value) as string
+})
+
+const renderedPodcastScript: ComputedRef<string> = computed(() => {
+    if (!displayPodcast.value) return ''
+    return marked.parse(displayPodcast.value) as string
+})
+
+// 导航项计算
+const navItems = computed<SideNavItem[]>(() => {
+    const items: SideNavItem[] = []
+
+    // 播客
+    if (generateOptions.value.podcast || result.value.podcast_script || result.value.has_podcast_audio) {
+        items.push({
+            key: 'podcast',
+            label: '播客',
+            icon: 'podcasts',
+            hasContent: !!result.value.podcast_script || result.value.has_podcast_audio,
+            isLoading: podcastStreaming.value || podcastSynthesizing.value
+        })
+    }
+
+    // 文章
+    if (generateOptions.value.article || result.value.article) {
+        items.push({
+            key: 'article',
+            label: '文章',
+            icon: 'article',
+            hasContent: !!result.value.article || !!displayArticle.value,
+            isLoading: articleStreaming.value
+        })
+    }
+
+    // 大纲
+    if (generateOptions.value.outline || result.value.outline) {
+        items.push({
+            key: 'outline',
+            label: '大纲',
+            icon: 'format_list_bulleted',
+            hasContent: !!result.value.outline || !!displayOutline.value,
+            isLoading: outlineStreaming.value
+        })
+    }
+
+    // 视频（始终显示）
+    items.push({
+        key: 'video',
+        label: '视频',
+        icon: 'videocam',
+        hasContent: !!result.value.video_url,
+        isLoading: taskStatus.value === 'downloading'
+    })
+
+    // 音频（始终显示）
+    items.push({
+        key: 'audio',
+        label: '音频',
+        icon: 'music_note',
+        hasContent: !!result.value.audio_url,
+        isLoading: taskStatus.value === 'downloading'
+    })
+
+    // 字幕（始终显示）
+    items.push({
+        key: 'subtitle',
+        label: '字幕',
+        icon: 'subtitles',
+        hasContent: !!result.value.transcript,
+        isLoading: taskStatus.value === 'transcribing'
+    })
+
+    return items
+})
+
+// 可生成项
+const disabledItems = computed<SideNavItem[]>(() => {
+    const items: SideNavItem[] = []
+
+    // 只有当任务状态为 ready 或 completed 时，才显示可生成项
+    if (taskStatus.value !== 'ready' && taskStatus.value !== 'completed') {
+        return items
+    }
+
+    // 播客（用户未选择且没有内容）
+    if (!generateOptions.value.podcast && !result.value.podcast_script && !result.value.has_podcast_audio) {
+        items.push({
+            key: 'podcast',
+            label: '播客',
+            icon: 'podcasts',
+            hasContent: false,
+            isLoading: false
+        })
+    }
+
+    // 文章
+    if (!generateOptions.value.article && !result.value.article) {
+        items.push({
+            key: 'article',
+            label: '文章',
+            icon: 'article',
+            hasContent: false,
+            isLoading: false
+        })
+    }
+
+    // 大纲
+    if (!generateOptions.value.outline && !result.value.outline) {
+        items.push({
+            key: 'outline',
+            label: '大纲',
+            icon: 'format_list_bulleted',
+            hasContent: false,
+            isLoading: false
+        })
+    }
+
+    return items
+})
+
+// 切换聚焦模式
+const toggleFocus = (key: SideNavKey) => {
+    focusedSection.value = focusedSection.value === key ? null : key
+}
+
+// 判断区块是否可见
+const isSectionVisible = (key: SideNavKey): boolean => {
+    return focusedSection.value === null || focusedSection.value === key
+}
+
+// 滚动到指定区块
+const scrollToSection = (key: SideNavKey) => {
+    const element = document.getElementById(`section-${key}`)
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// 生成单个内容
+const handleGenerateContent = (key: SideNavKey) => {
+    if (key === 'podcast' || key === 'article' || key === 'outline') {
+        taskStore.generateSingleContent(key)
+        toastStore.showToast(`正在生成${key === 'podcast' ? '播客' : key === 'article' ? '文章' : '大纲'}...`, 'info')
+    }
+}
+
+// 复制内容
+const copyContent = (content: string) => {
+    if (!content) return
+    navigator.clipboard.writeText(content).then(() => {
+        toastStore.showToast('已复制到剪贴板', 'success')
+    }).catch(() => {
+        toastStore.showToast('复制失败，请手动选择复制', 'error')
+    })
+}
+
+// 是否显示播客区块
+const showPodcast = computed(() => {
+    return generateOptions.value.podcast || result.value.podcast_script || result.value.has_podcast_audio || podcastStreaming.value || podcastSynthesizing.value
+})
+
+// 是否显示文章区块
+const showArticle = computed(() => {
+    return generateOptions.value.article || result.value.article || articleStreaming.value
+})
+
+// 是否显示大纲区块
+const showOutline = computed(() => {
+    return generateOptions.value.outline || result.value.outline || outlineStreaming.value
+})
+
+// 加载状态文本
+const getLoadingText = (key: SideNavKey): string => {
+    if (taskStatus.value === 'downloading') return '正在下载视频...'
+    if (taskStatus.value === 'transcribing') return '正在转录音频...'
+    if (key === 'podcast' && podcastSynthesizing.value) return '正在合成播客音频...'
+    if (key === 'podcast' && podcastStreaming.value) return '正在生成播客脚本...'
+    if (key === 'article' && articleStreaming.value) return '正在生成文章...'
+    if (key === 'outline' && outlineStreaming.value) return '正在生成大纲...'
+    return '加载中...'
+}
 </script>
 
 <template>
-    <main class="px-6 sm:px-10 lg:px-20 flex flex-1 justify-center py-5 sm:py-8 md:py-10">
-        <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
-            <!-- PageHeading -->
-            <div class="flex flex-wrap justify-between gap-3 p-4">
-                <div class="flex min-w-72 flex-col gap-2">
-                    <p class="text-gray-900 dark:text-white text-4xl font-black leading-tight tracking-tight-lg">
-                        {{ statusTitle }}
-                    </p>
-                </div>
-                <div
-                    v-if="isFailed"
-                    class="flex items-center"
-                >
-                    <button
-                        class="flex min-w-btn cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-wide-sm hover:bg-primary/90 transition-colors"
-                        @click="handleRetry"
-                    >
-                        <span class="truncate">重新尝试</span>
-                    </button>
-                </div>
-            </div>
+    <main class="flex flex-1 min-h-0">
+        <!-- 侧边导航 -->
+        <SideNavigation
+            :items="navItems"
+            :disabled-items="disabledItems"
+            :focused-item="focusedSection"
+            @scroll-to="scrollToSection"
+            @toggle-focus="toggleFocus"
+            @generate="handleGenerateContent"
+        />
 
-            <!-- Progress Text -->
-            <div
-                v-if="isProcessing"
-                class="px-4 pb-4"
-            >
-                <div class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg p-4">
-                    <div class="flex items-center gap-3">
-                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
-                        <span class="text-sm text-gray-600 dark:text-gray-300">{{ progressText }}</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
-                <!-- Left Column: Video Info -->
-                <aside class="lg:col-span-1 flex flex-col gap-6">
-                    <div class="flex flex-col gap-4">
-                        <div class="flex flex-col gap-1">
-                            <p class="text-gray-900 dark:text-white text-lg font-bold leading-tight">
-                                {{ result.title || '视频标题' }}
+        <!-- 主内容区 -->
+        <div class="flex-1 overflow-y-auto lg:ml-0">
+            <div class="max-w-5xl mx-auto px-6 py-8">
+                <!-- 页面头部 -->
+                <div class="mb-8">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                                {{ statusTitle }}
+                            </h1>
+                            <p
+                                v-if="result.title"
+                                class="text-lg text-gray-600 dark:text-gray-400"
+                            >
+                                {{ result.title }}
                             </p>
                         </div>
-                        <div class="flex flex-col sm:flex-row lg:flex-col gap-3">
-                            <MediaDownload
-                                type="video"
-                                :available="!!result.video_url"
-                                :is-processing="isProcessing"
-                                :download-url="videoDownloadUrl"
-                            />
-                            <MediaDownload
-                                type="audio"
-                                :available="!!result.audio_url"
-                                :is-processing="isProcessing"
-                                :download-url="audioDownloadUrl"
-                            />
-                            <PodcastPlayer
-                                v-if="showPodcast || podcastStreaming || podcastSynthesizing"
-                                :src="podcastDownloadUrl"
-                                :available="result.has_podcast_audio"
-                                :is-processing="podcastStreaming || podcastSynthesizing"
-                                :error="result.podcast_error"
-                            />
+
+                        <!-- 重试按钮 -->
+                        <button
+                            v-if="isFailed"
+                            class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                            @click="handleRetry"
+                        >
+                            <span class="material-symbols-outlined">refresh</span>
+                            <span>重新尝试</span>
+                        </button>
+                    </div>
+
+                    <!-- 进度指示器 -->
+                    <div
+                        v-if="isProcessing"
+                        class="mt-4 p-4 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg"
+                    >
+                        <div class="flex items-center gap-3">
+                            <div class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                            <span class="text-sm text-gray-600 dark:text-gray-300">{{ progressText }}</span>
                         </div>
                     </div>
-                </aside>
+                </div>
 
-                <!-- Right Column: Content -->
-                <ContentTabs
-                    v-if="hasTextContent || isProcessing"
-                    v-model:current-tab="currentTab"
-                    :is-loading="isContentLoading"
-                    :loading-text="contentLoadingText"
-                    :rendered-content="renderedContent"
-                    :show-podcast="showPodcast"
-                    @copy="taskStore.copyContent()"
-                />
+                <!-- 内容区块列表 -->
+                <div class="space-y-6">
+                    <!-- 播客区块 -->
+                    <ContentSection
+                        v-if="showPodcast"
+                        id="podcast"
+                        title="播客"
+                        icon="podcasts"
+                        :is-visible="isSectionVisible('podcast')"
+                        :is-loading="podcastStreaming || podcastSynthesizing"
+                        :loading-text="getLoadingText('podcast')"
+                    >
+                        <template #actions>
+                            <button
+                                v-if="result.podcast_script"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
+                                @click="copyContent(result.podcast_script)"
+                            >
+                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <span>复制脚本</span>
+                            </button>
+                        </template>
 
-                <!-- 仅下载模式提示 -->
-                <div
-                    v-else-if="!isFailed"
-                    class="lg:col-span-2 flex flex-col items-center justify-center bg-white dark:bg-dark-bg rounded-xl border border-gray-200 dark:border-dark-border p-12"
-                >
-                    <span class="material-symbols-outlined text-5xl text-gray-400 dark:text-gray-600 mb-4">download_done</span>
-                    <p class="text-gray-600 dark:text-gray-400 text-center">
-                        仅下载模式，无文字内容
-                    </p>
-                    <p class="text-gray-500 dark:text-gray-500 text-sm text-center mt-2">
-                        请使用左侧按钮下载视频或音频文件
-                    </p>
+                        <!-- 播客播放器 -->
+                        <PodcastPlayer
+                            :src="podcastDownloadUrl"
+                            :available="result.has_podcast_audio"
+                            :is-processing="podcastSynthesizing"
+                            :error="result.podcast_error"
+                        />
+
+                        <!-- 播客脚本 -->
+                        <div
+                            v-if="displayPodcast"
+                            class="mt-6 prose prose-sm dark:prose-invert max-w-none"
+                            v-html="renderedPodcastScript"
+                        />
+                    </ContentSection>
+
+                    <!-- 文章区块 -->
+                    <ContentSection
+                        v-if="showArticle"
+                        id="article"
+                        title="文章"
+                        icon="article"
+                        :is-visible="isSectionVisible('article')"
+                        :is-loading="articleStreaming && !displayArticle"
+                        :loading-text="getLoadingText('article')"
+                    >
+                        <template #actions>
+                            <button
+                                v-if="result.article || displayArticle"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
+                                @click="copyContent(result.article || displayArticle)"
+                            >
+                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <span>复制</span>
+                            </button>
+                        </template>
+
+                        <div
+                            v-if="displayArticle"
+                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
+                            v-html="renderedArticle"
+                        />
+                        <div
+                            v-else-if="!articleStreaming"
+                            class="text-gray-500 dark:text-gray-400 text-center py-8"
+                        >
+                            文章生成失败或未生成
+                        </div>
+                    </ContentSection>
+
+                    <!-- 大纲区块 -->
+                    <ContentSection
+                        v-if="showOutline"
+                        id="outline"
+                        title="大纲"
+                        icon="format_list_bulleted"
+                        :is-visible="isSectionVisible('outline')"
+                        :is-loading="outlineStreaming && !displayOutline"
+                        :loading-text="getLoadingText('outline')"
+                    >
+                        <template #actions>
+                            <button
+                                v-if="result.outline || displayOutline"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
+                                @click="copyContent(result.outline || displayOutline)"
+                            >
+                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <span>复制</span>
+                            </button>
+                        </template>
+
+                        <div
+                            v-if="displayOutline"
+                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
+                            v-html="renderedOutline"
+                        />
+                        <div
+                            v-else-if="!outlineStreaming"
+                            class="text-gray-500 dark:text-gray-400 text-center py-8"
+                        >
+                            大纲生成失败或未生成
+                        </div>
+                    </ContentSection>
+
+                    <!-- 视频区块 -->
+                    <ContentSection
+                        id="video"
+                        title="视频"
+                        icon="videocam"
+                        :is-visible="isSectionVisible('video')"
+                        :is-loading="taskStatus === 'downloading' && !result.video_url"
+                        :loading-text="getLoadingText('video')"
+                    >
+                        <VideoSection
+                            :src="videoDownloadUrl"
+                            :title="result.title"
+                            :available="!!result.video_url"
+                            :is-processing="taskStatus === 'downloading'"
+                        />
+                    </ContentSection>
+
+                    <!-- 音频区块 -->
+                    <ContentSection
+                        id="audio"
+                        title="音频"
+                        icon="music_note"
+                        :is-visible="isSectionVisible('audio')"
+                        :is-loading="taskStatus === 'downloading' && !result.audio_url"
+                        :loading-text="getLoadingText('audio')"
+                    >
+                        <AudioSection
+                            :src="audioDownloadUrl"
+                            :title="result.title"
+                            :available="!!result.audio_url"
+                            :is-processing="taskStatus === 'downloading'"
+                        />
+                    </ContentSection>
+
+                    <!-- 字幕区块 -->
+                    <ContentSection
+                        id="subtitle"
+                        title="字幕"
+                        icon="subtitles"
+                        :is-visible="isSectionVisible('subtitle')"
+                        :is-loading="taskStatus === 'transcribing' && !result.transcript"
+                        :loading-text="getLoadingText('subtitle')"
+                    >
+                        <SubtitleSection
+                            :content="result.transcript"
+                            :title="result.title"
+                            :is-loading="taskStatus === 'transcribing'"
+                        />
+                    </ContentSection>
                 </div>
             </div>
         </div>
