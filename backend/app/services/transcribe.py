@@ -133,17 +133,21 @@ async def extract_audio_async(
     return audio_path
 
 
+_whisper_client: AsyncOpenAI | None = None
+
+
 def get_whisper_client() -> AsyncOpenAI:
-    """获取 Whisper 兼容客户端"""
-    settings = get_settings()
-
-    if not settings.whisper_api_key:
-        raise TranscribeError("WHISPER_API_KEY 未配置")
-
-    return AsyncOpenAI(
-        base_url=settings.whisper_base_url,
-        api_key=settings.whisper_api_key,
-    )
+    """获取 Whisper 兼容客户端（单例模式，复用连接）"""
+    global _whisper_client
+    if _whisper_client is None:
+        settings = get_settings()
+        if not settings.whisper_api_key:
+            raise TranscribeError("WHISPER_API_KEY 未配置")
+        _whisper_client = AsyncOpenAI(
+            base_url=settings.whisper_base_url,
+            api_key=settings.whisper_api_key,
+        )
+    return _whisper_client
 
 
 async def check_whisper_api() -> tuple[bool, str]:

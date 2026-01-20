@@ -85,18 +85,21 @@ DEFAULT_PODCAST_SYSTEM_PROMPT = """你是一位专业的播客脚本作家，擅
 
 DEFAULT_PODCAST_USER_PROMPT = "请将以下视频转录内容改写为播客脚本，返回 json 格式：\n\n{content}"
 
+_client: AsyncOpenAI | None = None
+
 
 def get_client() -> AsyncOpenAI:
-    """获取 OpenAI 兼容客户端"""
-    settings = get_settings()
-
-    if not settings.openai_api_key:
-        raise LLMError("OPENAI_API_KEY 未配置")
-
-    return AsyncOpenAI(
-        base_url=settings.openai_base_url,
-        api_key=settings.openai_api_key,
-    )
+    """获取 OpenAI 兼容客户端（单例模式，复用连接）"""
+    global _client
+    if _client is None:
+        settings = get_settings()
+        if not settings.openai_api_key:
+            raise LLMError("OPENAI_API_KEY 未配置")
+        _client = AsyncOpenAI(
+            base_url=settings.openai_base_url,
+            api_key=settings.openai_api_key,
+        )
+    return _client
 
 
 async def check_llm_api() -> tuple[bool, str]:
