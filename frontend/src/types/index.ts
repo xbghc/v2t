@@ -5,31 +5,9 @@ export type TaskStatus =
     | 'pending'
     | 'downloading'
     | 'transcribing'
-    | 'ready_to_stream'
-    | 'generating'
-    | 'generating_podcast'
-    | 'synthesizing'
+    | 'ready'      // 转录完成，可以开始生成
     | 'completed'
     | 'failed'
-
-/**
- * SSE 流式事件类型
- */
-export type StreamEventType = 'outline' | 'article' | 'podcast_start' | 'podcast_done' | 'complete' | 'error'
-
-/**
- * SSE 流式事件数据
- */
-export interface StreamEventData {
-    content?: string
-    done?: boolean
-    type?: string
-    message?: string
-    script?: string
-    has_audio?: boolean
-    error?: string
-    status?: string
-}
 
 /**
  * 内容标签标识符
@@ -40,16 +18,6 @@ export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
  * 输入模式
  */
 export type InputMode = 'url' | 'subtitle'
-
-/**
- * 进度信息
- */
-export interface ProgressInfo {
-    title: string
-    text: string
-    percent: number
-    step: string
-}
 
 /**
  * 任务结果数据
@@ -65,20 +33,6 @@ export interface TaskResult {
     has_podcast_audio: boolean
     podcast_error: string
 }
-
-/**
- * 状态映射条目
- */
-export interface StatusMapEntry {
-    text: string
-    percent: number
-    step: string
-}
-
-/**
- * 状态映射类型
- */
-export type StatusMap = Partial<Record<TaskStatus, StatusMapEntry>>
 
 // ============ API 类型 ============
 

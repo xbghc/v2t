@@ -1,5 +1,5 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
-import type { CreateTaskResponse, CustomPrompts, GenerateOptions, PromptsResponse, StreamEventData, TaskResponse } from '@/types'
+import type { CreateTaskResponse, CustomPrompts, GenerateOptions, PromptsResponse, TaskResponse } from '@/types'
 
 /**
  * 获取默认提示词
@@ -82,29 +82,18 @@ export async function textToPodcast(
 }
 
 /**
- * 流式事件回调接口
+ * 流式生成大纲
+ * @returns 清理函数
  */
-export interface StreamCallbacks {
-    onOutline?: (content: string, done: boolean) => void
-    onArticle?: (content: string, done: boolean) => void
-    onPodcastStart?: () => void
-    onPodcastDone?: (script: string, hasAudio: boolean, error: string) => void
-    onComplete?: () => void
-    onError?: (type: string, message: string) => void
-}
-
-/**
- * 连接 SSE 流式端点获取生成内容
- * @returns 清理函数，调用后关闭连接
- */
-export function streamTaskContent(
+export function streamOutline(
     taskId: string,
-    callbacks: StreamCallbacks
+    onChunk: (content: string) => void,
+    onDone: () => void,
+    onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
-    let completed = false
 
-    fetchEventSource(`api/task/${taskId}/stream`, {
+    fetchEventSource(`api/task/${taskId}/stream/outline`, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {
@@ -119,42 +108,141 @@ export function streamTaskContent(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const eventType = ev.event
-            const data = ev.data ? JSON.parse(ev.data) as StreamEventData : {}
-
-            switch (eventType) {
-            case 'outline':
-                callbacks.onOutline?.(data.content || '', data.done || false)
-                break
-            case 'article':
-                callbacks.onArticle?.(data.content || '', data.done || false)
-                break
-            case 'podcast_start':
-                callbacks.onPodcastStart?.()
-                break
-            case 'podcast_done':
-                callbacks.onPodcastDone?.(data.script || '', data.has_audio || false, data.error || '')
-                break
-            case 'complete':
-                completed = true
-                callbacks.onComplete?.()
+            const data = JSON.parse(ev.data) as { content?: string; done?: boolean; error?: string }
+            if (data.error) {
+                onError(data.error)
                 ctrl.abort()
-                break
-            case 'error':
-                completed = true
-                callbacks.onError?.(data.type || 'unknown', data.message || '未知错误')
+            } else if (data.done) {
+                onDone()
                 ctrl.abort()
-                break
+            } else if (data.content) {
+                onChunk(data.content)
             }
         },
         onerror(err) {
-            if (!completed) {
-                callbacks.onError?.('connection', err instanceof Error ? err.message : '连接错误')
-            }
+            onError(err instanceof Error ? err.message : '连接错误')
             throw err
         },
         onclose() {
-            // 阻止自动重连
+            throw new Error('Stream closed')
+        },
+    })
+
+    return () => ctrl.abort()
+}
+
+/**
+ * 流式生成文章
+ * @returns 清理函数
+ */
+export function streamArticle(
+    taskId: string,
+    onChunk: (content: string) => void,
+    onDone: () => void,
+    onError: (error: string) => void
+): () => void {
+    const ctrl = new AbortController()
+
+    fetchEventSource(`api/task/${taskId}/stream/article`, {
+        signal: ctrl.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+                return
+            }
+            const contentType = response.headers.get('content-type')
+            if (contentType?.includes('application/json')) {
+                const data = await response.json() as { detail?: string }
+                throw new Error(data.detail || `HTTP ${response.status}`)
+            }
+            throw new Error(`HTTP ${response.status}`)
+        },
+        onmessage(ev) {
+            const data = JSON.parse(ev.data) as { content?: string; done?: boolean; error?: string }
+            if (data.error) {
+                onError(data.error)
+                ctrl.abort()
+            } else if (data.done) {
+                onDone()
+                ctrl.abort()
+            } else if (data.content) {
+                onChunk(data.content)
+            }
+        },
+        onerror(err) {
+            onError(err instanceof Error ? err.message : '连接错误')
+            throw err
+        },
+        onclose() {
+            throw new Error('Stream closed')
+        },
+    })
+
+    return () => ctrl.abort()
+}
+
+/**
+ * 播客流式事件数据
+ */
+interface PodcastStreamData {
+    content?: string
+    script_done?: boolean
+    synthesizing?: boolean
+    done?: boolean
+    has_audio?: boolean
+    audio_error?: string
+    error?: string
+}
+
+/**
+ * 流式生成播客（脚本 + 音频合成）
+ * @returns 清理函数
+ */
+export function streamPodcast(
+    taskId: string,
+    onScriptChunk: (content: string) => void,
+    onScriptDone: () => void,
+    onSynthesizing: () => void,
+    onDone: (hasAudio: boolean, audioError?: string) => void,
+    onError: (error: string) => void
+): () => void {
+    const ctrl = new AbortController()
+
+    fetchEventSource(`api/task/${taskId}/stream/podcast`, {
+        signal: ctrl.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+                return
+            }
+            const contentType = response.headers.get('content-type')
+            if (contentType?.includes('application/json')) {
+                const data = await response.json() as { detail?: string }
+                throw new Error(data.detail || `HTTP ${response.status}`)
+            }
+            throw new Error(`HTTP ${response.status}`)
+        },
+        onmessage(ev) {
+            const data = JSON.parse(ev.data) as PodcastStreamData
+            if (data.error) {
+                onError(data.error)
+                ctrl.abort()
+            } else if (data.done) {
+                onDone(data.has_audio || false, data.audio_error)
+                ctrl.abort()
+            } else if (data.synthesizing) {
+                onSynthesizing()
+            } else if (data.script_done) {
+                onScriptDone()
+            } else if (data.content) {
+                onScriptChunk(data.content)
+            }
+        },
+        onerror(err) {
+            onError(err instanceof Error ? err.message : '连接错误')
+            throw err
+        },
+        onclose() {
             throw new Error('Stream closed')
         },
     })

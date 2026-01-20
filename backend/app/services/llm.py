@@ -272,3 +272,34 @@ async def generate_podcast_script(
         max_tokens=8192,
         response_format={"type": "json_object"},
     )
+
+
+async def generate_podcast_script_stream(
+    content: str,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    流式生成播客脚本
+
+    Args:
+        content: 转录内容
+        system_prompt: 自定义系统提示词，为空则使用默认
+        user_prompt: 自定义用户提示词，为空则使用默认，使用 {content} 占位符
+
+    Yields:
+        str: 播客脚本内容片段
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt or DEFAULT_PODCAST_SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": (user_prompt or DEFAULT_PODCAST_USER_PROMPT).format(content=content),
+        },
+    ]
+
+    async for chunk in chat(messages, max_tokens=8192):
+        yield chunk

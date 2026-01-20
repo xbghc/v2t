@@ -46,10 +46,7 @@ class TaskStatus(str, Enum):
     PENDING = "pending"
     DOWNLOADING = "downloading"
     TRANSCRIBING = "transcribing"
-    READY_TO_STREAM = "ready_to_stream"  # 转录完成，等待流式生成
-    GENERATING = "generating"
-    GENERATING_PODCAST = "generating_podcast"
-    SYNTHESIZING = "synthesizing"
+    READY = "ready"  # 转录完成，可以开始生成（前端并行调用各生成端点）
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -246,7 +243,7 @@ async def process_video_task(
         task.progress = "转录完成，准备生成内容"
 
         # 4. 设置为等待流式生成状态
-        task.status = TaskStatus.READY_TO_STREAM
+        task.status = TaskStatus.READY
         logger.info("任务 %s 转录完成，等待流式生成", task_id)
 
     except DownloadError as e:
@@ -290,7 +287,7 @@ async def process_text_task(
 
     try:
         # 1. 生成播客脚本
-        task.status = TaskStatus.GENERATING_PODCAST
+        task.status = TaskStatus.READY
         task.progress = "正在生成播客脚本..."
 
         podcast_script = await generate_podcast_script(
@@ -304,7 +301,6 @@ async def process_text_task(
         task.podcast_script = podcast_script
 
         # 2. 合成播客音频
-        task.status = TaskStatus.SYNTHESIZING
         task.progress = "正在合成播客音频..."
 
         podcast_audio_path = output_dir / f"{task_id}_podcast.mp3"
@@ -337,143 +333,136 @@ async def process_text_task(
         logger.exception("任务 %s 处理异常", task_id)
 
 
-async def process_podcast_task(task_id: str):
-    """处理播客生成任务（在流式生成完成后调用）"""
-    task = tasks.get(task_id)
-    if not task or not task.generate_podcast_flag:
-        return
-
-    settings = get_settings()
-    output_dir = settings.temp_path
-
-    try:
-        # 生成播客脚本
-        task.status = TaskStatus.GENERATING_PODCAST
-        task.progress = "正在生成播客脚本..."
-
-        podcast_script = await generate_podcast_script(
-            task.transcript,
-            system_prompt=task.podcast_system_prompt or None,
-            user_prompt=task.podcast_user_prompt or None,
-        )
-        if podcast_script and len(podcast_script.strip()) >= 50:
-            task.podcast_script = podcast_script
-
-            # 合成播客音频
-            task.status = TaskStatus.SYNTHESIZING
-            task.progress = "正在合成播客音频..."
-            try:
-                podcast_audio_path = output_dir / f"{task_id}_podcast.mp3"
-                await generate_podcast_audio(
-                    podcast_script,
-                    podcast_audio_path,
-                    temp_dir=output_dir,
-                )
-                task.podcast_audio_path = podcast_audio_path
-            except PodcastTTSError as e:
-                logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
-                task.podcast_error = str(e)
-    except LLMError as e:
-        logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
-
-
-@app.get("/api/task/{task_id}/stream")
-async def stream_task_content(task_id: str, request: Request):
-    """SSE 流式传输 LLM 生成内容"""
+@app.get("/api/task/{task_id}/stream/outline")
+async def stream_outline(task_id: str, request: Request):
+    """流式生成大纲"""
     task = tasks.get(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="任务不存在或已过期")
-
-    if task.status != TaskStatus.READY_TO_STREAM:
-        raise HTTPException(status_code=400, detail=f"任务状态不正确: {task.status.value}")
-
+        raise HTTPException(status_code=404, detail="任务不存在")
     if not task.transcript:
         raise HTTPException(status_code=400, detail="转录内容不存在")
 
-    async def event_generator():
-        """生成 SSE 事件流"""
+    async def generate():
+        chunks = []
         try:
-            task.status = TaskStatus.GENERATING
-            task.progress = "正在生成内容..."
+            async for chunk in generate_outline(
+                task.transcript,
+                system_prompt=task.outline_system_prompt or None,
+                user_prompt=task.outline_user_prompt or None,
+            ):
+                if await request.is_disconnected():
+                    return
+                chunks.append(chunk)
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
 
-            # 流式生成大纲
-            if task.generate_outline_flag:
-                task.progress = "正在生成大纲..."
-                outline_chunks = []
-                try:
-                    async for chunk in generate_outline(
-                        task.transcript,
-                        system_prompt=task.outline_system_prompt or None,
-                        user_prompt=task.outline_user_prompt or None,
-                    ):
-                        # 检查客户端是否断开连接
-                        if await request.is_disconnected():
-                            logger.info("任务 %s 客户端断开连接", task_id)
-                            return
-                        outline_chunks.append(chunk)
-                        yield f"event: outline\ndata: {json.dumps({'content': chunk, 'done': False})}\n\n"
-
-                    # 保存完整大纲
-                    full_outline = "".join(outline_chunks)
-                    if full_outline and len(full_outline.strip()) >= 50:
-                        task.outline = full_outline
-                    yield f"event: outline\ndata: {json.dumps({'content': '', 'done': True})}\n\n"
-                except LLMError as e:
-                    logger.warning("任务 %s 大纲生成失败: %s", task_id, e)
-                    yield f"event: error\ndata: {json.dumps({'type': 'outline', 'message': str(e)})}\n\n"
-
-            # 流式生成文章
-            if task.generate_article_flag:
-                task.progress = "正在生成详细内容..."
-                article_chunks = []
-                try:
-                    async for chunk in generate_article(
-                        task.transcript,
-                        system_prompt=task.article_system_prompt or None,
-                        user_prompt=task.article_user_prompt or None,
-                    ):
-                        if await request.is_disconnected():
-                            logger.info("任务 %s 客户端断开连接", task_id)
-                            return
-                        article_chunks.append(chunk)
-                        yield f"event: article\ndata: {json.dumps({'content': chunk, 'done': False})}\n\n"
-
-                    # 保存完整文章
-                    full_article = "".join(article_chunks)
-                    if full_article and len(full_article.strip()) >= 50:
-                        task.article = full_article
-                    yield f"event: article\ndata: {json.dumps({'content': '', 'done': True})}\n\n"
-                except LLMError as e:
-                    logger.warning("任务 %s 文章生成失败: %s", task_id, e)
-                    yield f"event: error\ndata: {json.dumps({'type': 'article', 'message': str(e)})}\n\n"
-
-            # 处理播客（非流式，在后台进行）
-            if task.generate_podcast_flag:
-                task.progress = "正在生成播客..."
-                yield f"event: podcast_start\ndata: {json.dumps({'message': '开始生成播客'})}\n\n"
-                await process_podcast_task(task_id)
-                yield f"event: podcast_done\ndata: {json.dumps({'script': task.podcast_script, 'has_audio': task.podcast_audio_path is not None, 'error': task.podcast_error})}\n\n"
-
-            # 完成
-            task.status = TaskStatus.COMPLETED
-            task.progress = "处理完成"
-            logger.info("任务 %s 流式生成完成", task_id)
-            yield f"event: complete\ndata: {json.dumps({'status': 'completed'})}\n\n"
-
-        except Exception as e:
-            logger.exception("任务 %s 流式生成异常", task_id)
-            task.status = TaskStatus.FAILED
-            task.error = str(e)
-            task.progress = f"生成失败: {e}"
-            yield f"event: error\ndata: {json.dumps({'type': 'fatal', 'message': str(e)})}\n\n"
+            task.outline = "".join(chunks)
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except LLMError as e:
+            logger.warning("任务 %s 大纲生成失败: %s", task_id, e)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return StreamingResponse(
-        event_generator(),
+        generate(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/task/{task_id}/stream/article")
+async def stream_article(task_id: str, request: Request):
+    """流式生成文章"""
+    task = tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.transcript:
+        raise HTTPException(status_code=400, detail="转录内容不存在")
+
+    async def generate():
+        chunks = []
+        try:
+            async for chunk in generate_article(
+                task.transcript,
+                system_prompt=task.article_system_prompt or None,
+                user_prompt=task.article_user_prompt or None,
+            ):
+                if await request.is_disconnected():
+                    return
+                chunks.append(chunk)
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+            task.article = "".join(chunks)
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except LLMError as e:
+            logger.warning("任务 %s 文章生成失败: %s", task_id, e)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.get("/api/task/{task_id}/stream/podcast")
+async def stream_podcast(task_id: str, request: Request):
+    """流式生成播客脚本，完成后自动合成音频"""
+    from app.services.llm import generate_podcast_script_stream
+
+    task = tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if not task.transcript:
+        raise HTTPException(status_code=400, detail="转录内容不存在")
+
+    settings = get_settings()
+
+    async def generate():
+        chunks = []
+        try:
+            # 流式生成脚本
+            async for chunk in generate_podcast_script_stream(
+                task.transcript,
+                system_prompt=task.podcast_system_prompt or None,
+                user_prompt=task.podcast_user_prompt or None,
+            ):
+                if await request.is_disconnected():
+                    return
+                chunks.append(chunk)
+                yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+            task.podcast_script = "".join(chunks)
+            yield f"data: {json.dumps({'script_done': True})}\n\n"
+
+            # 合成音频
+            yield f"data: {json.dumps({'synthesizing': True})}\n\n"
+            try:
+                audio_path = settings.temp_path / f"{task_id}_podcast.mp3"
+                await generate_podcast_audio(task.podcast_script, audio_path, temp_dir=settings.temp_path)
+                task.podcast_audio_path = audio_path
+                yield f"data: {json.dumps({'done': True, 'has_audio': True})}\n\n"
+            except PodcastTTSError as e:
+                task.podcast_error = str(e)
+                logger.warning("任务 %s 播客音频合成失败: %s", task_id, e)
+                yield f"data: {json.dumps({'done': True, 'has_audio': False, 'audio_error': str(e)})}\n\n"
+        except LLMError as e:
+            logger.warning("任务 %s 播客脚本生成失败: %s", task_id, e)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
         },
     )
 

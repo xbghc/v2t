@@ -5,7 +5,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
-import ProgressBar from './ProgressBar.vue'
 import MediaDownload from './MediaDownload.vue'
 import PodcastPlayer from './PodcastPlayer.vue'
 import ContentTabs from './ContentTabs.vue'
@@ -27,10 +26,12 @@ const {
     taskId,
     taskStatus,
     errorMessage,
-    progress,
+    progressText,
     result,
     currentContent,
     isStreaming,
+    podcastStreaming,
+    podcastSynthesizing,
     currentTab
 } = storeToRefs(taskStore)
 
@@ -103,17 +104,15 @@ const contentLoadingText: ComputedRef<string> = computed(() => {
     if (currentTab.value === 'outline' || currentTab.value === 'article') {
         if (taskStatus.value === 'downloading') return '正在下载视频...'
         if (taskStatus.value === 'transcribing') return '正在转录音频...'
-        if (taskStatus.value === 'ready_to_stream') return '准备生成内容...'
-        if (taskStatus.value === 'generating') return '正在生成内容...'
+        if (taskStatus.value === 'ready') return '准备生成内容...'
         return '准备中...'
     }
     if (currentTab.value === 'podcast') {
         if (taskStatus.value === 'downloading') return '正在下载视频...'
         if (taskStatus.value === 'transcribing') return '正在转录音频...'
-        if (taskStatus.value === 'ready_to_stream') return '准备生成内容...'
-        if (taskStatus.value === 'generating') return '正在生成内容...'
-        if (taskStatus.value === 'generating_podcast') return '正在生成播客脚本...'
-        if (taskStatus.value === 'synthesizing') return '正在合成播客音频...'
+        if (taskStatus.value === 'ready') return '准备生成内容...'
+        if (podcastSynthesizing.value) return '正在合成播客音频...'
+        if (podcastStreaming.value) return '正在生成播客脚本...'
         return '准备中...'
     }
     return '加载中...'
@@ -177,13 +176,18 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `a
                 </div>
             </div>
 
-            <!-- Progress Bar -->
-            <ProgressBar
+            <!-- Progress Text -->
+            <div
                 v-if="isProcessing"
-                :step="progress.step"
-                :text="progress.text"
-                :percent="progress.percent"
-            />
+                class="px-4 pb-4"
+            >
+                <div class="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg p-4">
+                    <div class="flex items-center gap-3">
+                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
+                        <span class="text-sm text-gray-600 dark:text-gray-300">{{ progressText }}</span>
+                    </div>
+                </div>
+            </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 p-4 mt-4">
                 <!-- Left Column: Video Info -->
@@ -208,10 +212,10 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() => taskId.value ? `a
                                 :download-url="audioDownloadUrl"
                             />
                             <PodcastPlayer
-                                v-if="showPodcast || (taskStatus === 'generating_podcast' || taskStatus === 'synthesizing')"
+                                v-if="showPodcast || podcastStreaming || podcastSynthesizing"
                                 :src="podcastDownloadUrl"
                                 :available="result.has_podcast_audio"
-                                :is-processing="taskStatus === 'generating_podcast' || taskStatus === 'synthesizing'"
+                                :is-processing="podcastStreaming || podcastSynthesizing"
                                 :error="result.podcast_error"
                             />
                         </div>
