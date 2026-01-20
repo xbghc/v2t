@@ -1,5 +1,7 @@
 """AI 内容生成服务 - 使用 OpenAI 兼容 API"""
 
+from collections.abc import AsyncGenerator
+
 from openai import AsyncOpenAI
 
 from app.config import get_settings
@@ -102,9 +104,9 @@ async def chat(
     max_tokens: int = 4096,
     temperature: float = 0.6,
     response_format: dict | None = None,
-) -> str:
+) -> AsyncGenerator[str, None]:
     """
-    调用 AI 聊天接口
+    流式调用 AI 聊天接口，逐块 yield 内容
 
     Args:
         messages: 消息列表
@@ -112,8 +114,8 @@ async def chat(
         temperature: 温度参数
         response_format: 响应格式，如 {"type": "json_object"}
 
-    Returns:
-        str: 响应内容
+    Yields:
+        str: 响应内容片段
     """
     settings = get_settings()
     client = get_client()
@@ -131,11 +133,32 @@ async def chat(
 
     stream = await client.chat.completions.create(**kwargs)
 
-    result = []
     async for chunk in stream:
         if chunk.choices[0].delta.content:
-            result.append(chunk.choices[0].delta.content)
+            yield chunk.choices[0].delta.content
 
+
+async def chat_complete(
+    messages: list[dict],
+    max_tokens: int = 4096,
+    temperature: float = 0.6,
+    response_format: dict | None = None,
+) -> str:
+    """
+    调用 chat 并收集完整响应（用于播客脚本等需要完整 JSON 的场景）
+
+    Args:
+        messages: 消息列表
+        max_tokens: 最大 token 数
+        temperature: 温度参数
+        response_format: 响应格式，如 {"type": "json_object"}
+
+    Returns:
+        str: 完整响应内容
+    """
+    result = []
+    async for chunk in chat(messages, max_tokens, temperature, response_format):
+        result.append(chunk)
     return "".join(result)
 
 
@@ -143,17 +166,17 @@ async def generate_outline(
     content: str,
     system_prompt: str | None = None,
     user_prompt: str | None = None,
-) -> str:
+) -> AsyncGenerator[str, None]:
     """
-    根据字幕内容生成大纲和时间线
+    流式生成大纲和时间线
 
     Args:
         content: 字幕内容
         system_prompt: 自定义系统提示词，为空则使用默认
         user_prompt: 自定义用户提示词，为空则使用默认，使用 {content} 占位符
 
-    Returns:
-        str: 大纲和时间线
+    Yields:
+        str: 大纲内容片段
     """
     messages = [
         {
@@ -166,24 +189,25 @@ async def generate_outline(
         },
     ]
 
-    return await chat(messages)
+    async for chunk in chat(messages):
+        yield chunk
 
 
 async def generate_article(
     content: str,
     system_prompt: str | None = None,
     user_prompt: str | None = None,
-) -> str:
+) -> AsyncGenerator[str, None]:
     """
-    将字幕内容转化为完整文章
+    流式生成完整文章
 
     Args:
         content: 字幕内容
         system_prompt: 自定义系统提示词，为空则使用默认
         user_prompt: 自定义用户提示词，为空则使用默认，使用 {content} 占位符
 
-    Returns:
-        str: 完整文章
+    Yields:
+        str: 文章内容片段
     """
     messages = [
         {
@@ -196,7 +220,8 @@ async def generate_article(
         },
     ]
 
-    return await chat(messages, max_tokens=8192)
+    async for chunk in chat(messages, max_tokens=8192):
+        yield chunk
 
 
 async def generate_podcast_script(
@@ -205,7 +230,7 @@ async def generate_podcast_script(
     user_prompt: str | None = None,
 ) -> str:
     """
-    将转录内容转换为播客脚本
+    将转录内容转换为播客脚本（需要完整 JSON，使用非流式调用）
 
     Args:
         content: 转录内容
@@ -226,7 +251,7 @@ async def generate_podcast_script(
         },
     ]
 
-    return await chat(
+    return await chat_complete(
         messages,
         max_tokens=8192,
         response_format={"type": "json_object"},

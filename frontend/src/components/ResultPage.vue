@@ -15,13 +15,15 @@ interface Props {
     progress: ProgressInfo
     result: TaskResult
     currentContent?: string
+    isStreaming?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
     taskId: null,
     taskStatus: 'pending',
     errorMessage: '',
-    currentContent: ''
+    currentContent: '',
+    isStreaming: false
 })
 
 const currentTab = defineModel<CurrentTab>('currentTab', { default: 'article' })
@@ -33,6 +35,11 @@ defineEmits<{
 
 const isProcessing: ComputedRef<boolean> = computed(() => {
     return props.taskStatus !== 'completed' && props.taskStatus !== 'failed'
+})
+
+// 是否正在流式生成（有流式内容或正在streaming）
+const isStreamingContent: ComputedRef<boolean> = computed(() => {
+    return props.isStreaming && !!props.currentContent
 })
 
 const isFailed: ComputedRef<boolean> = computed(() => {
@@ -51,14 +58,18 @@ const isContentLoading: ComputedRef<boolean> = computed(() => {
     if (!isProcessing.value && !isFailed.value) {
         return false
     }
+    // 如果有流式内容正在显示，不显示加载状态
+    if (props.currentContent && props.isStreaming) {
+        return false
+    }
     if (currentTab.value === 'transcript') {
         return !props.result.transcript
     }
     if (currentTab.value === 'outline') {
-        return !props.result.outline && isProcessing.value
+        return !props.result.outline && !props.currentContent && isProcessing.value
     }
     if (currentTab.value === 'article') {
-        return !props.result.article && isProcessing.value
+        return !props.result.article && !props.currentContent && isProcessing.value
     }
     if (currentTab.value === 'podcast') {
         return !props.result.podcast_script && isProcessing.value
@@ -75,12 +86,14 @@ const contentLoadingText: ComputedRef<string> = computed(() => {
     if (currentTab.value === 'outline' || currentTab.value === 'article') {
         if (props.taskStatus === 'downloading') return '正在下载视频...'
         if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        if (props.taskStatus === 'ready_to_stream') return '准备生成内容...'
         if (props.taskStatus === 'generating') return '正在生成内容...'
         return '准备中...'
     }
     if (currentTab.value === 'podcast') {
         if (props.taskStatus === 'downloading') return '正在下载视频...'
         if (props.taskStatus === 'transcribing') return '正在转录音频...'
+        if (props.taskStatus === 'ready_to_stream') return '准备生成内容...'
         if (props.taskStatus === 'generating') return '正在生成内容...'
         if (props.taskStatus === 'generating_podcast') return '正在生成播客脚本...'
         if (props.taskStatus === 'synthesizing') return '正在合成播客音频...'
@@ -111,6 +124,7 @@ const statusTitle: ComputedRef<string> = computed(() => {
 
 const statusDescription: ComputedRef<string> = computed(() => {
     if (isFailed.value) return props.errorMessage
+    if (isStreamingContent.value) return '内容正在实时生成中...'
     if (isProcessing.value) return '请勿关闭页面，内容将逐步显示'
     return '查看生成的内容，复制或下载原始媒体文件'
 })

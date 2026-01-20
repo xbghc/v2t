@@ -18,7 +18,8 @@ const {
     errorMessage,
     progress,
     result,
-    currentContent
+    currentContent,
+    isStreaming
 } = storeToRefs(taskStore)
 
 // 解构方法
@@ -58,6 +59,7 @@ const { submitUrl, startNew, retryTask, copyContent } = taskStore
                     :progress="progress"
                     :result="result"
                     :current-content="currentContent"
+                    :is-streaming="isStreaming"
                     @retry="retryTask"
                     @copy="copyContent"
                 />

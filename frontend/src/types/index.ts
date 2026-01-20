@@ -5,11 +5,31 @@ export type TaskStatus =
     | 'pending'
     | 'downloading'
     | 'transcribing'
+    | 'ready_to_stream'
     | 'generating'
     | 'generating_podcast'
     | 'synthesizing'
     | 'completed'
     | 'failed'
+
+/**
+ * SSE 流式事件类型
+ */
+export type StreamEventType = 'outline' | 'article' | 'podcast_start' | 'podcast_done' | 'complete' | 'error'
+
+/**
+ * SSE 流式事件数据
+ */
+export interface StreamEventData {
+    content?: string
+    done?: boolean
+    type?: string
+    message?: string
+    script?: string
+    has_audio?: boolean
+    error?: string
+    status?: string
+}
 
 /**
  * 内容标签标识符

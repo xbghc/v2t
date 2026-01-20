@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { createTask, getTask, getDefaultPrompts, textToPodcast } from '@/api/task'
+import { createTask, getTask, getDefaultPrompts, textToPodcast, streamTaskContent } from '@/api/task'
 import type {
     PageState,
     TaskStatus,
@@ -88,6 +88,12 @@ export const useTaskStore = defineStore('task', () => {
     let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '', podcastSystem: '', podcastUser: '' }
     let pollTimer: ReturnType<typeof setInterval> | null = null
 
+    // 流式状态
+    const isStreaming: Ref<boolean> = ref(false)
+    const streamingOutline: Ref<string> = ref('')
+    const streamingArticle: Ref<string> = ref('')
+    let streamCleanup: (() => void) | null = null
+
     // 动态计算总步骤数
     const getTotalSteps = (): number => {
         // 基础步骤：下载 + 转录
@@ -109,6 +115,7 @@ export const useTaskStore = defineStore('task', () => {
             'pending': { text: '等待处理...', percent: 5, step: `步骤 1/${total}` },
             'downloading': { text: '正在下载视频...', percent: 20, step: `步骤 1/${total}` },
             'transcribing': { text: '正在转录音频...', percent: 40, step: `步骤 2/${total}` },
+            'ready_to_stream': { text: '准备生成内容...', percent: 50, step: `步骤 3/${total}` },
             'generating': { text: '正在生成内容...', percent: hasGenerate ? 60 : 40, step: `步骤 3/${total}` },
             'generating_podcast': { text: '正在生成播客脚本...', percent: hasPodcast ? 75 : 60, step: `步骤 ${hasGenerate ? 4 : 3}/${total}` },
             'synthesizing': { text: '正在合成播客音频...', percent: 90, step: `步骤 ${hasGenerate ? 5 : 4}/${total}` },
@@ -119,11 +126,19 @@ export const useTaskStore = defineStore('task', () => {
 
     // 计算属性：当前内容（用于复制）
     const currentContent: ComputedRef<string> = computed(() => {
-        if (currentTab.value === 'article') return result.article || ''
-        if (currentTab.value === 'outline') return result.outline || ''
+        if (currentTab.value === 'article') return result.article || streamingArticle.value || ''
+        if (currentTab.value === 'outline') return result.outline || streamingOutline.value || ''
         if (currentTab.value === 'podcast') return result.podcast_script || ''
         return result.transcript || ''
     })
+
+    // 计算属性：显示内容（优先使用流式内容）
+    const displayOutline: ComputedRef<string> = computed(() =>
+        isStreaming.value ? streamingOutline.value : result.outline
+    )
+    const displayArticle: ComputedRef<string> = computed(() =>
+        isStreaming.value ? streamingArticle.value : result.article
+    )
 
     // 重置状态
     const resetState = (): void => {
@@ -132,6 +147,10 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         Object.assign(progress, { title: '', text: '准备中...', percent: 10, step: '步骤 1/3' })
         Object.assign(result, { title: '', has_video: false, has_audio: false, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false })
+        // 重置流式状态
+        isStreaming.value = false
+        streamingOutline.value = ''
+        streamingArticle.value = ''
     }
 
     // 重置字幕状态
@@ -249,6 +268,71 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
+    // 停止流式连接
+    const stopStreaming = (): void => {
+        if (streamCleanup) {
+            streamCleanup()
+            streamCleanup = null
+        }
+        isStreaming.value = false
+    }
+
+    // 启动流式连接
+    const startStreaming = (id: string): void => {
+        stopStreaming()
+        isStreaming.value = true
+        streamingOutline.value = ''
+        streamingArticle.value = ''
+
+        streamCleanup = streamTaskContent(id, {
+            onOutline: (content: string, done: boolean) => {
+                if (!done) {
+                    streamingOutline.value += content
+                } else {
+                    // 流式完成，保存到结果
+                    if (streamingOutline.value) {
+                        result.outline = streamingOutline.value
+                    }
+                }
+            },
+            onArticle: (content: string, done: boolean) => {
+                if (!done) {
+                    streamingArticle.value += content
+                } else {
+                    // 流式完成，保存到结果
+                    if (streamingArticle.value) {
+                        result.article = streamingArticle.value
+                    }
+                }
+            },
+            onPodcastStart: () => {
+                taskStatus.value = 'generating_podcast'
+                progress.text = '正在生成播客脚本...'
+            },
+            onPodcastDone: (script: string, hasAudio: boolean, error: string) => {
+                if (script) result.podcast_script = script
+                result.has_podcast_audio = hasAudio
+                if (error) result.podcast_error = error
+            },
+            onComplete: () => {
+                isStreaming.value = false
+                taskStatus.value = 'completed'
+                progress.text = '处理完成'
+                progress.percent = 100
+                progress.step = '完成'
+                handleTaskComplete()
+            },
+            onError: (type: string, message: string) => {
+                console.error(`流式错误 [${type}]: ${message}`)
+                if (type === 'fatal' || type === 'connection') {
+                    isStreaming.value = false
+                    taskStatus.value = 'failed'
+                    errorMessage.value = message
+                }
+            }
+        })
+    }
+
     // 轮询任务状态
     const poll = async (): Promise<void> => {
         if (!taskId.value) return
@@ -257,7 +341,11 @@ export const useTaskStore = defineStore('task', () => {
             const data = await getTask(taskId.value)
             handleTaskUpdate(data)
 
-            if (data.status === 'completed') {
+            if (data.status === 'ready_to_stream') {
+                // 检测到准备流式状态，停止轮询，启动流式连接
+                stopPolling()
+                startStreaming(taskId.value)
+            } else if (data.status === 'completed') {
                 stopPolling()
                 handleTaskComplete()
             } else if (data.status === 'failed') {
@@ -387,6 +475,7 @@ export const useTaskStore = defineStore('task', () => {
     // 开始新任务
     const startNew = (): void => {
         stopPolling()
+        stopStreaming()
         resetState()
         resetSubtitleState()
         url.value = ''
@@ -396,6 +485,7 @@ export const useTaskStore = defineStore('task', () => {
     // 重试任务
     const retryTask = (): void => {
         stopPolling()
+        stopStreaming()
         resetState()
         url.value = lastUrl
         Object.assign(generateOptions, lastGenerateOptions)
@@ -430,9 +520,15 @@ export const useTaskStore = defineStore('task', () => {
         result,
         promptsLoaded,
         prompts,
+        // 流式状态
+        isStreaming,
+        streamingOutline,
+        streamingArticle,
 
         // 计算属性
         currentContent,
+        displayOutline,
+        displayArticle,
 
         // 方法
         resetState,
