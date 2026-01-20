@@ -121,7 +121,11 @@ async def extract_audio_async(
             raise TranscribeError("音频提取失败")
 
     except FileNotFoundError:
-        raise TranscribeError("ffmpeg 未安装，请先安装 ffmpeg")
+        raise TranscribeError(
+            "ffmpeg 未安装，请先安装:\n"
+            "  macOS: brew install ffmpeg\n"
+            "  Ubuntu: sudo apt install ffmpeg"
+        )
 
     if not audio_path.exists():
         raise TranscribeError("音频提取失败：输出文件不存在")

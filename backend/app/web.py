@@ -552,8 +552,9 @@ def run_server(host: str = "0.0.0.0", port: int = 8100):
     missing = check_dependencies()
     if missing:
         deps_str = ", ".join(f"{cmd} ({desc})" for cmd, desc in missing)
-        logger.warning("缺少系统依赖: %s", deps_str)
-        logger.warning(get_install_hint())
+        logger.error("缺少系统依赖: %s", deps_str)
+        logger.error(get_install_hint())
+        raise SystemExit(1)
 
     import uvicorn
     uvicorn.run(app, host=host, port=port)
