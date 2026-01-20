@@ -88,6 +88,11 @@ export const useTaskStore = defineStore('task', () => {
     const podcastStreaming: Ref<boolean> = ref(false)
     const podcastSynthesizing: Ref<boolean> = ref(false)
 
+    // 生成失败状态跟踪
+    const outlineFailed: Ref<boolean> = ref(false)
+    const articleFailed: Ref<boolean> = ref(false)
+    const podcastFailed: Ref<boolean> = ref(false)
+
     // 流式内容缓冲区
     const streamingOutline: Ref<string> = ref('')
     const streamingArticle: Ref<string> = ref('')
@@ -139,6 +144,10 @@ export const useTaskStore = defineStore('task', () => {
         streamingOutline.value = ''
         streamingArticle.value = ''
         streamingPodcast.value = ''
+        // 重置失败状态
+        outlineFailed.value = false
+        articleFailed.value = false
+        podcastFailed.value = false
     }
 
     // 重置字幕状态
@@ -304,6 +313,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('大纲生成失败:', err)
+                    outlineFailed.value = true
                     outlineStreaming.value = false
                     checkAllStreamingDone()
                 }
@@ -323,6 +333,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('文章生成失败:', err)
+                    articleFailed.value = true
                     articleStreaming.value = false
                     checkAllStreamingDone()
                 }
@@ -350,6 +361,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('播客生成失败:', err)
+                    podcastFailed.value = true
                     podcastStreaming.value = false
                     podcastSynthesizing.value = false
                     checkAllStreamingDone()
@@ -569,6 +581,7 @@ export const useTaskStore = defineStore('task', () => {
 
         if (type === 'outline' && !outlineStreaming.value) {
             generateOptions.outline = true
+            outlineFailed.value = false
             outlineStreaming.value = true
             streamingOutline.value = ''
             outlineCleanup = streamOutline(
@@ -580,6 +593,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('大纲生成失败:', err)
+                    outlineFailed.value = true
                     outlineStreaming.value = false
                 }
             )
@@ -587,6 +601,7 @@ export const useTaskStore = defineStore('task', () => {
 
         if (type === 'article' && !articleStreaming.value) {
             generateOptions.article = true
+            articleFailed.value = false
             articleStreaming.value = true
             streamingArticle.value = ''
             articleCleanup = streamArticle(
@@ -598,6 +613,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('文章生成失败:', err)
+                    articleFailed.value = true
                     articleStreaming.value = false
                 }
             )
@@ -605,6 +621,7 @@ export const useTaskStore = defineStore('task', () => {
 
         if (type === 'podcast' && !podcastStreaming.value) {
             generateOptions.podcast = true
+            podcastFailed.value = false
             podcastStreaming.value = true
             streamingPodcast.value = ''
             podcastCleanup = streamPodcast(
@@ -623,6 +640,7 @@ export const useTaskStore = defineStore('task', () => {
                 },
                 (err) => {
                     console.error('播客生成失败:', err)
+                    podcastFailed.value = true
                     podcastStreaming.value = false
                     podcastSynthesizing.value = false
                 }
@@ -692,6 +710,10 @@ export const useTaskStore = defineStore('task', () => {
         streamingOutline,
         streamingArticle,
         streamingPodcast,
+        // 失败状态
+        outlineFailed,
+        articleFailed,
+        podcastFailed,
 
         // 计算属性
         currentContent,

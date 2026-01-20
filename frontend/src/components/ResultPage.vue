@@ -40,7 +40,11 @@ const {
     articleStreaming,
     displayOutline,
     displayArticle,
-    displayPodcast
+    displayPodcast,
+    // 失败状态
+    outlineFailed,
+    articleFailed,
+    podcastFailed
 } = storeToRefs(taskStore)
 
 // 聚焦模式状态
@@ -248,19 +252,31 @@ const copyContent = (content: string) => {
     })
 }
 
-// 是否显示播客区块
+// 是否显示播客区块（只有在任务准备好或已有内容时才显示）
 const showPodcast = computed(() => {
-    return generateOptions.value.podcast || result.value.podcast_script || result.value.has_podcast_audio || podcastStreaming.value || podcastSynthesizing.value
+    // 已有内容或正在生成
+    if (result.value.podcast_script || result.value.has_podcast_audio || podcastStreaming.value || podcastSynthesizing.value) return true
+    // 用户选择了生成，且任务已准备好开始生成
+    if (generateOptions.value.podcast && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    return false
 })
 
-// 是否显示文章区块
+// 是否显示文章区块（只有在任务准备好或已有内容时才显示）
 const showArticle = computed(() => {
-    return generateOptions.value.article || result.value.article || articleStreaming.value
+    // 已有内容或正在生成
+    if (result.value.article || articleStreaming.value) return true
+    // 用户选择了生成，且任务已准备好开始生成
+    if (generateOptions.value.article && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    return false
 })
 
-// 是否显示大纲区块
+// 是否显示大纲区块（只有在任务准备好或已有内容时才显示）
 const showOutline = computed(() => {
-    return generateOptions.value.outline || result.value.outline || outlineStreaming.value
+    // 已有内容或正在生成
+    if (result.value.outline || outlineStreaming.value) return true
+    // 用户选择了生成，且任务已准备好开始生成
+    if (generateOptions.value.outline && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    return false
 })
 
 // 加载状态文本
@@ -365,6 +381,21 @@ const getLoadingText = (key: SideNavKey): string => {
                             class="mt-6 prose prose-sm dark:prose-invert max-w-none"
                             v-html="renderedPodcastScript"
                         />
+                        <!-- 生成失败：显示失败提示和重试按钮 -->
+                        <div
+                            v-else-if="podcastFailed && !result.has_podcast_audio"
+                            class="flex flex-col items-center justify-center py-12 gap-4"
+                        >
+                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
+                            <p class="text-gray-500 dark:text-gray-400">播客生成失败</p>
+                            <button
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="handleGenerateContent('podcast')"
+                            >
+                                <span class="material-symbols-outlined text-lg">refresh</span>
+                                <span>重新生成</span>
+                            </button>
+                        </div>
                     </ContentSection>
 
                     <!-- 文章区块 -->
@@ -393,11 +424,20 @@ const getLoadingText = (key: SideNavKey): string => {
                             class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
                             v-html="renderedArticle"
                         />
+                        <!-- 生成失败：显示失败提示和重试按钮 -->
                         <div
-                            v-else-if="!articleStreaming"
-                            class="text-gray-500 dark:text-gray-400 text-center py-8"
+                            v-else-if="articleFailed"
+                            class="flex flex-col items-center justify-center py-12 gap-4"
                         >
-                            文章生成失败或未生成
+                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
+                            <p class="text-gray-500 dark:text-gray-400">文章生成失败</p>
+                            <button
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="handleGenerateContent('article')"
+                            >
+                                <span class="material-symbols-outlined text-lg">refresh</span>
+                                <span>重新生成</span>
+                            </button>
                         </div>
                     </ContentSection>
 
@@ -427,11 +467,20 @@ const getLoadingText = (key: SideNavKey): string => {
                             class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
                             v-html="renderedOutline"
                         />
+                        <!-- 生成失败：显示失败提示和重试按钮 -->
                         <div
-                            v-else-if="!outlineStreaming"
-                            class="text-gray-500 dark:text-gray-400 text-center py-8"
+                            v-else-if="outlineFailed"
+                            class="flex flex-col items-center justify-center py-12 gap-4"
                         >
-                            大纲生成失败或未生成
+                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
+                            <p class="text-gray-500 dark:text-gray-400">大纲生成失败</p>
+                            <button
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="handleGenerateContent('outline')"
+                            >
+                                <span class="material-symbols-outlined text-lg">refresh</span>
+                                <span>重新生成</span>
+                            </button>
                         </div>
                     </ContentSection>
 
