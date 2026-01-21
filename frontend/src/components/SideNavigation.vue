@@ -80,7 +80,9 @@ const isItemFocused = (key: SideNavKey): boolean => {
     >
         <!-- 标题区域 -->
         <div class="p-4 border-b border-gray-200 dark:border-dark-border">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">内容导航</h2>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                内容导航
+            </h2>
         </div>
 
         <!-- 导航项列表 -->
@@ -169,7 +171,9 @@ const isItemFocused = (key: SideNavKey): boolean => {
                 class="px-4 py-8 text-center text-gray-400 dark:text-gray-500"
             >
                 <span class="material-symbols-outlined text-4xl mb-2">hourglass_empty</span>
-                <p class="text-sm">等待内容加载...</p>
+                <p class="text-sm">
+                    等待内容加载...
+                </p>
             </div>
         </div>
 

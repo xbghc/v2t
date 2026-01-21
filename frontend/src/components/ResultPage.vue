@@ -32,7 +32,13 @@ const {
     taskId,
     taskStatus,
     progressText,
-    result,
+    videoResult,
+    // 生成内容
+    outline,
+    article,
+    podcastScript,
+    hasPodcastAudio,
+    podcastError,
     generateOptions,
     podcastStreaming,
     podcastSynthesizing,
@@ -81,10 +87,10 @@ const statusTitle: ComputedRef<string> = computed(() => {
 // 资源 URL
 const BASE_URL = import.meta.env.BASE_URL
 const videoDownloadUrl: ComputedRef<string> = computed(() =>
-    result.value.video_url ? `${BASE_URL}${result.value.video_url.replace(/^\//, '')}` : ''
+    videoResult.value.video_url ? `${BASE_URL}${videoResult.value.video_url.replace(/^\//, '')}` : ''
 )
 const audioDownloadUrl: ComputedRef<string> = computed(() =>
-    result.value.audio_url ? `${BASE_URL}${result.value.audio_url.replace(/^\//, '')}` : ''
+    videoResult.value.audio_url ? `${BASE_URL}${videoResult.value.audio_url.replace(/^\//, '')}` : ''
 )
 const podcastDownloadUrl: ComputedRef<string> = computed(() =>
     taskId.value ? `${BASE_URL}api/task/${taskId.value}/podcast` : ''
@@ -111,34 +117,34 @@ const navItems = computed<SideNavItem[]>(() => {
     const items: SideNavItem[] = []
 
     // 播客
-    if (generateOptions.value.podcast || result.value.podcast_script || result.value.has_podcast_audio) {
+    if (generateOptions.value.podcast || podcastScript.value || hasPodcastAudio.value) {
         items.push({
             key: 'podcast',
             label: '播客',
             icon: 'podcasts',
-            hasContent: !!result.value.podcast_script || result.value.has_podcast_audio,
+            hasContent: !!podcastScript.value || hasPodcastAudio.value,
             isLoading: podcastStreaming.value || podcastSynthesizing.value
         })
     }
 
     // 文章
-    if (generateOptions.value.article || result.value.article) {
+    if (generateOptions.value.article || article.value) {
         items.push({
             key: 'article',
             label: '文章',
             icon: 'article',
-            hasContent: !!result.value.article || !!displayArticle.value,
+            hasContent: !!article.value || !!displayArticle.value,
             isLoading: articleStreaming.value
         })
     }
 
     // 大纲
-    if (generateOptions.value.outline || result.value.outline) {
+    if (generateOptions.value.outline || outline.value) {
         items.push({
             key: 'outline',
             label: '大纲',
             icon: 'format_list_bulleted',
-            hasContent: !!result.value.outline || !!displayOutline.value,
+            hasContent: !!outline.value || !!displayOutline.value,
             isLoading: outlineStreaming.value
         })
     }
@@ -148,7 +154,7 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'video',
         label: '视频',
         icon: 'videocam',
-        hasContent: !!result.value.video_url,
+        hasContent: !!videoResult.value.video_url,
         isLoading: taskStatus.value === 'downloading'
     })
 
@@ -157,7 +163,7 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'audio',
         label: '音频',
         icon: 'music_note',
-        hasContent: !!result.value.audio_url,
+        hasContent: !!videoResult.value.audio_url,
         isLoading: taskStatus.value === 'downloading'
     })
 
@@ -166,7 +172,7 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'subtitle',
         label: '字幕',
         icon: 'subtitles',
-        hasContent: !!result.value.transcript,
+        hasContent: !!videoResult.value.transcript,
         isLoading: taskStatus.value === 'transcribing'
     })
 
@@ -183,7 +189,7 @@ const disabledItems = computed<SideNavItem[]>(() => {
     }
 
     // 播客（用户未选择且没有内容）
-    if (!generateOptions.value.podcast && !result.value.podcast_script && !result.value.has_podcast_audio) {
+    if (!generateOptions.value.podcast && !podcastScript.value && !hasPodcastAudio.value) {
         items.push({
             key: 'podcast',
             label: '播客',
@@ -194,7 +200,7 @@ const disabledItems = computed<SideNavItem[]>(() => {
     }
 
     // 文章
-    if (!generateOptions.value.article && !result.value.article) {
+    if (!generateOptions.value.article && !article.value) {
         items.push({
             key: 'article',
             label: '文章',
@@ -205,7 +211,7 @@ const disabledItems = computed<SideNavItem[]>(() => {
     }
 
     // 大纲
-    if (!generateOptions.value.outline && !result.value.outline) {
+    if (!generateOptions.value.outline && !outline.value) {
         items.push({
             key: 'outline',
             label: '大纲',
@@ -255,7 +261,7 @@ const copyContent = (content: string) => {
 // 是否显示播客区块（只有在任务准备好或已有内容时才显示）
 const showPodcast = computed(() => {
     // 已有内容或正在生成
-    if (result.value.podcast_script || result.value.has_podcast_audio || podcastStreaming.value || podcastSynthesizing.value) return true
+    if (podcastScript.value || hasPodcastAudio.value || podcastStreaming.value || podcastSynthesizing.value) return true
     // 用户选择了生成，且任务已准备好开始生成
     if (generateOptions.value.podcast && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
     return false
@@ -264,7 +270,7 @@ const showPodcast = computed(() => {
 // 是否显示文章区块（只有在任务准备好或已有内容时才显示）
 const showArticle = computed(() => {
     // 已有内容或正在生成
-    if (result.value.article || articleStreaming.value) return true
+    if (article.value || articleStreaming.value) return true
     // 用户选择了生成，且任务已准备好开始生成
     if (generateOptions.value.article && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
     return false
@@ -273,7 +279,7 @@ const showArticle = computed(() => {
 // 是否显示大纲区块（只有在任务准备好或已有内容时才显示）
 const showOutline = computed(() => {
     // 已有内容或正在生成
-    if (result.value.outline || outlineStreaming.value) return true
+    if (outline.value || outlineStreaming.value) return true
     // 用户选择了生成，且任务已准备好开始生成
     if (generateOptions.value.outline && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
     return false
@@ -314,10 +320,10 @@ const getLoadingText = (key: SideNavKey): string => {
                                 {{ statusTitle }}
                             </h1>
                             <p
-                                v-if="result.title"
+                                v-if="videoResult.title"
                                 class="text-lg text-gray-600 dark:text-gray-400"
                             >
-                                {{ result.title }}
+                                {{ videoResult.title }}
                             </p>
                         </div>
 
@@ -358,9 +364,9 @@ const getLoadingText = (key: SideNavKey): string => {
                     >
                         <template #actions>
                             <button
-                                v-if="result.podcast_script"
+                                v-if="podcastScript"
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
-                                @click="copyContent(result.podcast_script)"
+                                @click="copyContent(podcastScript)"
                             >
                                 <span class="material-symbols-outlined text-lg">content_copy</span>
                                 <span>复制脚本</span>
@@ -370,9 +376,9 @@ const getLoadingText = (key: SideNavKey): string => {
                         <!-- 播客播放器 -->
                         <PodcastPlayer
                             :src="podcastDownloadUrl"
-                            :available="result.has_podcast_audio"
+                            :available="hasPodcastAudio"
                             :is-processing="podcastSynthesizing"
-                            :error="result.podcast_error"
+                            :error="podcastError"
                         />
 
                         <!-- 播客脚本 -->
@@ -383,11 +389,13 @@ const getLoadingText = (key: SideNavKey): string => {
                         />
                         <!-- 生成失败：显示失败提示和重试按钮 -->
                         <div
-                            v-else-if="podcastFailed && !result.has_podcast_audio"
+                            v-else-if="podcastFailed && !hasPodcastAudio"
                             class="flex flex-col items-center justify-center py-12 gap-4"
                         >
                             <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">播客生成失败</p>
+                            <p class="text-gray-500 dark:text-gray-400">
+                                播客生成失败
+                            </p>
                             <button
                                 class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                                 @click="handleGenerateContent('podcast')"
@@ -410,9 +418,9 @@ const getLoadingText = (key: SideNavKey): string => {
                     >
                         <template #actions>
                             <button
-                                v-if="result.article || displayArticle"
+                                v-if="article || displayArticle"
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
-                                @click="copyContent(result.article || displayArticle)"
+                                @click="copyContent(article || displayArticle)"
                             >
                                 <span class="material-symbols-outlined text-lg">content_copy</span>
                                 <span>复制</span>
@@ -430,7 +438,9 @@ const getLoadingText = (key: SideNavKey): string => {
                             class="flex flex-col items-center justify-center py-12 gap-4"
                         >
                             <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">文章生成失败</p>
+                            <p class="text-gray-500 dark:text-gray-400">
+                                文章生成失败
+                            </p>
                             <button
                                 class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                                 @click="handleGenerateContent('article')"
@@ -453,9 +463,9 @@ const getLoadingText = (key: SideNavKey): string => {
                     >
                         <template #actions>
                             <button
-                                v-if="result.outline || displayOutline"
+                                v-if="outline || displayOutline"
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
-                                @click="copyContent(result.outline || displayOutline)"
+                                @click="copyContent(outline || displayOutline)"
                             >
                                 <span class="material-symbols-outlined text-lg">content_copy</span>
                                 <span>复制</span>
@@ -473,7 +483,9 @@ const getLoadingText = (key: SideNavKey): string => {
                             class="flex flex-col items-center justify-center py-12 gap-4"
                         >
                             <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">大纲生成失败</p>
+                            <p class="text-gray-500 dark:text-gray-400">
+                                大纲生成失败
+                            </p>
                             <button
                                 class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                                 @click="handleGenerateContent('outline')"
@@ -490,13 +502,13 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="视频"
                         icon="videocam"
                         :is-visible="isSectionVisible('video')"
-                        :is-loading="taskStatus === 'downloading' && !result.video_url"
+                        :is-loading="taskStatus === 'downloading' && !videoResult.video_url"
                         :loading-text="getLoadingText('video')"
                     >
                         <VideoSection
                             :src="videoDownloadUrl"
-                            :title="result.title"
-                            :available="!!result.video_url"
+                            :title="videoResult.title"
+                            :available="!!videoResult.video_url"
                             :is-processing="taskStatus === 'downloading'"
                         />
                     </ContentSection>
@@ -507,13 +519,13 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="音频"
                         icon="music_note"
                         :is-visible="isSectionVisible('audio')"
-                        :is-loading="taskStatus === 'downloading' && !result.audio_url"
+                        :is-loading="taskStatus === 'downloading' && !videoResult.audio_url"
                         :loading-text="getLoadingText('audio')"
                     >
                         <AudioSection
                             :src="audioDownloadUrl"
-                            :title="result.title"
-                            :available="!!result.audio_url"
+                            :title="videoResult.title"
+                            :available="!!videoResult.audio_url"
                             :is-processing="taskStatus === 'downloading'"
                         />
                     </ContentSection>
@@ -524,12 +536,12 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="字幕"
                         icon="subtitles"
                         :is-visible="isSectionVisible('subtitle')"
-                        :is-loading="taskStatus === 'transcribing' && !result.transcript"
+                        :is-loading="taskStatus === 'transcribing' && !videoResult.transcript"
                         :loading-text="getLoadingText('subtitle')"
                     >
                         <SubtitleSection
-                            :content="result.transcript"
-                            :title="result.title"
+                            :content="videoResult.transcript"
+                            :title="videoResult.title"
                             :is-loading="taskStatus === 'transcribing'"
                         />
                     </ContentSection>

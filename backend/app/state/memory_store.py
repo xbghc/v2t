@@ -3,7 +3,7 @@
 import logging
 import time
 
-from app.models.entities import Resource, TaskResult
+from app.models.entities import PodcastTask, Resource, Task, VideoTask
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 resources: dict[str, Resource] = {}
 
 # 内存存储任务（小规模使用足够）
-tasks: dict[str, TaskResult] = {}
+tasks: dict[str, Task] = {}
 
 # 资源过期时间（2小时）
 RESOURCE_EXPIRE_SECONDS = 7200
@@ -20,7 +20,7 @@ RESOURCE_EXPIRE_SECONDS = 7200
 TASK_EXPIRE_SECONDS = 3600
 
 
-def get_task(task_id: str) -> TaskResult | None:
+def get_task(task_id: str) -> Task | None:
     """获取任务"""
     return tasks.get(task_id)
 
@@ -30,7 +30,7 @@ def get_resource(resource_id: str) -> Resource | None:
     return resources.get(resource_id)
 
 
-def register_task(task: TaskResult) -> None:
+def register_task(task: Task) -> None:
     """注册任务"""
     tasks[task.task_id] = task
 
@@ -90,11 +90,11 @@ def cleanup_old_tasks() -> None:
     for tid in expired:
         task = tasks.pop(tid, None)
         if task:
-            # 减少资源引用计数
-            if task.resource_id and task.resource_id in resources:
+            # VideoTask: 减少资源引用计数
+            if isinstance(task, VideoTask) and task.resource_id and task.resource_id in resources:
                 resources[task.resource_id].ref_count -= 1
-            # 删除播客临时文件
-            if task.podcast_audio_path and task.podcast_audio_path.exists():
+            # PodcastTask: 删除播客临时文件
+            if isinstance(task, PodcastTask) and task.podcast_audio_path and task.podcast_audio_path.exists():
                 try:
                     task.podcast_audio_path.unlink()
                 except OSError as e:

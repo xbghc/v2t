@@ -1,10 +1,9 @@
 """视频处理后台任务"""
 
 import logging
-from dataclasses import dataclass
 
 from app.config import get_settings
-from app.models.entities import Resource, TaskResult
+from app.models.entities import Resource, VideoTask
 from app.models.enums import TaskStatus
 from app.services.transcribe import TranscribeError, extract_audio_async
 from app.services.video_downloader import DownloadError, download_video
@@ -14,22 +13,7 @@ from app.utils.hash import compute_file_hash
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class VideoTaskOptions:
-    """视频任务选项"""
-
-    generate_outline: bool = True
-    generate_article: bool = True
-    generate_podcast: bool = False
-    outline_system_prompt: str = ""
-    outline_user_prompt: str = ""
-    article_system_prompt: str = ""
-    article_user_prompt: str = ""
-    podcast_system_prompt: str = ""
-    podcast_user_prompt: str = ""
-
-
-async def update_task_status(task: TaskResult, status: TaskStatus, progress: str) -> None:
+async def update_task_status(task: VideoTask, status: TaskStatus, progress: str) -> None:
     """更新任务状态并推送 SSE 事件"""
     task.status = status
     task.progress = progress
@@ -52,36 +36,13 @@ async def update_task_status(task: TaskResult, status: TaskStatus, progress: str
 async def process_video_task(
     task_id: str,
     url: str,
-    options: VideoTaskOptions,
 ) -> None:
     """后台处理视频任务（下载和转录阶段）"""
     task = get_task(task_id)
-    if not task:
+    if not task or not isinstance(task, VideoTask):
         return
 
-    # 保存生成选项和提示词到任务中
-    task.generate_outline_flag = options.generate_outline
-    task.generate_article_flag = options.generate_article
-    task.generate_podcast_flag = options.generate_podcast
-    task.outline_system_prompt = options.outline_system_prompt
-    task.outline_user_prompt = options.outline_user_prompt
-    task.article_system_prompt = options.article_system_prompt
-    task.article_user_prompt = options.article_user_prompt
-    task.podcast_system_prompt = options.podcast_system_prompt
-    task.podcast_user_prompt = options.podcast_user_prompt
-
-    # 判断是否需要转录（任一生成选项开启则需要转录）
-    need_transcribe = (
-        options.generate_outline or options.generate_article or options.generate_podcast
-    )
-    logger.info(
-        "任务 %s 开始处理: %s (大纲: %s, 文章: %s, 播客: %s)",
-        task_id,
-        url,
-        options.generate_outline,
-        options.generate_article,
-        options.generate_podcast,
-    )
+    logger.info("任务 %s 开始处理: %s", task_id, url)
 
     settings = get_settings()
     output_dir = settings.temp_path
@@ -124,12 +85,6 @@ async def process_video_task(
         else:
             audio_path = resource.audio_path
             logger.info("任务 %s 复用音频资源", task_id)
-
-        # 仅下载模式：不需要转录，直接完成
-        if not need_transcribe:
-            await update_task_status(task, TaskStatus.COMPLETED, "下载完成")
-            logger.info("任务 %s 下载完成: %s", task_id, task.title)
-            return
 
         # 检查视频时长
         if video_result.duration and video_result.duration > settings.max_video_duration:

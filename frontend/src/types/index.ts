@@ -19,20 +19,17 @@ export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
  */
 export type InputMode = 'url' | 'subtitle'
 
+// ============ 任务类型 ============
+
 /**
- * 任务结果数据
+ * 视频任务结果（本地状态）
  */
-export interface TaskResult {
+export interface VideoTaskResult {
     title: string
     resource_id: string | null
     video_url: string | null
     audio_url: string | null
-    article: string
-    outline: string
     transcript: string
-    podcast_script: string
-    has_podcast_audio: boolean
-    podcast_error: string
 }
 
 // ============ API 类型 ============
@@ -42,15 +39,14 @@ export interface TaskResult {
  */
 export interface CreateTaskRequest {
     url: string
-    generate_outline: boolean
-    generate_article: boolean
-    generate_podcast: boolean
-    outline_system_prompt?: string
-    outline_user_prompt?: string
-    article_system_prompt?: string
-    article_user_prompt?: string
-    podcast_system_prompt?: string
-    podcast_user_prompt?: string
+}
+
+/**
+ * 流式生成请求参数
+ */
+export interface StreamPrompts {
+    systemPrompt: string
+    userPrompt: string
 }
 
 /**
@@ -87,18 +83,9 @@ export interface CustomPrompts {
 }
 
 /**
- * POST /api/process 响应
+ * 视频任务响应
  */
-export interface CreateTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-}
-
-/**
- * GET /api/task/{task_id} 响应
- */
-export interface TaskResponse {
+export interface VideoTaskResponse {
     task_id: string
     status: TaskStatus
     progress: string
@@ -107,8 +94,39 @@ export interface TaskResponse {
     video_url: string | null
     audio_url: string | null
     transcript: string
+    error: string
+}
+
+/**
+ * 大纲任务响应
+ */
+export interface OutlineTaskResponse {
+    task_id: string
+    status: TaskStatus
+    progress: string
     outline: string
+    error: string
+}
+
+/**
+ * 文章任务响应
+ */
+export interface ArticleTaskResponse {
+    task_id: string
+    status: TaskStatus
+    progress: string
     article: string
+    error: string
+}
+
+/**
+ * 播客任务响应
+ */
+export interface PodcastTaskResponse {
+    task_id: string
+    status: TaskStatus
+    progress: string
+    title: string
     podcast_script: string
     has_podcast_audio: boolean
     podcast_error: string
@@ -116,9 +134,9 @@ export interface TaskResponse {
 }
 
 /**
- * SSE 状态流事件数据
+ * SSE 状态流事件数据（VideoTask）
  */
-export interface StatusStreamData {
+export interface VideoStatusStreamData {
     status: TaskStatus
     progress: string
     title: string
@@ -126,6 +144,19 @@ export interface StatusStreamData {
     video_url: string | null
     audio_url: string | null
     transcript: string
+    error: string
+}
+
+/**
+ * SSE 状态流事件数据（PodcastTask）
+ */
+export interface PodcastStatusStreamData {
+    status: TaskStatus
+    progress: string
+    title: string
+    podcast_script: string
+    has_podcast_audio: boolean
+    podcast_error: string
     error: string
 }
 

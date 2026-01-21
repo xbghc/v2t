@@ -21,32 +21,62 @@ class Resource:
 
 
 @dataclass
-class TaskResult:
-    """任务结果"""
+class VideoTask:
+    """视频下载和转录任务"""
 
     task_id: str
     status: TaskStatus = TaskStatus.PENDING
     progress: str = "等待处理..."
     title: str = ""
-    resource_id: str | None = None  # 关联的资源 ID（文件哈希）
+    resource_id: str | None = None
     transcript: str = ""
-    outline: str = ""
-    article: str = ""
-    podcast_script: str = ""
-    podcast_audio_path: Path | None = None
-    podcast_error: str = ""  # 播客生成失败的错误信息
     error: str = ""
     created_at: float = field(default_factory=time.time)
-    # 生成选项（用于 SSE 流式生成）
-    generate_outline_flag: bool = False
-    generate_article_flag: bool = False
-    generate_podcast_flag: bool = False
-    # 自定义提示词
-    outline_system_prompt: str = ""
-    outline_user_prompt: str = ""
-    article_system_prompt: str = ""
-    article_user_prompt: str = ""
-    podcast_system_prompt: str = ""
-    podcast_user_prompt: str = ""
-    # SSE 状态推送队列
     status_queue: Queue | None = field(default=None, repr=False)
+
+
+@dataclass
+class OutlineTask:
+    """大纲生成任务"""
+
+    task_id: str
+    status: TaskStatus = TaskStatus.PENDING
+    progress: str = "等待处理..."
+    transcript: str = ""  # 输入
+    outline: str = ""  # 输出
+    error: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class ArticleTask:
+    """文章生成任务"""
+
+    task_id: str
+    status: TaskStatus = TaskStatus.PENDING
+    progress: str = "等待处理..."
+    transcript: str = ""  # 输入
+    article: str = ""  # 输出
+    error: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
+@dataclass
+class PodcastTask:
+    """播客生成任务"""
+
+    task_id: str
+    status: TaskStatus = TaskStatus.PENDING
+    progress: str = "等待处理..."
+    title: str = ""
+    transcript: str = ""  # 输入
+    podcast_script: str = ""
+    podcast_audio_path: Path | None = None
+    podcast_error: str = ""
+    error: str = ""
+    created_at: float = field(default_factory=time.time)
+    status_queue: Queue | None = field(default=None, repr=False)
+
+
+# 任务类型联合
+Task = VideoTask | OutlineTask | ArticleTask | PodcastTask

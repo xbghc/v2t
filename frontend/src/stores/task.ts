@@ -1,17 +1,27 @@
 import { defineStore } from 'pinia'
 import { ref, reactive, computed } from 'vue'
 import type { Ref, ComputedRef } from 'vue'
-import { createTask, getTask, getDefaultPrompts, textToPodcast, streamOutline, streamArticle, streamPodcast, streamTaskStatus } from '@/api/task'
+import {
+    createVideoTask,
+    getVideoTask,
+    getDefaultPrompts,
+    createPodcastTask,
+    streamOutline,
+    streamArticle,
+    streamPodcast,
+    streamVideoTaskStatus
+} from '@/api/task'
 import { useToastStore } from '@/stores/toast'
 import type {
     TaskStatus,
     CurrentTab,
-    TaskResult,
-    TaskResponse,
+    VideoTaskResult,
+    VideoTaskResponse,
     CustomPrompts,
     GenerateOptions,
     InputMode,
-    StatusStreamData
+    VideoStatusStreamData,
+    StreamPrompts
 } from '@/types'
 
 export const useTaskStore = defineStore('task', () => {
@@ -47,19 +57,26 @@ export const useTaskStore = defineStore('task', () => {
     const progressText: Ref<string> = ref('准备中...')
     const progressTitle: Ref<string> = ref('')
 
-    // 处理结果
-    const result: TaskResult = reactive({
+    // 视频任务结果
+    const videoResult: VideoTaskResult = reactive({
         title: '',
         resource_id: null,
         video_url: null,
         audio_url: null,
-        article: '',
-        outline: '',
-        transcript: '',
-        podcast_script: '',
-        has_podcast_audio: false,
-        podcast_error: ''
+        transcript: ''
     })
+
+    // 生成内容结果
+    const outline: Ref<string> = ref('')
+    const article: Ref<string> = ref('')
+    const podcastScript: Ref<string> = ref('')
+    const hasPodcastAudio: Ref<boolean> = ref(false)
+    const podcastError: Ref<string> = ref('')
+
+    // 各任务 ID
+    const outlineTaskId: Ref<string | null> = ref(null)
+    const articleTaskId: Ref<string | null> = ref(null)
+    const podcastTaskId: Ref<string | null> = ref(null)
 
     // 提示词状态
     const promptsLoaded: Ref<boolean> = ref(false)
@@ -77,8 +94,6 @@ export const useTaskStore = defineStore('task', () => {
 
     // 保存最后一次提交的参数，用于重试
     let lastUrl: string = ''
-    let lastGenerateOptions: GenerateOptions = { outline: true, article: true, podcast: false }
-    let lastPrompts: CustomPrompts = { outlineSystem: '', outlineUser: '', articleSystem: '', articleUser: '', podcastSystem: '', podcastUser: '' }
     // SSE 状态流清理函数
     let statusStreamCleanup: (() => void) | null = null
 
@@ -110,21 +125,21 @@ export const useTaskStore = defineStore('task', () => {
 
     // 计算属性：当前内容（用于复制）
     const currentContent: ComputedRef<string> = computed(() => {
-        if (currentTab.value === 'article') return result.article || streamingArticle.value || ''
-        if (currentTab.value === 'outline') return result.outline || streamingOutline.value || ''
-        if (currentTab.value === 'podcast') return result.podcast_script || streamingPodcast.value || ''
-        return result.transcript || ''
+        if (currentTab.value === 'article') return article.value || streamingArticle.value || ''
+        if (currentTab.value === 'outline') return outline.value || streamingOutline.value || ''
+        if (currentTab.value === 'podcast') return podcastScript.value || streamingPodcast.value || ''
+        return videoResult.transcript || ''
     })
 
     // 计算属性：显示内容（优先使用流式内容）
     const displayOutline: ComputedRef<string> = computed(() =>
-        outlineStreaming.value ? streamingOutline.value : result.outline
+        outlineStreaming.value ? streamingOutline.value : outline.value
     )
     const displayArticle: ComputedRef<string> = computed(() =>
-        articleStreaming.value ? streamingArticle.value : result.article
+        articleStreaming.value ? streamingArticle.value : article.value
     )
     const displayPodcast: ComputedRef<string> = computed(() =>
-        podcastStreaming.value ? streamingPodcast.value : result.podcast_script
+        podcastStreaming.value ? streamingPodcast.value : podcastScript.value
     )
 
     // 重置状态
@@ -135,7 +150,18 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
         progressText.value = '准备中...'
         progressTitle.value = ''
-        Object.assign(result, { title: '', resource_id: null, video_url: null, audio_url: null, article: '', outline: '', transcript: '', podcast_script: '', has_podcast_audio: false, podcast_error: '' })
+        // 重置视频结果
+        Object.assign(videoResult, { title: '', resource_id: null, video_url: null, audio_url: null, transcript: '' })
+        // 重置生成内容
+        outline.value = ''
+        article.value = ''
+        podcastScript.value = ''
+        hasPodcastAudio.value = false
+        podcastError.value = ''
+        // 重置任务 ID
+        outlineTaskId.value = null
+        articleTaskId.value = null
+        podcastTaskId.value = null
         // 重置流式状态
         outlineStreaming.value = false
         articleStreaming.value = false
@@ -296,18 +322,24 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 并行启动所有流式生成
-    const startGenerating = (id: string): void => {
+    const startGenerating = (videoTaskIdStr: string): void => {
         progressText.value = '正在生成内容...'
 
         // 根据选项并行启动多个流
         if (generateOptions.outline) {
             outlineStreaming.value = true
             streamingOutline.value = ''
+            const outlinePrompts: StreamPrompts = {
+                systemPrompt: prompts.outlineSystem,
+                userPrompt: prompts.outlineUser
+            }
             outlineCleanup = streamOutline(
-                id,
+                videoTaskIdStr,
+                outlinePrompts,
+                (newTaskId) => { outlineTaskId.value = newTaskId },
                 (chunk) => { streamingOutline.value += chunk },
                 () => {
-                    result.outline = streamingOutline.value
+                    outline.value = streamingOutline.value
                     outlineStreaming.value = false
                     checkAllStreamingDone()
                 },
@@ -323,11 +355,17 @@ export const useTaskStore = defineStore('task', () => {
         if (generateOptions.article) {
             articleStreaming.value = true
             streamingArticle.value = ''
+            const articlePrompts: StreamPrompts = {
+                systemPrompt: prompts.articleSystem,
+                userPrompt: prompts.articleUser
+            }
             articleCleanup = streamArticle(
-                id,
+                videoTaskIdStr,
+                articlePrompts,
+                (newTaskId) => { articleTaskId.value = newTaskId },
                 (chunk) => { streamingArticle.value += chunk },
                 () => {
-                    result.article = streamingArticle.value
+                    article.value = streamingArticle.value
                     articleStreaming.value = false
                     checkAllStreamingDone()
                 },
@@ -343,18 +381,24 @@ export const useTaskStore = defineStore('task', () => {
         if (generateOptions.podcast) {
             podcastStreaming.value = true
             streamingPodcast.value = ''
+            const podcastPrompts: StreamPrompts = {
+                systemPrompt: prompts.podcastSystem,
+                userPrompt: prompts.podcastUser
+            }
             podcastCleanup = streamPodcast(
-                id,
+                videoTaskIdStr,
+                podcastPrompts,
+                (newTaskId) => { podcastTaskId.value = newTaskId },
                 (chunk) => { streamingPodcast.value += chunk },
                 () => { /* script done, wait for audio */ },
                 () => {
                     podcastSynthesizing.value = true
                     progressText.value = '正在合成播客音频...'
                 },
-                (hasAudio, audioError) => {
-                    result.podcast_script = streamingPodcast.value
-                    result.has_podcast_audio = hasAudio
-                    if (audioError) result.podcast_error = audioError
+                (hasAudio, audioErr) => {
+                    podcastScript.value = streamingPodcast.value
+                    hasPodcastAudio.value = hasAudio
+                    if (audioErr) podcastError.value = audioErr
                     podcastStreaming.value = false
                     podcastSynthesizing.value = false
                     checkAllStreamingDone()
@@ -378,18 +422,18 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 处理 SSE 状态更新
-    const handleStatusStreamUpdate = (data: StatusStreamData): void => {
+    const handleStatusStreamUpdate = (data: VideoStatusStreamData): void => {
         taskStatus.value = data.status
 
         // 渐进更新数据
         if (data.title) {
             progressTitle.value = data.title
-            result.title = data.title
+            videoResult.title = data.title
         }
-        if (data.resource_id) result.resource_id = data.resource_id
-        if (data.video_url) result.video_url = data.video_url
-        if (data.audio_url) result.audio_url = data.audio_url
-        if (data.transcript) result.transcript = data.transcript
+        if (data.resource_id) videoResult.resource_id = data.resource_id
+        if (data.video_url) videoResult.video_url = data.video_url
+        if (data.audio_url) videoResult.audio_url = data.audio_url
+        if (data.transcript) videoResult.transcript = data.transcript
 
         // 更新进度文本
         progressText.value = data.progress || getProgressText(data.status)
@@ -414,7 +458,7 @@ export const useTaskStore = defineStore('task', () => {
     const startStatusStream = (id: string): void => {
         taskId.value = id
         stopStatusStream()
-        statusStreamCleanup = streamTaskStatus(
+        statusStreamCleanup = streamVideoTaskStatus(
             id,
             handleStatusStreamUpdate,
             (err) => {
@@ -423,30 +467,25 @@ export const useTaskStore = defineStore('task', () => {
         )
     }
 
-    // 处理任务更新
-    const handleTaskUpdate = (data: TaskResponse): void => {
+    // 处理视频任务更新
+    const handleVideoTaskUpdate = (data: VideoTaskResponse): void => {
         taskStatus.value = data.status
 
         // 渐进更新数据
         if (data.title) {
             progressTitle.value = data.title
-            result.title = data.title
+            videoResult.title = data.title
         }
-        if (data.resource_id) result.resource_id = data.resource_id
-        if (data.video_url) result.video_url = data.video_url
-        if (data.audio_url) result.audio_url = data.audio_url
-        if (data.transcript) result.transcript = data.transcript
-        if (data.outline) result.outline = data.outline
-        if (data.article) result.article = data.article
-        if (data.podcast_script) result.podcast_script = data.podcast_script
-        if (data.has_podcast_audio) result.has_podcast_audio = true
-        if (data.podcast_error) result.podcast_error = data.podcast_error
+        if (data.resource_id) videoResult.resource_id = data.resource_id
+        if (data.video_url) videoResult.video_url = data.video_url
+        if (data.audio_url) videoResult.audio_url = data.audio_url
+        if (data.transcript) videoResult.transcript = data.transcript
 
         // 更新进度文本
         progressText.value = data.progress || getProgressText(data.status)
 
         // 自动切换到有内容的 tab
-        if (result.transcript && !result.outline && !result.article && !result.podcast_script && currentTab.value !== 'transcript') {
+        if (videoResult.transcript && !outline.value && !article.value && !podcastScript.value && currentTab.value !== 'transcript') {
             currentTab.value = 'transcript'
         }
     }
@@ -467,11 +506,11 @@ export const useTaskStore = defineStore('task', () => {
     // 处理任务完成
     const handleTaskComplete = (): void => {
         // 优先显示有内容的 tab
-        if (result.article) {
+        if (article.value) {
             currentTab.value = 'article'
-        } else if (result.outline) {
+        } else if (outline.value) {
             currentTab.value = 'outline'
-        } else if (result.podcast_script) {
+        } else if (podcastScript.value) {
             currentTab.value = 'podcast'
         } else {
             currentTab.value = 'transcript'
@@ -479,7 +518,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 处理任务失败
-    const handleTaskFailed = (data: TaskResponse): void => {
+    const handleTaskFailed = (data: VideoTaskResponse): void => {
         errorMessage.value = data.error || '处理失败'
     }
 
@@ -492,14 +531,12 @@ export const useTaskStore = defineStore('task', () => {
         }
 
         lastUrl = url.value
-        lastGenerateOptions = { ...generateOptions }
-        lastPrompts = { ...prompts }
         // 保存当前提示词到 localStorage
         savePromptsToStorage()
         resetState()
 
         try {
-            const data = await createTask(url.value, lastGenerateOptions, lastPrompts)
+            const data = await createVideoTask(url.value)
             startStatusStream(data.task_id)
             return data.task_id
         } catch (error) {
@@ -517,7 +554,6 @@ export const useTaskStore = defineStore('task', () => {
             return null
         }
 
-        lastPrompts = { ...prompts }
         // 保存当前提示词到 localStorage
         savePromptsToStorage()
         resetState()
@@ -527,13 +563,16 @@ export const useTaskStore = defineStore('task', () => {
         currentTab.value = 'podcast'
 
         try {
-            const data = await textToPodcast(
+            const data = await createPodcastTask(
                 subtitleText.value,
                 subtitleTitle.value,
                 prompts.podcastSystem,
                 prompts.podcastUser
             )
-            startStatusStream(data.task_id)
+            // 播客任务也需要监听状态流
+            taskId.value = data.task_id
+            podcastTaskId.value = data.task_id
+            taskStatus.value = data.status
             return data.task_id
         } catch (error) {
             errorMessage.value = (error as Error).message
@@ -557,8 +596,6 @@ export const useTaskStore = defineStore('task', () => {
         stopAllStreaming()
         resetState()
         url.value = lastUrl
-        Object.assign(generateOptions, lastGenerateOptions)
-        Object.assign(prompts, lastPrompts)
         return submitUrl()
     }
 
@@ -577,18 +614,24 @@ export const useTaskStore = defineStore('task', () => {
     const generateSingleContent = (type: 'outline' | 'article' | 'podcast'): void => {
         if (!taskId.value) return
 
-        const id = taskId.value
+        const videoTaskIdStr = taskId.value
 
         if (type === 'outline' && !outlineStreaming.value) {
             generateOptions.outline = true
             outlineFailed.value = false
             outlineStreaming.value = true
             streamingOutline.value = ''
+            const outlinePrompts: StreamPrompts = {
+                systemPrompt: prompts.outlineSystem,
+                userPrompt: prompts.outlineUser
+            }
             outlineCleanup = streamOutline(
-                id,
+                videoTaskIdStr,
+                outlinePrompts,
+                (newTaskId) => { outlineTaskId.value = newTaskId },
                 (chunk) => { streamingOutline.value += chunk },
                 () => {
-                    result.outline = streamingOutline.value
+                    outline.value = streamingOutline.value
                     outlineStreaming.value = false
                 },
                 (err) => {
@@ -604,11 +647,17 @@ export const useTaskStore = defineStore('task', () => {
             articleFailed.value = false
             articleStreaming.value = true
             streamingArticle.value = ''
+            const articlePrompts: StreamPrompts = {
+                systemPrompt: prompts.articleSystem,
+                userPrompt: prompts.articleUser
+            }
             articleCleanup = streamArticle(
-                id,
+                videoTaskIdStr,
+                articlePrompts,
+                (newTaskId) => { articleTaskId.value = newTaskId },
                 (chunk) => { streamingArticle.value += chunk },
                 () => {
-                    result.article = streamingArticle.value
+                    article.value = streamingArticle.value
                     articleStreaming.value = false
                 },
                 (err) => {
@@ -624,17 +673,23 @@ export const useTaskStore = defineStore('task', () => {
             podcastFailed.value = false
             podcastStreaming.value = true
             streamingPodcast.value = ''
+            const podcastPrompts: StreamPrompts = {
+                systemPrompt: prompts.podcastSystem,
+                userPrompt: prompts.podcastUser
+            }
             podcastCleanup = streamPodcast(
-                id,
+                videoTaskIdStr,
+                podcastPrompts,
+                (newTaskId) => { podcastTaskId.value = newTaskId },
                 (chunk) => { streamingPodcast.value += chunk },
                 () => { /* script done, wait for audio */ },
                 () => {
                     podcastSynthesizing.value = true
                 },
-                (hasAudio, audioError) => {
-                    result.podcast_script = streamingPodcast.value
-                    result.has_podcast_audio = hasAudio
-                    if (audioError) result.podcast_error = audioError
+                (hasAudio, audioErr) => {
+                    podcastScript.value = streamingPodcast.value
+                    hasPodcastAudio.value = hasAudio
+                    if (audioErr) podcastError.value = audioErr
                     podcastStreaming.value = false
                     podcastSynthesizing.value = false
                 },
@@ -660,9 +715,9 @@ export const useTaskStore = defineStore('task', () => {
         stopAllStreaming()
 
         try {
-            const data = await getTask(id)
+            const data = await getVideoTask(id)
             taskId.value = id
-            handleTaskUpdate(data)
+            handleVideoTaskUpdate(data)
 
             // 根据任务状态决定后续操作
             if (data.status === 'ready') {
@@ -698,7 +753,17 @@ export const useTaskStore = defineStore('task', () => {
         errorMessage,
         progressText,
         progressTitle,
-        result,
+        videoResult,
+        // 生成内容
+        outline,
+        article,
+        podcastScript,
+        hasPodcastAudio,
+        podcastError,
+        // 各任务 ID
+        outlineTaskId,
+        articleTaskId,
+        podcastTaskId,
         promptsLoaded,
         prompts,
         // 流式状态

@@ -3,6 +3,7 @@
 import logging
 
 from app.config import get_settings
+from app.models.entities import PodcastTask
 from app.models.enums import TaskStatus
 from app.services.llm import LLMError, generate_podcast_script
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
@@ -11,7 +12,7 @@ from app.state import get_task
 logger = logging.getLogger(__name__)
 
 
-async def process_text_task(
+async def process_text_to_podcast_task(
     task_id: str,
     text: str,
     title: str = "",
@@ -20,7 +21,7 @@ async def process_text_task(
 ) -> None:
     """后台处理文本转播客任务"""
     task = get_task(task_id)
-    if not task:
+    if not task or not isinstance(task, PodcastTask):
         return
 
     logger.info("任务 %s 开始处理文本转播客", task_id)
