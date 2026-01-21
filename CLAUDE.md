@@ -12,9 +12,14 @@ v2t 是一个视频转文字 Web 应用，提供视频下载、音频转录、AI
 v2t/
 ├── backend/                    # Python 后端 (仅 API)
 │   ├── app/
-│   │   ├── web.py
+│   │   ├── main.py            # 应用入口
 │   │   ├── config.py
-│   │   └── services/
+│   │   ├── models/            # 数据模型
+│   │   ├── state/             # 状态管理
+│   │   ├── tasks/             # 后台任务
+│   │   ├── routers/           # API 路由
+│   │   ├── utils/             # 工具函数
+│   │   └── services/          # 业务服务层
 │   ├── tests/
 │   ├── pyproject.toml
 │   └── pytest.ini
@@ -78,9 +83,27 @@ docker-compose up -d
 
 ```
 backend/app/
-├── web.py          # Web入口 (FastAPI)，后台任务+内存存储
-├── config.py       # 配置管理 (环境变量 > JSON文件 > 默认值)
-└── services/       # 业务服务层
+├── main.py           # 应用入口 (FastAPI)，组装路由
+├── config.py         # 配置管理 (环境变量 > JSON文件 > 默认值)
+├── models/           # 数据模型
+│   ├── enums.py      # TaskStatus 枚举
+│   ├── entities.py   # Resource, TaskResult 数据类
+│   └── schemas.py    # Pydantic 请求/响应模型
+├── state/            # 状态管理
+│   └── memory_store.py  # 内存存储、清理逻辑
+├── tasks/            # 后台任务
+│   ├── video_task.py    # 视频处理任务 + VideoTaskOptions
+│   └── text_task.py     # 文本转播客任务
+├── routers/          # API 路由
+│   ├── process.py    # POST /api/process, /api/text-to-podcast
+│   ├── task.py       # GET /api/task/{id}, /api/task/{id}/status-stream
+│   ├── stream.py     # GET /api/task/{id}/stream/* 流式端点
+│   ├── resource.py   # GET /api/resource/{id}/* 下载
+│   └── prompts.py    # GET /api/prompts
+├── utils/            # 工具函数
+│   ├── hash.py       # 文件哈希计算
+│   └── sse.py        # SSE 辅助函数
+└── services/         # 业务服务层
     ├── xiazaitool.py       # 视频链接解析 (外部API)
     ├── video_downloader.py # 视频下载 (aria2c)
     ├── transcribe.py       # 音频转录 (Whisper 兼容 API)

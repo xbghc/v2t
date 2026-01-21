@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-v2t-web = "app.web:run_server"
+v2t-web = "app.main:run_server"
 
 [dependency-groups]
 dev = [
