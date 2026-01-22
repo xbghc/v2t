@@ -59,7 +59,18 @@ async def update_workspace_status(
 
 
 async def process_workspace(workspace_id: str, url: str) -> None:
-    """后台处理工作区任务（下载和转录）"""
+    """
+    后台处理工作区任务（下载和转录）。
+
+    资源文件组织结构：
+        {temp_dir}/{url_hash}/
+            meta.json         # 元数据
+            video.mp4         # 视频
+            audio.mp3         # 音频
+            transcript.json   # 转录文本
+
+    支持文件复用：如果资源文件已存在，跳过对应处理步骤。
+    """
     workspace = get_workspace(workspace_id)
     if not workspace:
         return
@@ -78,6 +89,8 @@ async def process_workspace(workspace_id: str, url: str) -> None:
 
         video_result = await download_video(url, output_dir=output_dir)
         workspace.title = video_result.title
+        url_hash = video_result.url_hash
+        resource_dir = output_dir / url_hash
 
         # 添加视频资源
         video_resource = WorkspaceResource(
@@ -96,7 +109,8 @@ async def process_workspace(workspace_id: str, url: str) -> None:
         await update_workspace_status(
             workspace, WorkspaceStatus.TRANSCRIBING, "正在提取音频..."
         )
-        audio_path = await extract_audio_async(video_result.path)
+        audio_path = resource_dir / "audio.mp3"
+        audio_path = await extract_audio_async(video_result.path, audio_path=audio_path)
 
         # 添加音频资源
         audio_resource = WorkspaceResource(
@@ -114,17 +128,32 @@ async def process_workspace(workspace_id: str, url: str) -> None:
             raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
 
         # 3. 转录音频
-        await update_workspace_status(
-            workspace, WorkspaceStatus.TRANSCRIBING, "正在转录音频..."
-        )
-        transcript = await transcribe_audio(audio_path)
+        transcript_path = resource_dir / "transcript.json"
+
+        # 检查转录是否已存在（复用）
+        if transcript_path.exists():
+            try:
+                data = json.loads(transcript_path.read_text(encoding="utf-8"))
+                transcript = data.get("content", "")
+                logger.info("复用已有转录: %s", url_hash)
+            except (json.JSONDecodeError, OSError):
+                transcript = None
+        else:
+            transcript = None
+
+        if not transcript:
+            await update_workspace_status(
+                workspace, WorkspaceStatus.TRANSCRIBING, "正在转录音频..."
+            )
+            transcript = await transcribe_audio(audio_path)
+
+            # 保存转录结果
+            transcript_path.write_text(
+                json.dumps({"prompt": "", "content": transcript}, ensure_ascii=False),
+                encoding="utf-8",
+            )
 
         # 添加转录资源（TEXT 类型）
-        transcript_path = output_dir / f"{workspace_id}_transcript.json"
-        transcript_path.write_text(
-            json.dumps({"prompt": "", "content": transcript}, ensure_ascii=False),
-            encoding="utf-8",
-        )
         transcript_resource = WorkspaceResource(
             resource_id=str(uuid.uuid4())[:8],
             name="transcript",
