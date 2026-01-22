@@ -106,11 +106,6 @@ const renderedPodcastScript: ComputedRef<string> = computed(() => {
     return marked.parse(displayPodcast.value) as string
 })
 
-const renderedZhihuArticle: ComputedRef<string> = computed(() => {
-    if (!displayZhihu.value) return ''
-    return marked.parse(displayZhihu.value) as string
-})
-
 // 切换聚焦模式
 const toggleFocus = (key: SideNavKey) => {
     focusedSection.value = focusedSection.value === key ? null : key
@@ -322,28 +317,13 @@ const loadingState = computed<LoadingTextState>(() => ({
                             </button>
                         </template>
 
-                        <div
-                            v-if="displayZhihu"
-                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
-                            v-html="renderedZhihuArticle"
+                        <MarkdownContent
+                            content-key="zhihu"
+                            :display-content="displayZhihu"
+                            :is-failed="zhihuFailed"
+                            label="知乎文章"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="zhihuFailed"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                知乎文章生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('zhihu')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 视频区块 -->
