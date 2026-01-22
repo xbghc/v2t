@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
 import { useResultActions, getLoadingText, type LoadingTextState } from '@/composables/useResultActions'
+import { useContentVisibility } from '@/composables/useContentVisibility'
 import type { SideNavItem, SideNavKey } from '@/types'
 import SideNavigation from './SideNavigation.vue'
 import ContentSection from './ContentSection.vue'
@@ -18,6 +19,7 @@ const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
 const { handleRetry, handleGenerateContent, copyContent, scrollToSection } = useResultActions()
+const { showPodcast, showArticle, showOutline, showZhihu } = useContentVisibility()
 
 // 从 store 获取响应式状态
 const {
@@ -260,40 +262,6 @@ const toggleFocus = (key: SideNavKey) => {
 const isSectionVisible = (key: SideNavKey): boolean => {
     return focusedSection.value === null || focusedSection.value === key
 }
-
-// 是否显示播客区块（只有在工作区准备好或已有内容时才显示）
-const showPodcast = computed(() => {
-    // 已有内容或正在生成
-    if (podcastScript.value || hasPodcastAudio.value || podcastStreaming.value || podcastSynthesizing.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.podcast && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示文章区块（只有在工作区准备好或已有内容时才显示）
-const showArticle = computed(() => {
-    // 已有内容或正在生成
-    if (article.value || articleStreaming.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.article && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示大纲区块（只有在工作区准备好或已有内容时才显示）
-const showOutline = computed(() => {
-    // 已有内容或正在生成
-    if (outline.value || outlineStreaming.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.outline && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示知乎区块
-const showZhihu = computed(() => {
-    // 已有内容或正在生成
-    if (zhihuArticle.value || zhihuStreaming.value) return true
-    return false
-})
 
 // 加载状态（用于 getLoadingText）
 const loadingState = computed<LoadingTextState>(() => ({
