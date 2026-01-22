@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
-import { useToastStore } from '@/stores/toast'
+import { useResultActions, getLoadingText, type LoadingTextState } from '@/composables/useResultActions'
 import type { SideNavItem, SideNavKey } from '@/types'
 import SideNavigation from './SideNavigation.vue'
 import ContentSection from './ContentSection.vue'
@@ -17,15 +17,7 @@ import PodcastPlayer from './PodcastPlayer.vue'
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
-const toastStore = useToastStore()
-
-// 重试并导航
-const handleRetry = async () => {
-    const workspaceId = await taskStore.retryTask()
-    if (workspaceId) {
-        router.push({ name: 'workspace', params: { id: workspaceId } })
-    }
-}
+const { handleRetry, handleGenerateContent, copyContent, scrollToSection } = useResultActions()
 
 // 从 store 获取响应式状态
 const {
@@ -269,36 +261,6 @@ const isSectionVisible = (key: SideNavKey): boolean => {
     return focusedSection.value === null || focusedSection.value === key
 }
 
-// 滚动到指定区块
-const scrollToSection = (key: SideNavKey) => {
-    const element = document.getElementById(`section-${key}`)
-    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-// 生成单个内容
-const handleGenerateContent = (key: SideNavKey) => {
-    if (key === 'podcast' || key === 'article' || key === 'outline' || key === 'zhihu') {
-        taskStore.generateSingleContent(key)
-        const labels: Record<string, string> = {
-            podcast: '播客',
-            article: '文章',
-            outline: '大纲',
-            zhihu: '知乎文章'
-        }
-        toastStore.showToast(`正在生成${labels[key]}...`, 'info')
-    }
-}
-
-// 复制内容
-const copyContent = (content: string) => {
-    if (!content) return
-    navigator.clipboard.writeText(content).then(() => {
-        toastStore.showToast('已复制到剪贴板', 'success')
-    }).catch(() => {
-        toastStore.showToast('复制失败，请手动选择复制', 'error')
-    })
-}
-
 // 是否显示播客区块（只有在工作区准备好或已有内容时才显示）
 const showPodcast = computed(() => {
     // 已有内容或正在生成
@@ -333,17 +295,15 @@ const showZhihu = computed(() => {
     return false
 })
 
-// 加载状态文本
-const getLoadingText = (key: SideNavKey): string => {
-    if (workspaceStatus.value === 'downloading') return '正在下载视频...'
-    if (workspaceStatus.value === 'transcribing') return '正在转录音频...'
-    if (key === 'podcast' && podcastSynthesizing.value) return '正在合成播客音频...'
-    if (key === 'podcast' && podcastStreaming.value) return '正在生成播客脚本...'
-    if (key === 'article' && articleStreaming.value) return '正在生成文章...'
-    if (key === 'outline' && outlineStreaming.value) return '正在生成大纲...'
-    if (key === 'zhihu' && zhihuStreaming.value) return '正在生成知乎文章...'
-    return '加载中...'
-}
+// 加载状态（用于 getLoadingText）
+const loadingState = computed<LoadingTextState>(() => ({
+    workspaceStatus: workspaceStatus.value,
+    podcastSynthesizing: podcastSynthesizing.value,
+    podcastStreaming: podcastStreaming.value,
+    articleStreaming: articleStreaming.value,
+    outlineStreaming: outlineStreaming.value,
+    zhihuStreaming: zhihuStreaming.value
+}))
 </script>
 
 <template>
@@ -409,7 +369,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="podcasts"
                         :is-visible="isSectionVisible('podcast')"
                         :is-loading="podcastStreaming || podcastSynthesizing"
-                        :loading-text="getLoadingText('podcast')"
+                        :loading-text="getLoadingText('podcast', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -463,7 +423,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="article"
                         :is-visible="isSectionVisible('article')"
                         :is-loading="articleStreaming && !displayArticle"
-                        :loading-text="getLoadingText('article')"
+                        :loading-text="getLoadingText('article', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -508,7 +468,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="format_list_bulleted"
                         :is-visible="isSectionVisible('outline')"
                         :is-loading="outlineStreaming && !displayOutline"
-                        :loading-text="getLoadingText('outline')"
+                        :loading-text="getLoadingText('outline', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -553,7 +513,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="edit_document"
                         :is-visible="isSectionVisible('zhihu')"
                         :is-loading="zhihuStreaming && !displayZhihu"
-                        :loading-text="getLoadingText('zhihu')"
+                        :loading-text="getLoadingText('zhihu', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -597,7 +557,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="videocam"
                         :is-visible="isSectionVisible('video')"
                         :is-loading="workspaceStatus === 'downloading' && !videoUrl"
-                        :loading-text="getLoadingText('video')"
+                        :loading-text="getLoadingText('video', loadingState)"
                     >
                         <VideoSection
                             :src="videoDownloadUrl"
@@ -614,7 +574,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="music_note"
                         :is-visible="isSectionVisible('audio')"
                         :is-loading="workspaceStatus === 'downloading' && !audioUrl"
-                        :loading-text="getLoadingText('audio')"
+                        :loading-text="getLoadingText('audio', loadingState)"
                     >
                         <AudioSection
                             :src="audioDownloadUrl"
@@ -631,7 +591,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="subtitles"
                         :is-visible="isSectionVisible('subtitle')"
                         :is-loading="workspaceStatus === 'transcribing' && !transcript"
-                        :loading-text="getLoadingText('subtitle')"
+                        :loading-text="getLoadingText('subtitle', loadingState)"
                     >
                         <SubtitleSection
                             :content="transcript"
