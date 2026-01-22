@@ -1,34 +1,36 @@
 """视频下载服务 - 使用 xiazaitool API + aria2c 多线程下载"""
 
 import asyncio
+import json
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from pathvalidate import sanitize_filename as _sanitize_filename
 from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 
 from app.config import get_settings
 from app.services.xiazaitool import XiazaitoolError, parse_video_url
+from app.utils.url_hash import compute_url_hash
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadError(Exception):
     """下载错误"""
+
     pass
 
 
 @dataclass
 class VideoResult:
     """下载结果"""
+
     path: Path
     title: str
+    url_hash: str
     duration: int | None = None  # 秒
-
-
-def sanitize_filename(filename: str, max_len: int = 200) -> str:
-    """清理文件名，移除非法字符"""
-    return _sanitize_filename(filename, max_len=max_len, replacement_text="_")
 
 
 def get_referer(url: str) -> str:
@@ -59,7 +61,7 @@ def parse_aria2c_progress(line: str) -> tuple[int, int] | None:
         (downloaded_bytes, total_bytes) 或 None
     """
     # 匹配格式: [#xxx 1.2MiB/10MiB(12%) ...]
-    match = re.search(r'\[#\w+ ([\d.]+)(\w+)/([\d.]+)(\w+)', line)
+    match = re.search(r"\[#\w+ ([\d.]+)(\w+)/([\d.]+)(\w+)", line)
     if not match:
         return None
 
@@ -74,42 +76,59 @@ def parse_aria2c_progress(line: str) -> tuple[int, int] | None:
     return downloaded, total
 
 
-async def download_file(
+def _read_meta(resource_dir: Path) -> dict | None:
+    """读取资源目录的元数据"""
+    meta_path = resource_dir / "meta.json"
+    if meta_path.exists():
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return None
+
+
+def _write_meta(resource_dir: Path, meta: dict) -> None:
+    """写入资源目录的元数据"""
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    meta_path = resource_dir / "meta.json"
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _touch_dir(resource_dir: Path) -> None:
+    """更新目录的访问时间"""
+    if resource_dir.exists():
+        resource_dir.touch()
+
+
+async def _download_with_aria2c(
     url: str,
     video_url: str,
-    title: str,
-    output_dir: Path | None = None,
-) -> VideoResult:
+    save_path: Path,
+) -> None:
     """
     使用 aria2c 多线程下载视频文件
 
     Args:
         url: 原始视频页面链接（用于获取 referer）
         video_url: 直接下载链接
-        title: 视频标题
-        output_dir: 输出目录（默认使用临时目录）
-
-    Returns:
-        VideoResult: 下载结果
+        save_path: 保存路径
     """
-    settings = get_settings()
-    download_dir = output_dir or settings.temp_path
-
-    save_name = f"{sanitize_filename(title)}.mp4" if title else "video.mp4"
-    save_path = download_dir / save_name
-
-    # 已存在则直接返回
-    if save_path.exists():
-        return VideoResult(path=save_path, title=title)
+    download_dir = save_path.parent
+    save_name = save_path.name
 
     # 构建 aria2c 命令
     cmd = [
         "aria2c",
-        "-x", "16",  # 最大连接数
-        "-s", "16",  # 分段数
-        "-k", "1M",  # 最小分片大小
-        "-d", str(download_dir),  # 下载目录
-        "-o", save_name,  # 输出文件名
+        "-x",
+        "16",  # 最大连接数
+        "-s",
+        "16",  # 分段数
+        "-k",
+        "1M",  # 最小分片大小
+        "-d",
+        str(download_dir),  # 下载目录
+        "-o",
+        save_name,  # 输出文件名
         "--continue=true",  # 断点续传
         "--auto-file-renaming=false",  # 不自动重命名
         "--allow-overwrite=false",  # 不覆盖
@@ -189,8 +208,6 @@ async def download_file(
             else:
                 raise DownloadError("下载完成但文件不存在")
 
-        return VideoResult(path=save_path, title=title)
-
     except FileNotFoundError:
         raise DownloadError(
             "aria2c 未安装，请先安装:\n"
@@ -201,7 +218,14 @@ async def download_file(
 
 async def download_video(url: str, output_dir: Path | None = None) -> VideoResult:
     """
-    下载视频
+    下载视频，支持文件复用。
+
+    文件组织结构：
+        {output_dir}/{url_hash}/
+            meta.json     # 元数据（标题、URL等）
+            video.mp4     # 视频文件
+
+    如果视频已存在，直接返回复用；否则下载并保存。
 
     Args:
         url: 视频页面链接
@@ -213,6 +237,23 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
     Raises:
         DownloadError: 下载失败
     """
+    settings = get_settings()
+    base_dir = output_dir or settings.temp_path
+
+    # 计算 URL 哈希
+    url_hash = compute_url_hash(url)
+    resource_dir = base_dir / url_hash
+    video_path = resource_dir / "video.mp4"
+
+    # 检查是否已存在（复用）
+    if video_path.exists():
+        meta = _read_meta(resource_dir)
+        title = meta.get("title", "") if meta else ""
+        _touch_dir(resource_dir)  # 更新访问时间
+        logger.info("复用已有视频: %s", url_hash)
+        return VideoResult(path=video_path, title=title, url_hash=url_hash)
+
+    # 解析视频链接
     try:
         video_info = await parse_video_url(url)
     except XiazaitoolError as e:
@@ -221,9 +262,19 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
     if not video_info.video_url:
         raise DownloadError("无法获取视频下载链接")
 
-    return await download_file(
+    # 创建目录并保存元数据
+    resource_dir.mkdir(parents=True, exist_ok=True)
+    _write_meta(resource_dir, {
+        "url": url,
+        "title": video_info.title,
+        "cover_url": video_info.cover_url,
+    })
+
+    # 下载视频
+    await _download_with_aria2c(
         url=url,
         video_url=video_info.video_url,
-        title=video_info.title,
-        output_dir=output_dir,
+        save_path=video_path,
     )
+
+    return VideoResult(path=video_path, title=video_info.title, url_hash=url_hash)
