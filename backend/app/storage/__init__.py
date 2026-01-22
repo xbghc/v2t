@@ -2,6 +2,7 @@
 
 from app.storage.file_storage import FileStorage
 from app.storage.local_file import LocalFileStorage
+from app.storage.memory_metadata import MemoryMetadataStore
 from app.storage.metadata_store import MetadataStore
 
-__all__ = ["FileStorage", "LocalFileStorage", "MetadataStore"]
+__all__ = ["FileStorage", "LocalFileStorage", "MemoryMetadataStore", "MetadataStore"]
