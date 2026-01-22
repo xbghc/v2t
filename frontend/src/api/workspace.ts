@@ -1,27 +1,12 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type {
     PromptsResponse,
-    VideoTaskResponse,
-    OutlineTaskResponse,
-    ArticleTaskResponse,
-    PodcastTaskResponse,
-    ZhihuArticleTaskResponse,
-    VideoStatusStreamData,
+    WorkspaceResponse,
+    StreamPrompts,
 } from '@/types'
-
-// 任务响应联合类型
-type TaskResponse = VideoTaskResponse | OutlineTaskResponse | ArticleTaskResponse | PodcastTaskResponse | ZhihuArticleTaskResponse
 
 // API 基础路径，使用 Vite 的 base 配置
 const API_BASE = `${import.meta.env.BASE_URL}api`
-
-/**
- * 流式请求参数
- */
-interface StreamPrompts {
-    systemPrompt: string
-    userPrompt: string
-}
 
 /**
  * 获取默认提示词
@@ -35,75 +20,47 @@ export async function getDefaultPrompts(): Promise<PromptsResponse> {
 }
 
 /**
- * 创建视频处理任务
+ * 创建工作区
  */
-export async function createVideoTask(url: string): Promise<VideoTaskResponse> {
-    const response = await fetch(`${API_BASE}/process-video`, {
+export async function createWorkspace(url: string): Promise<WorkspaceResponse> {
+    const response = await fetch(`${API_BASE}/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
     })
-    const data = await response.json() as VideoTaskResponse | { detail: string }
+    const data = await response.json() as WorkspaceResponse | { detail: string }
 
     if (!response.ok) {
-        throw new Error((data as { detail: string }).detail || '提交失败')
+        throw new Error((data as { detail: string }).detail || '创建工作区失败')
     }
 
-    return data as VideoTaskResponse
+    return data as WorkspaceResponse
 }
 
 /**
- * 获取任务状态（通用）
+ * 获取工作区信息
  */
-export async function getTask(taskId: string): Promise<TaskResponse> {
-    const response = await fetch(`${API_BASE}/task/${taskId}`)
-    return response.json() as Promise<TaskResponse>
+export async function getWorkspace(workspaceId: string): Promise<WorkspaceResponse> {
+    const response = await fetch(`${API_BASE}/workspaces/${workspaceId}`)
+    if (!response.ok) {
+        const data = await response.json() as { detail?: string }
+        throw new Error(data.detail || '获取工作区失败')
+    }
+    return response.json() as Promise<WorkspaceResponse>
 }
 
 /**
- * 获取视频任务状态
- */
-export async function getVideoTask(taskId: string): Promise<VideoTaskResponse> {
-    const response = await fetch(`${API_BASE}/task/${taskId}`)
-    return response.json() as Promise<VideoTaskResponse>
-}
-
-/**
- * 获取大纲任务状态
- */
-export async function getOutlineTask(taskId: string): Promise<OutlineTaskResponse> {
-    const response = await fetch(`${API_BASE}/task/${taskId}`)
-    return response.json() as Promise<OutlineTaskResponse>
-}
-
-/**
- * 获取文章任务状态
- */
-export async function getArticleTask(taskId: string): Promise<ArticleTaskResponse> {
-    const response = await fetch(`${API_BASE}/task/${taskId}`)
-    return response.json() as Promise<ArticleTaskResponse>
-}
-
-/**
- * 获取播客任务状态
- */
-export async function getPodcastTask(taskId: string): Promise<PodcastTaskResponse> {
-    const response = await fetch(`${API_BASE}/task/${taskId}`)
-    return response.json() as Promise<PodcastTaskResponse>
-}
-
-/**
- * SSE 流式监听视频任务状态变化
+ * SSE 流式监听工作区状态变化
  * @returns 清理函数
  */
-export function streamVideoTaskStatus(
-    taskId: string,
-    onStatusChange: (data: VideoStatusStreamData) => void,
+export function streamWorkspaceStatus(
+    workspaceId: string,
+    onStatusChange: (data: WorkspaceResponse) => void,
     onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`${API_BASE}/task/${taskId}/status-stream`, {
+    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/status-stream`, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {
@@ -118,10 +75,10 @@ export function streamVideoTaskStatus(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const data = JSON.parse(ev.data) as VideoStatusStreamData
+            const data = JSON.parse(ev.data) as WorkspaceResponse
             onStatusChange(data)
             // 终态自动关闭连接
-            if (data.status === 'completed' || data.status === 'failed' || data.status === 'ready') {
+            if (data.status === 'failed' || data.status === 'ready') {
                 ctrl.abort()
             }
         },
@@ -130,7 +87,7 @@ export function streamVideoTaskStatus(
             throw err
         },
         onclose() {
-            // SSE 连接正常关闭（到达终态后）
+            // SSE 连接正常关闭
         },
     })
 
@@ -138,50 +95,36 @@ export function streamVideoTaskStatus(
 }
 
 /**
- * 文本转播客任务
+ * 流式生成事件数据
  */
-export async function createPodcastTask(
-    text: string,
-    title: string = '',
-    podcastSystemPrompt: string = '',
-    podcastUserPrompt: string = ''
-): Promise<PodcastTaskResponse> {
-    const response = await fetch(`${API_BASE}/text-to-podcast`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            text,
-            title,
-            podcast_system_prompt: podcastSystemPrompt,
-            podcast_user_prompt: podcastUserPrompt,
-        })
-    })
-    const data = await response.json() as PodcastTaskResponse | { detail: string }
-
-    if (!response.ok) {
-        throw new Error((data as { detail: string }).detail || '提交失败')
-    }
-
-    return data as PodcastTaskResponse
+interface StreamEventData {
+    resource_id?: string
+    content?: string
+    done?: boolean
+    error?: string
+    // 播客特有
+    script_done?: boolean
+    synthesizing?: boolean
+    has_audio?: boolean
+    audio_error?: string
+    audio_resource_id?: string
 }
 
 /**
  * 流式生成大纲
- * @param videoTaskId 视频任务 ID（用于获取转录内容）
- * @param onTaskCreated 新建的大纲任务 ID 回调
  * @returns 清理函数
  */
 export function streamOutline(
-    videoTaskId: string,
+    workspaceId: string,
     prompts: StreamPrompts,
-    onTaskCreated: (taskId: string) => void,
+    onResourceCreated: (resourceId: string) => void,
     onChunk: (content: string) => void,
     onDone: () => void,
     onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`${API_BASE}/task/${videoTaskId}/stream/outline`, {
+    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/outline`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -202,12 +145,12 @@ export function streamOutline(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const data = JSON.parse(ev.data) as { task_id?: string; content?: string; done?: boolean; error?: string }
+            const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
                 ctrl.abort()
-            } else if (data.task_id) {
-                onTaskCreated(data.task_id)
+            } else if (data.resource_id) {
+                onResourceCreated(data.resource_id)
             } else if (data.done) {
                 onDone()
                 ctrl.abort()
@@ -229,21 +172,19 @@ export function streamOutline(
 
 /**
  * 流式生成文章
- * @param videoTaskId 视频任务 ID（用于获取转录内容）
- * @param onTaskCreated 新建的文章任务 ID 回调
  * @returns 清理函数
  */
 export function streamArticle(
-    videoTaskId: string,
+    workspaceId: string,
     prompts: StreamPrompts,
-    onTaskCreated: (taskId: string) => void,
+    onResourceCreated: (resourceId: string) => void,
     onChunk: (content: string) => void,
     onDone: () => void,
     onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`${API_BASE}/task/${videoTaskId}/stream/article`, {
+    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/article`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -264,12 +205,12 @@ export function streamArticle(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const data = JSON.parse(ev.data) as { task_id?: string; content?: string; done?: boolean; error?: string }
+            const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
                 ctrl.abort()
-            } else if (data.task_id) {
-                onTaskCreated(data.task_id)
+            } else if (data.resource_id) {
+                onResourceCreated(data.resource_id)
             } else if (data.done) {
                 onDone()
                 ctrl.abort()
@@ -290,38 +231,22 @@ export function streamArticle(
 }
 
 /**
- * 播客流式事件数据
- */
-interface PodcastStreamData {
-    task_id?: string
-    content?: string
-    script_done?: boolean
-    synthesizing?: boolean
-    done?: boolean
-    has_audio?: boolean
-    audio_error?: string
-    error?: string
-}
-
-/**
  * 流式生成播客（脚本 + 音频合成）
- * @param videoTaskId 视频任务 ID（用于获取转录内容）
- * @param onTaskCreated 新建的播客任务 ID 回调
  * @returns 清理函数
  */
 export function streamPodcast(
-    videoTaskId: string,
+    workspaceId: string,
     prompts: StreamPrompts,
-    onTaskCreated: (taskId: string) => void,
+    onResourceCreated: (resourceId: string) => void,
     onScriptChunk: (content: string) => void,
     onScriptDone: () => void,
     onSynthesizing: () => void,
-    onDone: (hasAudio: boolean, audioError?: string) => void,
+    onDone: (hasAudio: boolean, audioResourceId?: string, audioError?: string) => void,
     onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`${API_BASE}/task/${videoTaskId}/stream/podcast`, {
+    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/podcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -342,14 +267,14 @@ export function streamPodcast(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const data = JSON.parse(ev.data) as PodcastStreamData
+            const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
                 ctrl.abort()
-            } else if (data.task_id) {
-                onTaskCreated(data.task_id)
+            } else if (data.resource_id) {
+                onResourceCreated(data.resource_id)
             } else if (data.done) {
-                onDone(data.has_audio || false, data.audio_error)
+                onDone(data.has_audio || false, data.audio_resource_id, data.audio_error)
                 ctrl.abort()
             } else if (data.synthesizing) {
                 onSynthesizing()
@@ -373,21 +298,19 @@ export function streamPodcast(
 
 /**
  * 流式生成知乎文章
- * @param videoTaskId 视频任务 ID（用于获取转录内容）
- * @param onTaskCreated 新建的知乎文章任务 ID 回调
  * @returns 清理函数
  */
 export function streamZhihuArticle(
-    videoTaskId: string,
+    workspaceId: string,
     prompts: StreamPrompts,
-    onTaskCreated: (taskId: string) => void,
+    onResourceCreated: (resourceId: string) => void,
     onChunk: (content: string) => void,
     onDone: () => void,
     onError: (error: string) => void
 ): () => void {
     const ctrl = new AbortController()
 
-    fetchEventSource(`${API_BASE}/task/${videoTaskId}/stream/zhihu-article`, {
+    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/zhihu-article`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -408,12 +331,12 @@ export function streamZhihuArticle(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
-            const data = JSON.parse(ev.data) as { task_id?: string; content?: string; done?: boolean; error?: string }
+            const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
                 ctrl.abort()
-            } else if (data.task_id) {
-                onTaskCreated(data.task_id)
+            } else if (data.resource_id) {
+                onResourceCreated(data.resource_id)
             } else if (data.done) {
                 onDone()
                 ctrl.abort()

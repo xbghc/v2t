@@ -5,91 +5,47 @@ from asyncio import Queue
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.models.enums import TaskStatus
+from app.models.enums import ResourceType, WorkspaceStatus
 
 
 @dataclass
-class Resource:
-    """资源（视频/音频文件）"""
+class WorkspaceResource:
+    """工作区资源"""
 
-    resource_id: str  # 文件内容哈希
-    video_path: Path | None = None
-    audio_path: Path | None = None
-    title: str = ""
+    resource_id: str
+    name: str  # video, audio, transcript, outline, article, podcast, zhihu
+    resource_type: ResourceType
+    resource_path: Path | None = None
     created_at: float = field(default_factory=time.time)
-    ref_count: int = 1  # 引用计数
 
 
 @dataclass
-class VideoTask:
-    """视频下载和转录任务"""
+class Workspace:
+    """工作区"""
 
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
+    workspace_id: str
+    url: str = ""
+    title: str = ""
+    status: WorkspaceStatus = WorkspaceStatus.PENDING
     progress: str = "等待处理..."
-    title: str = ""
-    resource_id: str | None = None
-    transcript: str = ""
     error: str = ""
+    resources: list[WorkspaceResource] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
+    last_accessed_at: float = field(default_factory=time.time)
     status_queue: Queue | None = field(default=None, repr=False)
 
+    def get_resource(self, name: str) -> WorkspaceResource | None:
+        """获取指定名称的最新资源"""
+        for res in reversed(self.resources):
+            if res.name == name:
+                return res
+        return None
 
-@dataclass
-class OutlineTask:
-    """大纲生成任务"""
+    def get_resources_by_name(self, name: str) -> list[WorkspaceResource]:
+        """获取指定名称的所有资源"""
+        return [res for res in self.resources if res.name == name]
 
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
-    progress: str = "等待处理..."
-    transcript: str = ""  # 输入
-    outline: str = ""  # 输出
-    error: str = ""
-    created_at: float = field(default_factory=time.time)
-
-
-@dataclass
-class ArticleTask:
-    """文章生成任务"""
-
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
-    progress: str = "等待处理..."
-    transcript: str = ""  # 输入
-    article: str = ""  # 输出
-    error: str = ""
-    created_at: float = field(default_factory=time.time)
-
-
-@dataclass
-class PodcastTask:
-    """播客生成任务"""
-
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
-    progress: str = "等待处理..."
-    title: str = ""
-    transcript: str = ""  # 输入
-    podcast_script: str = ""
-    podcast_audio_path: Path | None = None
-    podcast_error: str = ""
-    error: str = ""
-    created_at: float = field(default_factory=time.time)
-    status_queue: Queue | None = field(default=None, repr=False)
-
-
-@dataclass
-class ZhihuArticleTask:
-    """知乎文章生成任务"""
-
-    task_id: str
-    status: TaskStatus = TaskStatus.PENDING
-    progress: str = "等待处理..."
-    transcript: str = ""  # 输入
-    zhihu_article: str = ""  # 输出
-    error: str = ""
-    created_at: float = field(default_factory=time.time)
-
-
-# 任务类型联合
-Task = VideoTask | OutlineTask | ArticleTask | PodcastTask | ZhihuArticleTask
+    def add_resource(self, resource: WorkspaceResource) -> None:
+        """添加资源"""
+        self.resources.append(resource)
+        self.last_accessed_at = time.time()

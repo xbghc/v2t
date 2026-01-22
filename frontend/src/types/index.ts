@@ -1,44 +1,73 @@
 /**
- * 任务状态值，与后端 TaskStatus 枚举对应
+ * 工作区状态值，与后端 WorkspaceStatus 枚举对应
  */
-export type TaskStatus =
+export type WorkspaceStatus =
     | 'pending'
     | 'downloading'
     | 'transcribing'
     | 'ready'      // 转录完成，可以开始生成
-    | 'completed'
     | 'failed'
+
+/**
+ * 资源类型
+ */
+export type ResourceType = 'video' | 'audio' | 'text'
 
 /**
  * 内容标签标识符
  */
-export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
+export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast' | 'zhihu'
 
 /**
  * 输入模式
  */
 export type InputMode = 'url' | 'subtitle'
 
-// ============ 任务类型 ============
+// ============ Workspace 类型 ============
 
 /**
- * 视频任务结果（本地状态）
+ * 工作区资源
  */
-export interface VideoTaskResult {
-    title: string
-    resource_id: string | null
-    video_url: string | null
-    audio_url: string | null
-    transcript: string
+export interface WorkspaceResource {
+    resource_id: string
+    name: string  // video, audio, transcript, outline, article, podcast, zhihu
+    resource_type: ResourceType
+    download_url: string | null
+    content: string | null  // text 类型直接返回内容
+    created_at: number
 }
 
-// ============ API 类型 ============
+/**
+ * 工作区响应
+ */
+export interface WorkspaceResponse {
+    workspace_id: string
+    url: string
+    title: string
+    status: WorkspaceStatus
+    progress: string
+    error: string
+    resources: WorkspaceResource[]
+    created_at: number
+    last_accessed_at: number
+}
 
 /**
- * 创建任务请求参数
+ * 创建工作区请求
  */
-export interface CreateTaskRequest {
+export interface CreateWorkspaceRequest {
     url: string
+}
+
+// ============ 生成选项 ============
+
+/**
+ * 生成选项
+ */
+export interface GenerateOptions {
+    outline: boolean
+    article: boolean
+    podcast: boolean
 }
 
 /**
@@ -49,14 +78,7 @@ export interface StreamPrompts {
     userPrompt: string
 }
 
-/**
- * 生成选项
- */
-export interface GenerateOptions {
-    outline: boolean
-    article: boolean
-    podcast: boolean
-}
+// ============ 提示词类型 ============
 
 /**
  * GET /api/prompts 响应 - 默认提示词
@@ -84,95 +106,6 @@ export interface CustomPrompts {
     podcastUser: string
     zhihuSystem: string
     zhihuUser: string
-}
-
-/**
- * 视频任务响应
- */
-export interface VideoTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-    title: string
-    resource_id: string | null
-    video_url: string | null
-    audio_url: string | null
-    transcript: string
-    error: string
-}
-
-/**
- * 大纲任务响应
- */
-export interface OutlineTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-    outline: string
-    error: string
-}
-
-/**
- * 文章任务响应
- */
-export interface ArticleTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-    article: string
-    error: string
-}
-
-/**
- * 播客任务响应
- */
-export interface PodcastTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-    title: string
-    podcast_script: string
-    has_podcast_audio: boolean
-    podcast_error: string
-    error: string
-}
-
-/**
- * 知乎文章任务响应
- */
-export interface ZhihuArticleTaskResponse {
-    task_id: string
-    status: TaskStatus
-    progress: string
-    zhihu_article: string
-    error: string
-}
-
-/**
- * SSE 状态流事件数据（VideoTask）
- */
-export interface VideoStatusStreamData {
-    status: TaskStatus
-    progress: string
-    title: string
-    resource_id: string | null
-    video_url: string | null
-    audio_url: string | null
-    transcript: string
-    error: string
-}
-
-/**
- * SSE 状态流事件数据（PodcastTask）
- */
-export interface PodcastStatusStreamData {
-    status: TaskStatus
-    progress: string
-    title: string
-    podcast_script: string
-    has_podcast_audio: boolean
-    podcast_error: string
-    error: string
 }
 
 // ============ 组件 Props 类型 ============

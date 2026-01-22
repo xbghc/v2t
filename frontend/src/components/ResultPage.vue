@@ -21,22 +21,26 @@ const toastStore = useToastStore()
 
 // 重试并导航
 const handleRetry = async () => {
-    const taskId = await taskStore.retryTask()
-    if (taskId) {
-        router.push({ name: 'task', params: { id: taskId } })
+    const workspaceId = await taskStore.retryTask()
+    if (workspaceId) {
+        router.push({ name: 'workspace', params: { id: workspaceId } })
     }
 }
 
 // 从 store 获取响应式状态
 const {
-    taskId,
-    taskStatus,
+    workspaceId,
+    workspaceStatus,
     progressText,
-    videoResult,
+    title,
+    videoUrl,
+    audioUrl,
+    transcript,
     // 生成内容
     outline,
     article,
     podcastScript,
+    podcastAudioUrl,
     hasPodcastAudio,
     podcastError,
     zhihuArticle,
@@ -60,12 +64,12 @@ const {
 // 聚焦模式状态
 const focusedSection = ref<SideNavKey | null>(null)
 
-// 从 URL 参数加载任务
+// 从 URL 参数加载工作区
 onMounted(async () => {
-    const urlTaskId = route.params.id as string
-    if (urlTaskId && urlTaskId !== 'error') {
-        if (!taskId.value || taskId.value !== urlTaskId) {
-            const loaded = await taskStore.loadTaskById(urlTaskId)
+    const urlWorkspaceId = route.params.id as string
+    if (urlWorkspaceId && urlWorkspaceId !== 'error') {
+        if (!workspaceId.value || workspaceId.value !== urlWorkspaceId) {
+            const loaded = await taskStore.loadWorkspaceById(urlWorkspaceId)
             if (!loaded) {
                 router.push({ name: 'home' })
             }
@@ -75,11 +79,11 @@ onMounted(async () => {
 
 // 计算属性
 const isProcessing: ComputedRef<boolean> = computed(() => {
-    return taskStatus.value !== 'completed' && taskStatus.value !== 'failed'
+    return workspaceStatus.value !== 'ready' && workspaceStatus.value !== 'failed'
 })
 
 const isFailed: ComputedRef<boolean> = computed(() => {
-    return taskStatus.value === 'failed'
+    return workspaceStatus.value === 'failed'
 })
 
 const statusTitle: ComputedRef<string> = computed(() => {
@@ -91,13 +95,13 @@ const statusTitle: ComputedRef<string> = computed(() => {
 // 资源 URL
 const BASE_URL = import.meta.env.BASE_URL
 const videoDownloadUrl: ComputedRef<string> = computed(() =>
-    videoResult.value.video_url ? `${BASE_URL}${videoResult.value.video_url.replace(/^\//, '')}` : ''
+    videoUrl.value ? `${BASE_URL}${videoUrl.value.replace(/^\//, '')}` : ''
 )
 const audioDownloadUrl: ComputedRef<string> = computed(() =>
-    videoResult.value.audio_url ? `${BASE_URL}${videoResult.value.audio_url.replace(/^\//, '')}` : ''
+    audioUrl.value ? `${BASE_URL}${audioUrl.value.replace(/^\//, '')}` : ''
 )
 const podcastDownloadUrl: ComputedRef<string> = computed(() =>
-    taskId.value ? `${BASE_URL}api/task/${taskId.value}/podcast` : ''
+    podcastAudioUrl.value ? `${BASE_URL}${podcastAudioUrl.value.replace(/^\//, '')}` : ''
 )
 
 // 内容渲染
@@ -174,8 +178,8 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'video',
         label: '视频',
         icon: 'videocam',
-        hasContent: !!videoResult.value.video_url,
-        isLoading: taskStatus.value === 'downloading'
+        hasContent: !!videoUrl.value,
+        isLoading: workspaceStatus.value === 'downloading'
     })
 
     // 音频（始终显示）
@@ -183,8 +187,8 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'audio',
         label: '音频',
         icon: 'music_note',
-        hasContent: !!videoResult.value.audio_url,
-        isLoading: taskStatus.value === 'downloading'
+        hasContent: !!audioUrl.value,
+        isLoading: workspaceStatus.value === 'downloading'
     })
 
     // 字幕（始终显示）
@@ -192,8 +196,8 @@ const navItems = computed<SideNavItem[]>(() => {
         key: 'subtitle',
         label: '字幕',
         icon: 'subtitles',
-        hasContent: !!videoResult.value.transcript,
-        isLoading: taskStatus.value === 'transcribing'
+        hasContent: !!transcript.value,
+        isLoading: workspaceStatus.value === 'transcribing'
     })
 
     return items
@@ -203,8 +207,8 @@ const navItems = computed<SideNavItem[]>(() => {
 const disabledItems = computed<SideNavItem[]>(() => {
     const items: SideNavItem[] = []
 
-    // 只有当任务状态为 ready 或 completed 时，才显示可生成项
-    if (taskStatus.value !== 'ready' && taskStatus.value !== 'completed') {
+    // 只有当工作区状态为 ready 时，才显示可生成项
+    if (workspaceStatus.value !== 'ready') {
         return items
     }
 
@@ -295,30 +299,30 @@ const copyContent = (content: string) => {
     })
 }
 
-// 是否显示播客区块（只有在任务准备好或已有内容时才显示）
+// 是否显示播客区块（只有在工作区准备好或已有内容时才显示）
 const showPodcast = computed(() => {
     // 已有内容或正在生成
     if (podcastScript.value || hasPodcastAudio.value || podcastStreaming.value || podcastSynthesizing.value) return true
-    // 用户选择了生成，且任务已准备好开始生成
-    if (generateOptions.value.podcast && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    // 用户选择了生成，且工作区已准备好开始生成
+    if (generateOptions.value.podcast && workspaceStatus.value === 'ready') return true
     return false
 })
 
-// 是否显示文章区块（只有在任务准备好或已有内容时才显示）
+// 是否显示文章区块（只有在工作区准备好或已有内容时才显示）
 const showArticle = computed(() => {
     // 已有内容或正在生成
     if (article.value || articleStreaming.value) return true
-    // 用户选择了生成，且任务已准备好开始生成
-    if (generateOptions.value.article && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    // 用户选择了生成，且工作区已准备好开始生成
+    if (generateOptions.value.article && workspaceStatus.value === 'ready') return true
     return false
 })
 
-// 是否显示大纲区块（只有在任务准备好或已有内容时才显示）
+// 是否显示大纲区块（只有在工作区准备好或已有内容时才显示）
 const showOutline = computed(() => {
     // 已有内容或正在生成
     if (outline.value || outlineStreaming.value) return true
-    // 用户选择了生成，且任务已准备好开始生成
-    if (generateOptions.value.outline && (taskStatus.value === 'ready' || taskStatus.value === 'completed')) return true
+    // 用户选择了生成，且工作区已准备好开始生成
+    if (generateOptions.value.outline && workspaceStatus.value === 'ready') return true
     return false
 })
 
@@ -331,8 +335,8 @@ const showZhihu = computed(() => {
 
 // 加载状态文本
 const getLoadingText = (key: SideNavKey): string => {
-    if (taskStatus.value === 'downloading') return '正在下载视频...'
-    if (taskStatus.value === 'transcribing') return '正在转录音频...'
+    if (workspaceStatus.value === 'downloading') return '正在下载视频...'
+    if (workspaceStatus.value === 'transcribing') return '正在转录音频...'
     if (key === 'podcast' && podcastSynthesizing.value) return '正在合成播客音频...'
     if (key === 'podcast' && podcastStreaming.value) return '正在生成播客脚本...'
     if (key === 'article' && articleStreaming.value) return '正在生成文章...'
@@ -365,10 +369,10 @@ const getLoadingText = (key: SideNavKey): string => {
                                 {{ statusTitle }}
                             </h1>
                             <p
-                                v-if="videoResult.title"
+                                v-if="title"
                                 class="text-lg text-gray-600 dark:text-gray-400"
                             >
-                                {{ videoResult.title }}
+                                {{ title }}
                             </p>
                         </div>
 
@@ -592,14 +596,14 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="视频"
                         icon="videocam"
                         :is-visible="isSectionVisible('video')"
-                        :is-loading="taskStatus === 'downloading' && !videoResult.video_url"
+                        :is-loading="workspaceStatus === 'downloading' && !videoUrl"
                         :loading-text="getLoadingText('video')"
                     >
                         <VideoSection
                             :src="videoDownloadUrl"
-                            :title="videoResult.title"
-                            :available="!!videoResult.video_url"
-                            :is-processing="taskStatus === 'downloading'"
+                            :title="title"
+                            :available="!!videoUrl"
+                            :is-processing="workspaceStatus === 'downloading'"
                         />
                     </ContentSection>
 
@@ -609,14 +613,14 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="音频"
                         icon="music_note"
                         :is-visible="isSectionVisible('audio')"
-                        :is-loading="taskStatus === 'downloading' && !videoResult.audio_url"
+                        :is-loading="workspaceStatus === 'downloading' && !audioUrl"
                         :loading-text="getLoadingText('audio')"
                     >
                         <AudioSection
                             :src="audioDownloadUrl"
-                            :title="videoResult.title"
-                            :available="!!videoResult.audio_url"
-                            :is-processing="taskStatus === 'downloading'"
+                            :title="title"
+                            :available="!!audioUrl"
+                            :is-processing="workspaceStatus === 'downloading'"
                         />
                     </ContentSection>
 
@@ -626,13 +630,13 @@ const getLoadingText = (key: SideNavKey): string => {
                         title="字幕"
                         icon="subtitles"
                         :is-visible="isSectionVisible('subtitle')"
-                        :is-loading="taskStatus === 'transcribing' && !videoResult.transcript"
+                        :is-loading="workspaceStatus === 'transcribing' && !transcript"
                         :loading-text="getLoadingText('subtitle')"
                     >
                         <SubtitleSection
-                            :content="videoResult.transcript"
-                            :title="videoResult.title"
-                            :is-loading="taskStatus === 'transcribing'"
+                            :content="transcript"
+                            :title="title"
+                            :is-loading="workspaceStatus === 'transcribing'"
                         />
                     </ContentSection>
                 </div>

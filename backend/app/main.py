@@ -17,11 +17,9 @@ logger = logging.getLogger(__name__)
 from fastapi import FastAPI
 
 from app.routers import (
-    process_router,
     prompts_router,
-    resource_router,
     stream_router,
-    task_router,
+    workspace_router,
 )
 
 app = FastAPI(
@@ -30,10 +28,8 @@ app = FastAPI(
 )
 
 # 注册路由
-app.include_router(process_router)
-app.include_router(task_router)
+app.include_router(workspace_router)
 app.include_router(stream_router)
-app.include_router(resource_router)
 app.include_router(prompts_router)
 
 

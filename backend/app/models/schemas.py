@@ -2,11 +2,41 @@
 
 from pydantic import BaseModel
 
+# ===== Workspace 相关 =====
 
-class ProcessRequest(BaseModel):
-    """视频处理请求"""
+
+class CreateWorkspaceRequest(BaseModel):
+    """创建工作区请求"""
 
     url: str
+
+
+class WorkspaceResourceResponse(BaseModel):
+    """资源响应"""
+
+    resource_id: str
+    name: str  # video, audio, transcript, outline, article, podcast, zhihu
+    resource_type: str  # video | audio | text
+    download_url: str | None = None
+    content: str | None = None  # text 类型直接返回内容
+    created_at: float
+
+
+class WorkspaceResponse(BaseModel):
+    """工作区响应"""
+
+    workspace_id: str
+    url: str
+    title: str
+    status: str  # pending, downloading, transcribing, ready, failed
+    progress: str
+    error: str
+    resources: list[WorkspaceResourceResponse]
+    created_at: float
+    last_accessed_at: float
+
+
+# ===== 流式生成相关 =====
 
 
 class StreamRequest(BaseModel):
@@ -16,13 +46,7 @@ class StreamRequest(BaseModel):
     user_prompt: str = ""
 
 
-class TextToPodcastRequest(BaseModel):
-    """文本转播客请求"""
-
-    text: str
-    title: str = ""
-    podcast_system_prompt: str = ""
-    podcast_user_prompt: str = ""
+# ===== 提示词相关 =====
 
 
 class PromptsResponse(BaseModel):
@@ -36,60 +60,3 @@ class PromptsResponse(BaseModel):
     podcast_user: str
     zhihu_system: str
     zhihu_user: str
-
-
-class VideoTaskResponse(BaseModel):
-    """视频任务响应"""
-
-    task_id: str
-    status: str
-    progress: str
-    title: str = ""
-    resource_id: str | None = None
-    video_url: str | None = None
-    audio_url: str | None = None
-    transcript: str = ""
-    error: str = ""
-
-
-class OutlineTaskResponse(BaseModel):
-    """大纲任务响应"""
-
-    task_id: str
-    status: str
-    progress: str
-    outline: str = ""
-    error: str = ""
-
-
-class ArticleTaskResponse(BaseModel):
-    """文章任务响应"""
-
-    task_id: str
-    status: str
-    progress: str
-    article: str = ""
-    error: str = ""
-
-
-class PodcastTaskResponse(BaseModel):
-    """播客任务响应"""
-
-    task_id: str
-    status: str
-    progress: str
-    title: str = ""
-    podcast_script: str = ""
-    has_podcast_audio: bool = False
-    podcast_error: str = ""
-    error: str = ""
-
-
-class ZhihuArticleTaskResponse(BaseModel):
-    """知乎文章任务响应"""
-
-    task_id: str
-    status: str
-    progress: str
-    zhihu_article: str = ""
-    error: str = ""

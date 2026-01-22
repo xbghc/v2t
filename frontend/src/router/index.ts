@@ -9,8 +9,8 @@ const routes: RouteRecordRaw[] = [
         component: InitialPage,
     },
     {
-        path: '/task/:id',
-        name: 'task',
+        path: '/w/:id',
+        name: 'workspace',
         component: ResultPage,
         props: true,
     },
