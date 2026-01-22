@@ -26,6 +26,14 @@ class XiazaitoolError(Exception):
     pass
 
 
+def check_xiazaitool_token() -> tuple[bool, str]:
+    """检测 XIAZAITOOL_TOKEN 是否配置"""
+    settings = get_settings()
+    if not settings.xiazaitool_token:
+        return False, "XIAZAITOOL_TOKEN 未配置"
+    return True, "OK"
+
+
 async def parse_video_url(url: str) -> VideoInfo:
     """
     解析视频链接，获取下载地址

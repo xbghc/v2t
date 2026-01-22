@@ -42,7 +42,17 @@ async def check_api_connections() -> bool:
     from app.services.llm import check_llm_api
     from app.services.podcast_tts import check_tts_api
     from app.services.transcribe import check_whisper_api
+    from app.services.xiazaitool import check_xiazaitool_token
 
+    # 同步检查（配置检测）
+    ok, msg = check_xiazaitool_token()
+    if ok:
+        logger.info("✓ Xiazaitool: %s", msg)
+    else:
+        logger.error("✗ Xiazaitool: %s", msg)
+        return False
+
+    # 异步检查（API 连接检测）
     checks = [
         ("LLM", check_llm_api()),
         ("Whisper", check_whisper_api()),
