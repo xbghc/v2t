@@ -134,6 +134,11 @@ export interface TabDefinition {
 export type SideNavKey = 'podcast' | 'article' | 'outline' | 'zhihu' | 'video' | 'audio' | 'subtitle'
 
 /**
+ * 可生成内容类型（SideNavKey 的子集）
+ */
+export type GeneratableContentKey = 'podcast' | 'article' | 'outline' | 'zhihu'
+
+/**
  * 侧边导航项
  */
 export interface SideNavItem {
