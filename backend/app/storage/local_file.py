@@ -1,7 +1,11 @@
 """本地文件存储实现"""
 
+import logging
 import shutil
+import time
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class LocalFileStorage:
@@ -77,3 +81,36 @@ class LocalFileStorage:
             本地文件路径
         """
         return self.base_dir / key
+
+
+def cleanup_old_files(base_dir: Path, expire_seconds: int = 86400) -> int:
+    """
+    清理过期的资源目录。
+
+    基于目录的访问时间（atime）判断是否过期。
+
+    Args:
+        base_dir: 存储根目录
+        expire_seconds: 过期时间（秒），默认 24 小时
+
+    Returns:
+        清理的目录数量
+    """
+    if not base_dir.exists():
+        return 0
+
+    now = time.time()
+    cleaned = 0
+
+    for item in base_dir.iterdir():
+        if item.is_dir():
+            try:
+                atime = item.stat().st_atime
+                if now - atime > expire_seconds:
+                    shutil.rmtree(item)
+                    logger.info("清理过期资源目录: %s", item.name)
+                    cleaned += 1
+            except OSError as e:
+                logger.warning("清理目录失败 %s: %s", item.name, e)
+
+    return cleaned
