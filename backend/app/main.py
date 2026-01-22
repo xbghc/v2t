@@ -1,20 +1,16 @@
 """v2t Web API 服务入口"""
 
+# 配置日志（必须在其他模块导入前执行）
+from app.logging_config import setup_logging
+
+setup_logging()
+
+# 标准库
 import asyncio
-import logging
-import os
 
-# 配置日志（支持 LOG_LEVEL 环境变量：DEBUG/INFO/WARNING/ERROR）
-log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
-log_level = getattr(logging, log_level_name, logging.INFO)
-
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
-
+# 第三方库
 from fastapi import FastAPI
+from loguru import logger
 
 from app.routers import (
     prompts_router,
