@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import type { ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
 import { useResultActions, getLoadingText, type LoadingTextState } from '@/composables/useResultActions'
 import { useContentVisibility } from '@/composables/useContentVisibility'
@@ -99,12 +98,6 @@ const audioDownloadUrl: ComputedRef<string> = computed(() =>
 const podcastDownloadUrl: ComputedRef<string> = computed(() =>
     podcastAudioUrl.value ? `${BASE_URL}${podcastAudioUrl.value.replace(/^\//, '')}` : ''
 )
-
-// 内容渲染
-const renderedPodcastScript: ComputedRef<string> = computed(() => {
-    if (!displayPodcast.value) return ''
-    return marked.parse(displayPodcast.value) as string
-})
 
 // 切换聚焦模式
 const toggleFocus = (key: SideNavKey) => {
@@ -212,28 +205,15 @@ const loadingState = computed<LoadingTextState>(() => ({
                         />
 
                         <!-- 播客脚本 -->
-                        <div
-                            v-if="displayPodcast"
-                            class="mt-6 prose prose-sm dark:prose-invert max-w-none"
-                            v-html="renderedPodcastScript"
+                        <MarkdownContent
+                            v-if="displayPodcast || (podcastFailed && !hasPodcastAudio)"
+                            content-key="podcast"
+                            :display-content="displayPodcast"
+                            :is-failed="podcastFailed && !hasPodcastAudio"
+                            label="播客"
+                            class="mt-6"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="podcastFailed && !hasPodcastAudio"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                播客生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('podcast')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 文章区块 -->
