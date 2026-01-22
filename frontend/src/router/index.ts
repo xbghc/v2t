@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import InitialPage from '@/components/InitialPage.vue'
-import ResultPage from '@/components/ResultPage.vue'
+import InitialPage from '@/pages/InitialPage.vue'
+import ResultPage from '@/pages/ResultPage.vue'
 
 const routes: RouteRecordRaw[] = [
     {

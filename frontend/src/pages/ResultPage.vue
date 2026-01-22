@@ -8,13 +8,13 @@ import { useResultActions, getLoadingText, type LoadingTextState } from '@/compo
 import { useContentVisibility } from '@/composables/useContentVisibility'
 import { useNavItems } from '@/composables/useNavItems'
 import type { SideNavKey } from '@/types'
-import SideNavigation from './SideNavigation.vue'
-import ContentSection from './ContentSection.vue'
-import VideoSection from './VideoSection.vue'
-import AudioSection from './AudioSection.vue'
-import SubtitleSection from './SubtitleSection.vue'
-import PodcastPlayer from './PodcastPlayer.vue'
-import MarkdownContent from './MarkdownContent.vue'
+import SideNavigation from '@/components/SideNavigation.vue'
+import ContentSection from '@/components/ContentSection.vue'
+import VideoSection from '@/components/VideoSection.vue'
+import AudioSection from '@/components/AudioSection.vue'
+import SubtitleSection from '@/components/SubtitleSection.vue'
+import PodcastPlayer from '@/components/PodcastPlayer.vue'
+import MarkdownContent from '@/components/MarkdownContent.vue'
 
 const route = useRoute()
 const router = useRouter()
