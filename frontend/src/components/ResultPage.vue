@@ -101,11 +101,6 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() =>
 )
 
 // 内容渲染
-const renderedOutline: ComputedRef<string> = computed(() => {
-    if (!displayOutline.value) return ''
-    return marked.parse(displayOutline.value) as string
-})
-
 const renderedPodcastScript: ComputedRef<string> = computed(() => {
     if (!displayPodcast.value) return ''
     return marked.parse(displayPodcast.value) as string
@@ -297,28 +292,13 @@ const loadingState = computed<LoadingTextState>(() => ({
                             </button>
                         </template>
 
-                        <div
-                            v-if="displayOutline"
-                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
-                            v-html="renderedOutline"
+                        <MarkdownContent
+                            content-key="outline"
+                            :display-content="displayOutline"
+                            :is-failed="outlineFailed"
+                            label="大纲"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="outlineFailed"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                大纲生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('outline')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 知乎区块 -->
