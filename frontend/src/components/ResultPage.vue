@@ -3,29 +3,25 @@ import { ref, computed, onMounted } from 'vue'
 import type { ComputedRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
-import { marked } from 'marked'
 import { useTaskStore } from '@/stores/task'
-import { useToastStore } from '@/stores/toast'
-import type { SideNavItem, SideNavKey } from '@/types'
+import { useResultActions, getLoadingText, type LoadingTextState } from '@/composables/useResultActions'
+import { useContentVisibility } from '@/composables/useContentVisibility'
+import { useNavItems } from '@/composables/useNavItems'
+import type { SideNavKey } from '@/types'
 import SideNavigation from './SideNavigation.vue'
 import ContentSection from './ContentSection.vue'
 import VideoSection from './VideoSection.vue'
 import AudioSection from './AudioSection.vue'
 import SubtitleSection from './SubtitleSection.vue'
 import PodcastPlayer from './PodcastPlayer.vue'
+import MarkdownContent from './MarkdownContent.vue'
 
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
-const toastStore = useToastStore()
-
-// 重试并导航
-const handleRetry = async () => {
-    const workspaceId = await taskStore.retryTask()
-    if (workspaceId) {
-        router.push({ name: 'workspace', params: { id: workspaceId } })
-    }
-}
+const { handleRetry, handleGenerateContent, copyContent, scrollToSection } = useResultActions()
+const { showPodcast, showArticle, showOutline, showZhihu } = useContentVisibility()
+const { navItems, disabledItems } = useNavItems()
 
 // 从 store 获取响应式状态
 const {
@@ -44,7 +40,6 @@ const {
     hasPodcastAudio,
     podcastError,
     zhihuArticle,
-    generateOptions,
     podcastStreaming,
     podcastSynthesizing,
     outlineStreaming,
@@ -104,161 +99,6 @@ const podcastDownloadUrl: ComputedRef<string> = computed(() =>
     podcastAudioUrl.value ? `${BASE_URL}${podcastAudioUrl.value.replace(/^\//, '')}` : ''
 )
 
-// 内容渲染
-const renderedArticle: ComputedRef<string> = computed(() => {
-    if (!displayArticle.value) return ''
-    return marked.parse(displayArticle.value) as string
-})
-
-const renderedOutline: ComputedRef<string> = computed(() => {
-    if (!displayOutline.value) return ''
-    return marked.parse(displayOutline.value) as string
-})
-
-const renderedPodcastScript: ComputedRef<string> = computed(() => {
-    if (!displayPodcast.value) return ''
-    return marked.parse(displayPodcast.value) as string
-})
-
-const renderedZhihuArticle: ComputedRef<string> = computed(() => {
-    if (!displayZhihu.value) return ''
-    return marked.parse(displayZhihu.value) as string
-})
-
-// 导航项计算
-const navItems = computed<SideNavItem[]>(() => {
-    const items: SideNavItem[] = []
-
-    // 播客
-    if (generateOptions.value.podcast || podcastScript.value || hasPodcastAudio.value) {
-        items.push({
-            key: 'podcast',
-            label: '播客',
-            icon: 'podcasts',
-            hasContent: !!podcastScript.value || hasPodcastAudio.value,
-            isLoading: podcastStreaming.value || podcastSynthesizing.value
-        })
-    }
-
-    // 文章
-    if (generateOptions.value.article || article.value) {
-        items.push({
-            key: 'article',
-            label: '文章',
-            icon: 'article',
-            hasContent: !!article.value || !!displayArticle.value,
-            isLoading: articleStreaming.value
-        })
-    }
-
-    // 知乎（只有已有内容或正在生成时才显示）
-    if (zhihuArticle.value || zhihuStreaming.value) {
-        items.push({
-            key: 'zhihu',
-            label: '知乎',
-            icon: 'edit_document',
-            hasContent: !!zhihuArticle.value || !!displayZhihu.value,
-            isLoading: zhihuStreaming.value
-        })
-    }
-
-    // 大纲
-    if (generateOptions.value.outline || outline.value) {
-        items.push({
-            key: 'outline',
-            label: '大纲',
-            icon: 'format_list_bulleted',
-            hasContent: !!outline.value || !!displayOutline.value,
-            isLoading: outlineStreaming.value
-        })
-    }
-
-    // 视频（始终显示）
-    items.push({
-        key: 'video',
-        label: '视频',
-        icon: 'videocam',
-        hasContent: !!videoUrl.value,
-        isLoading: workspaceStatus.value === 'downloading'
-    })
-
-    // 音频（始终显示）
-    items.push({
-        key: 'audio',
-        label: '音频',
-        icon: 'music_note',
-        hasContent: !!audioUrl.value,
-        isLoading: workspaceStatus.value === 'downloading'
-    })
-
-    // 字幕（始终显示）
-    items.push({
-        key: 'subtitle',
-        label: '字幕',
-        icon: 'subtitles',
-        hasContent: !!transcript.value,
-        isLoading: workspaceStatus.value === 'transcribing'
-    })
-
-    return items
-})
-
-// 可生成项
-const disabledItems = computed<SideNavItem[]>(() => {
-    const items: SideNavItem[] = []
-
-    // 只有当工作区状态为 ready 时，才显示可生成项
-    if (workspaceStatus.value !== 'ready') {
-        return items
-    }
-
-    // 播客（用户未选择且没有内容）
-    if (!generateOptions.value.podcast && !podcastScript.value && !hasPodcastAudio.value) {
-        items.push({
-            key: 'podcast',
-            label: '播客',
-            icon: 'podcasts',
-            hasContent: false,
-            isLoading: false
-        })
-    }
-
-    // 文章
-    if (!generateOptions.value.article && !article.value) {
-        items.push({
-            key: 'article',
-            label: '文章',
-            icon: 'article',
-            hasContent: false,
-            isLoading: false
-        })
-    }
-
-    // 知乎
-    if (!zhihuArticle.value && !zhihuStreaming.value) {
-        items.push({
-            key: 'zhihu',
-            label: '知乎',
-            icon: 'edit_document',
-            hasContent: false,
-            isLoading: false
-        })
-    }
-
-    // 大纲
-    if (!generateOptions.value.outline && !outline.value) {
-        items.push({
-            key: 'outline',
-            label: '大纲',
-            icon: 'format_list_bulleted',
-            hasContent: false,
-            isLoading: false
-        })
-    }
-
-    return items
-})
-
 // 切换聚焦模式
 const toggleFocus = (key: SideNavKey) => {
     focusedSection.value = focusedSection.value === key ? null : key
@@ -269,81 +109,15 @@ const isSectionVisible = (key: SideNavKey): boolean => {
     return focusedSection.value === null || focusedSection.value === key
 }
 
-// 滚动到指定区块
-const scrollToSection = (key: SideNavKey) => {
-    const element = document.getElementById(`section-${key}`)
-    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
-// 生成单个内容
-const handleGenerateContent = (key: SideNavKey) => {
-    if (key === 'podcast' || key === 'article' || key === 'outline' || key === 'zhihu') {
-        taskStore.generateSingleContent(key)
-        const labels: Record<string, string> = {
-            podcast: '播客',
-            article: '文章',
-            outline: '大纲',
-            zhihu: '知乎文章'
-        }
-        toastStore.showToast(`正在生成${labels[key]}...`, 'info')
-    }
-}
-
-// 复制内容
-const copyContent = (content: string) => {
-    if (!content) return
-    navigator.clipboard.writeText(content).then(() => {
-        toastStore.showToast('已复制到剪贴板', 'success')
-    }).catch(() => {
-        toastStore.showToast('复制失败，请手动选择复制', 'error')
-    })
-}
-
-// 是否显示播客区块（只有在工作区准备好或已有内容时才显示）
-const showPodcast = computed(() => {
-    // 已有内容或正在生成
-    if (podcastScript.value || hasPodcastAudio.value || podcastStreaming.value || podcastSynthesizing.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.podcast && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示文章区块（只有在工作区准备好或已有内容时才显示）
-const showArticle = computed(() => {
-    // 已有内容或正在生成
-    if (article.value || articleStreaming.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.article && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示大纲区块（只有在工作区准备好或已有内容时才显示）
-const showOutline = computed(() => {
-    // 已有内容或正在生成
-    if (outline.value || outlineStreaming.value) return true
-    // 用户选择了生成，且工作区已准备好开始生成
-    if (generateOptions.value.outline && workspaceStatus.value === 'ready') return true
-    return false
-})
-
-// 是否显示知乎区块
-const showZhihu = computed(() => {
-    // 已有内容或正在生成
-    if (zhihuArticle.value || zhihuStreaming.value) return true
-    return false
-})
-
-// 加载状态文本
-const getLoadingText = (key: SideNavKey): string => {
-    if (workspaceStatus.value === 'downloading') return '正在下载视频...'
-    if (workspaceStatus.value === 'transcribing') return '正在转录音频...'
-    if (key === 'podcast' && podcastSynthesizing.value) return '正在合成播客音频...'
-    if (key === 'podcast' && podcastStreaming.value) return '正在生成播客脚本...'
-    if (key === 'article' && articleStreaming.value) return '正在生成文章...'
-    if (key === 'outline' && outlineStreaming.value) return '正在生成大纲...'
-    if (key === 'zhihu' && zhihuStreaming.value) return '正在生成知乎文章...'
-    return '加载中...'
-}
+// 加载状态（用于 getLoadingText）
+const loadingState = computed<LoadingTextState>(() => ({
+    workspaceStatus: workspaceStatus.value,
+    podcastSynthesizing: podcastSynthesizing.value,
+    podcastStreaming: podcastStreaming.value,
+    articleStreaming: articleStreaming.value,
+    outlineStreaming: outlineStreaming.value,
+    zhihuStreaming: zhihuStreaming.value
+}))
 </script>
 
 <template>
@@ -409,7 +183,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="podcasts"
                         :is-visible="isSectionVisible('podcast')"
                         :is-loading="podcastStreaming || podcastSynthesizing"
-                        :loading-text="getLoadingText('podcast')"
+                        :loading-text="getLoadingText('podcast', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -431,28 +205,15 @@ const getLoadingText = (key: SideNavKey): string => {
                         />
 
                         <!-- 播客脚本 -->
-                        <div
-                            v-if="displayPodcast"
-                            class="mt-6 prose prose-sm dark:prose-invert max-w-none"
-                            v-html="renderedPodcastScript"
+                        <MarkdownContent
+                            v-if="displayPodcast || (podcastFailed && !hasPodcastAudio)"
+                            content-key="podcast"
+                            :display-content="displayPodcast"
+                            :is-failed="podcastFailed && !hasPodcastAudio"
+                            label="播客"
+                            class="mt-6"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="podcastFailed && !hasPodcastAudio"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                播客生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('podcast')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 文章区块 -->
@@ -463,7 +224,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="article"
                         :is-visible="isSectionVisible('article')"
                         :is-loading="articleStreaming && !displayArticle"
-                        :loading-text="getLoadingText('article')"
+                        :loading-text="getLoadingText('article', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -476,28 +237,13 @@ const getLoadingText = (key: SideNavKey): string => {
                             </button>
                         </template>
 
-                        <div
-                            v-if="displayArticle"
-                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
-                            v-html="renderedArticle"
+                        <MarkdownContent
+                            content-key="article"
+                            :display-content="displayArticle"
+                            :is-failed="articleFailed"
+                            label="文章"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="articleFailed"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                文章生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('article')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 大纲区块 -->
@@ -508,7 +254,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="format_list_bulleted"
                         :is-visible="isSectionVisible('outline')"
                         :is-loading="outlineStreaming && !displayOutline"
-                        :loading-text="getLoadingText('outline')"
+                        :loading-text="getLoadingText('outline', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -521,28 +267,13 @@ const getLoadingText = (key: SideNavKey): string => {
                             </button>
                         </template>
 
-                        <div
-                            v-if="displayOutline"
-                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
-                            v-html="renderedOutline"
+                        <MarkdownContent
+                            content-key="outline"
+                            :display-content="displayOutline"
+                            :is-failed="outlineFailed"
+                            label="大纲"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="outlineFailed"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                大纲生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('outline')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 知乎区块 -->
@@ -553,7 +284,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="edit_document"
                         :is-visible="isSectionVisible('zhihu')"
                         :is-loading="zhihuStreaming && !displayZhihu"
-                        :loading-text="getLoadingText('zhihu')"
+                        :loading-text="getLoadingText('zhihu', loadingState)"
                     >
                         <template #actions>
                             <button
@@ -566,28 +297,13 @@ const getLoadingText = (key: SideNavKey): string => {
                             </button>
                         </template>
 
-                        <div
-                            v-if="displayZhihu"
-                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
-                            v-html="renderedZhihuArticle"
+                        <MarkdownContent
+                            content-key="zhihu"
+                            :display-content="displayZhihu"
+                            :is-failed="zhihuFailed"
+                            label="知乎文章"
+                            @retry="handleGenerateContent"
                         />
-                        <!-- 生成失败：显示失败提示和重试按钮 -->
-                        <div
-                            v-else-if="zhihuFailed"
-                            class="flex flex-col items-center justify-center py-12 gap-4"
-                        >
-                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
-                            <p class="text-gray-500 dark:text-gray-400">
-                                知乎文章生成失败
-                            </p>
-                            <button
-                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                                @click="handleGenerateContent('zhihu')"
-                            >
-                                <span class="material-symbols-outlined text-lg">refresh</span>
-                                <span>重新生成</span>
-                            </button>
-                        </div>
                     </ContentSection>
 
                     <!-- 视频区块 -->
@@ -597,7 +313,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="videocam"
                         :is-visible="isSectionVisible('video')"
                         :is-loading="workspaceStatus === 'downloading' && !videoUrl"
-                        :loading-text="getLoadingText('video')"
+                        :loading-text="getLoadingText('video', loadingState)"
                     >
                         <VideoSection
                             :src="videoDownloadUrl"
@@ -614,7 +330,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="music_note"
                         :is-visible="isSectionVisible('audio')"
                         :is-loading="workspaceStatus === 'downloading' && !audioUrl"
-                        :loading-text="getLoadingText('audio')"
+                        :loading-text="getLoadingText('audio', loadingState)"
                     >
                         <AudioSection
                             :src="audioDownloadUrl"
@@ -631,7 +347,7 @@ const getLoadingText = (key: SideNavKey): string => {
                         icon="subtitles"
                         :is-visible="isSectionVisible('subtitle')"
                         :is-loading="workspaceStatus === 'transcribing' && !transcript"
-                        :loading-text="getLoadingText('subtitle')"
+                        :loading-text="getLoadingText('subtitle', loadingState)"
                     >
                         <SubtitleSection
                             :content="transcript"
