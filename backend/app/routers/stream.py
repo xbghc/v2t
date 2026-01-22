@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
-from app.models.entities import ArticleTask, OutlineTask, PodcastTask, VideoTask
+from app.models.entities import ArticleTask, OutlineTask, PodcastTask, VideoTask, ZhihuArticleTask
 from app.models.enums import TaskStatus
 from app.models.schemas import StreamRequest
 from app.services.llm import (
@@ -16,6 +16,7 @@ from app.services.llm import (
     generate_article,
     generate_outline,
     generate_podcast_script_stream,
+    generate_zhihu_article,
 )
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
 from app.state import get_task, register_task
@@ -194,6 +195,53 @@ async def stream_podcast(
             podcast_task.error = str(e)
             podcast_task.progress = "生成失败"
             logger.warning("播客任务 %s 脚本生成失败: %s", task_id, e)
+            yield sse_data({"error": str(e)})
+
+    return sse_response(generate)
+
+
+@router.post("/zhihu-article")
+async def stream_zhihu_article(
+    video_task_id: str, request: Request, body: StreamRequest
+) -> StreamingResponse:
+    """流式生成知乎文章，创建新的 ZhihuArticleTask"""
+    video_task = get_video_task_with_transcript(video_task_id)
+
+    # 创建知乎文章任务
+    task_id = str(uuid.uuid4())[:8]
+    zhihu_task = ZhihuArticleTask(
+        task_id=task_id,
+        status=TaskStatus.READY,
+        progress="正在生成知乎文章...",
+        transcript=video_task.transcript,
+    )
+    register_task(zhihu_task)
+
+    async def generate() -> AsyncIterator[str]:
+        # 先返回新任务 ID
+        yield sse_data({"task_id": task_id})
+
+        chunks = []
+        try:
+            async for chunk in generate_zhihu_article(
+                video_task.transcript,
+                system_prompt=body.system_prompt or None,
+                user_prompt=body.user_prompt or None,
+            ):
+                if await request.is_disconnected():
+                    return
+                chunks.append(chunk)
+                yield sse_data({"content": chunk})
+
+            zhihu_task.zhihu_article = "".join(chunks)
+            zhihu_task.status = TaskStatus.COMPLETED
+            zhihu_task.progress = "生成完成"
+            yield sse_data({"done": True})
+        except LLMError as e:
+            zhihu_task.status = TaskStatus.FAILED
+            zhihu_task.error = str(e)
+            zhihu_task.progress = "生成失败"
+            logger.warning("知乎文章任务 %s 生成失败: %s", task_id, e)
             yield sse_data({"error": str(e)})
 
     return sse_response(generate)

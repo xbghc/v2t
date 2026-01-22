@@ -85,6 +85,26 @@ DEFAULT_PODCAST_SYSTEM_PROMPT = """你是一位专业的播客脚本作家，擅
 
 DEFAULT_PODCAST_USER_PROMPT = "请将以下视频转录内容改写为播客脚本，返回 json 格式：\n\n{content}"
 
+DEFAULT_ZHIHU_SYSTEM_PROMPT = """你是一位知乎专栏作者，风格是喜欢干货分享和分析的技术宅。
+
+写作要求：
+1. 标题直击主题，体现核心价值点
+2. 开头直接抛出结论或核心观点，不绕弯子
+3. 内容注重逻辑分析和原理解释
+4. 适当使用加粗强调关键概念和结论
+5. 用分隔线（---）分隔不同章节
+6. 语言简洁直接，少废话，多干货
+7. 保留原内容的核心信息和技术细节"""
+
+DEFAULT_ZHIHU_USER_PROMPT = """请将以下内容改写为知乎专栏文章：
+
+{content}
+
+要求：
+- 生成一个吸引人的标题
+- 按知乎文章风格重新组织内容
+- 输出格式为 Markdown"""
+
 _client: AsyncOpenAI | None = None
 
 
@@ -298,6 +318,37 @@ async def generate_podcast_script_stream(
         {
             "role": "user",
             "content": (user_prompt or DEFAULT_PODCAST_USER_PROMPT).format(content=content),
+        },
+    ]
+
+    async for chunk in chat(messages, max_tokens=8192):
+        yield chunk
+
+
+async def generate_zhihu_article(
+    content: str,
+    system_prompt: str | None = None,
+    user_prompt: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    流式生成知乎风格文章
+
+    Args:
+        content: 字幕内容
+        system_prompt: 自定义系统提示词，为空则使用默认
+        user_prompt: 自定义用户提示词，为空则使用默认，使用 {content} 占位符
+
+    Yields:
+        str: 文章内容片段
+    """
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt or DEFAULT_ZHIHU_SYSTEM_PROMPT,
+        },
+        {
+            "role": "user",
+            "content": (user_prompt or DEFAULT_ZHIHU_USER_PROMPT).format(content=content),
         },
     ]
 

@@ -5,11 +5,12 @@ import type {
     OutlineTaskResponse,
     ArticleTaskResponse,
     PodcastTaskResponse,
+    ZhihuArticleTaskResponse,
     VideoStatusStreamData,
 } from '@/types'
 
 // 任务响应联合类型
-type TaskResponse = VideoTaskResponse | OutlineTaskResponse | ArticleTaskResponse | PodcastTaskResponse
+type TaskResponse = VideoTaskResponse | OutlineTaskResponse | ArticleTaskResponse | PodcastTaskResponse | ZhihuArticleTaskResponse
 
 // API 基础路径，使用 Vite 的 base 配置
 const API_BASE = `${import.meta.env.BASE_URL}api`
@@ -356,6 +357,68 @@ export function streamPodcast(
                 onScriptDone()
             } else if (data.content) {
                 onScriptChunk(data.content)
+            }
+        },
+        onerror(err) {
+            onError(err instanceof Error ? err.message : '连接错误')
+            throw err
+        },
+        onclose() {
+            throw new Error('Stream closed')
+        },
+    })
+
+    return () => ctrl.abort()
+}
+
+/**
+ * 流式生成知乎文章
+ * @param videoTaskId 视频任务 ID（用于获取转录内容）
+ * @param onTaskCreated 新建的知乎文章任务 ID 回调
+ * @returns 清理函数
+ */
+export function streamZhihuArticle(
+    videoTaskId: string,
+    prompts: StreamPrompts,
+    onTaskCreated: (taskId: string) => void,
+    onChunk: (content: string) => void,
+    onDone: () => void,
+    onError: (error: string) => void
+): () => void {
+    const ctrl = new AbortController()
+
+    fetchEventSource(`${API_BASE}/task/${videoTaskId}/stream/zhihu-article`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            system_prompt: prompts.systemPrompt,
+            user_prompt: prompts.userPrompt
+        }),
+        signal: ctrl.signal,
+        openWhenHidden: true,
+        async onopen(response) {
+            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
+                return
+            }
+            const contentType = response.headers.get('content-type')
+            if (contentType?.includes('application/json')) {
+                const data = await response.json() as { detail?: string }
+                throw new Error(data.detail || `HTTP ${response.status}`)
+            }
+            throw new Error(`HTTP ${response.status}`)
+        },
+        onmessage(ev) {
+            const data = JSON.parse(ev.data) as { task_id?: string; content?: string; done?: boolean; error?: string }
+            if (data.error) {
+                onError(data.error)
+                ctrl.abort()
+            } else if (data.task_id) {
+                onTaskCreated(data.task_id)
+            } else if (data.done) {
+                onDone()
+                ctrl.abort()
+            } else if (data.content) {
+                onChunk(data.content)
             }
         },
         onerror(err) {

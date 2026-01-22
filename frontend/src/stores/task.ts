@@ -9,6 +9,7 @@ import {
     streamOutline,
     streamArticle,
     streamPodcast,
+    streamZhihuArticle,
     streamVideoTaskStatus
 } from '@/api/task'
 import { useToastStore } from '@/stores/toast'
@@ -72,11 +73,13 @@ export const useTaskStore = defineStore('task', () => {
     const podcastScript: Ref<string> = ref('')
     const hasPodcastAudio: Ref<boolean> = ref(false)
     const podcastError: Ref<string> = ref('')
+    const zhihuArticle: Ref<string> = ref('')
 
     // 各任务 ID
     const outlineTaskId: Ref<string | null> = ref(null)
     const articleTaskId: Ref<string | null> = ref(null)
     const podcastTaskId: Ref<string | null> = ref(null)
+    const zhihuTaskId: Ref<string | null> = ref(null)
 
     // 提示词状态
     const promptsLoaded: Ref<boolean> = ref(false)
@@ -86,7 +89,9 @@ export const useTaskStore = defineStore('task', () => {
         articleSystem: '',
         articleUser: '',
         podcastSystem: '',
-        podcastUser: ''
+        podcastUser: '',
+        zhihuSystem: '',
+        zhihuUser: ''
     })
 
     // localStorage key
@@ -102,25 +107,29 @@ export const useTaskStore = defineStore('task', () => {
     const articleStreaming: Ref<boolean> = ref(false)
     const podcastStreaming: Ref<boolean> = ref(false)
     const podcastSynthesizing: Ref<boolean> = ref(false)
+    const zhihuStreaming: Ref<boolean> = ref(false)
 
     // 生成失败状态跟踪
     const outlineFailed: Ref<boolean> = ref(false)
     const articleFailed: Ref<boolean> = ref(false)
     const podcastFailed: Ref<boolean> = ref(false)
+    const zhihuFailed: Ref<boolean> = ref(false)
 
     // 流式内容缓冲区
     const streamingOutline: Ref<string> = ref('')
     const streamingArticle: Ref<string> = ref('')
     const streamingPodcast: Ref<string> = ref('')
+    const streamingZhihu: Ref<string> = ref('')
 
     // 清理函数
     let outlineCleanup: (() => void) | null = null
     let articleCleanup: (() => void) | null = null
     let podcastCleanup: (() => void) | null = null
+    let zhihuCleanup: (() => void) | null = null
 
     // 计算属性：是否正在流式生成
     const isStreaming: ComputedRef<boolean> = computed(() =>
-        outlineStreaming.value || articleStreaming.value || podcastStreaming.value
+        outlineStreaming.value || articleStreaming.value || podcastStreaming.value || zhihuStreaming.value
     )
 
     // 计算属性：当前内容（用于复制）
@@ -141,6 +150,9 @@ export const useTaskStore = defineStore('task', () => {
     const displayPodcast: ComputedRef<string> = computed(() =>
         podcastStreaming.value ? streamingPodcast.value : podcastScript.value
     )
+    const displayZhihu: ComputedRef<string> = computed(() =>
+        zhihuStreaming.value ? streamingZhihu.value : zhihuArticle.value
+    )
 
     // 重置状态
     const resetState = (): void => {
@@ -158,22 +170,27 @@ export const useTaskStore = defineStore('task', () => {
         podcastScript.value = ''
         hasPodcastAudio.value = false
         podcastError.value = ''
+        zhihuArticle.value = ''
         // 重置任务 ID
         outlineTaskId.value = null
         articleTaskId.value = null
         podcastTaskId.value = null
+        zhihuTaskId.value = null
         // 重置流式状态
         outlineStreaming.value = false
         articleStreaming.value = false
         podcastStreaming.value = false
         podcastSynthesizing.value = false
+        zhihuStreaming.value = false
         streamingOutline.value = ''
         streamingArticle.value = ''
         streamingPodcast.value = ''
+        streamingZhihu.value = ''
         // 重置失败状态
         outlineFailed.value = false
         articleFailed.value = false
         podcastFailed.value = false
+        zhihuFailed.value = false
     }
 
     // 重置字幕状态
@@ -225,6 +242,8 @@ export const useTaskStore = defineStore('task', () => {
             prompts.articleUser = defaults.article_user
             prompts.podcastSystem = defaults.podcast_system
             prompts.podcastUser = defaults.podcast_user
+            prompts.zhihuSystem = defaults.zhihu_system
+            prompts.zhihuUser = defaults.zhihu_user
             promptsLoaded.value = true
         } catch (error) {
             console.error('加载默认提示词失败:', error)
@@ -242,6 +261,8 @@ export const useTaskStore = defineStore('task', () => {
             prompts.articleUser = defaults.article_user
             prompts.podcastSystem = defaults.podcast_system
             prompts.podcastUser = defaults.podcast_user
+            prompts.zhihuSystem = defaults.zhihu_system
+            prompts.zhihuUser = defaults.zhihu_user
         } catch (error) {
             console.error('重置提示词失败:', error)
         }
@@ -283,6 +304,18 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
+    // 重置知乎提示词
+    const resetZhihuPrompts = async (): Promise<void> => {
+        try {
+            const defaults = await getDefaultPrompts()
+            prompts.zhihuSystem = defaults.zhihu_system
+            prompts.zhihuUser = defaults.zhihu_user
+            savePromptsToStorage()
+        } catch (error) {
+            console.error('重置知乎提示词失败:', error)
+        }
+    }
+
     // 停止状态流
     const stopStatusStream = (): void => {
         if (statusStreamCleanup) {
@@ -305,15 +338,20 @@ export const useTaskStore = defineStore('task', () => {
             podcastCleanup()
             podcastCleanup = null
         }
+        if (zhihuCleanup) {
+            zhihuCleanup()
+            zhihuCleanup = null
+        }
         outlineStreaming.value = false
         articleStreaming.value = false
         podcastStreaming.value = false
         podcastSynthesizing.value = false
+        zhihuStreaming.value = false
     }
 
     // 检查是否所有流式生成都完成
     const checkAllStreamingDone = (): void => {
-        if (!outlineStreaming.value && !articleStreaming.value && !podcastStreaming.value) {
+        if (!outlineStreaming.value && !articleStreaming.value && !podcastStreaming.value && !zhihuStreaming.value) {
             // 所有流式生成完成
             taskStatus.value = 'completed'
             progressText.value = '处理完成'
@@ -508,6 +546,8 @@ export const useTaskStore = defineStore('task', () => {
         // 优先显示有内容的 tab
         if (article.value) {
             currentTab.value = 'article'
+        } else if (zhihuArticle.value) {
+            currentTab.value = 'article' // 知乎文章也归类到文章类
         } else if (outline.value) {
             currentTab.value = 'outline'
         } else if (podcastScript.value) {
@@ -611,7 +651,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     // 生成单个内容类型
-    const generateSingleContent = (type: 'outline' | 'article' | 'podcast'): void => {
+    const generateSingleContent = (type: 'outline' | 'article' | 'podcast' | 'zhihu'): void => {
         if (!taskId.value) return
 
         const videoTaskIdStr = taskId.value
@@ -701,6 +741,31 @@ export const useTaskStore = defineStore('task', () => {
                 }
             )
         }
+
+        if (type === 'zhihu' && !zhihuStreaming.value) {
+            zhihuFailed.value = false
+            zhihuStreaming.value = true
+            streamingZhihu.value = ''
+            const zhihuPrompts: StreamPrompts = {
+                systemPrompt: prompts.zhihuSystem,
+                userPrompt: prompts.zhihuUser
+            }
+            zhihuCleanup = streamZhihuArticle(
+                videoTaskIdStr,
+                zhihuPrompts,
+                (newTaskId) => { zhihuTaskId.value = newTaskId },
+                (chunk) => { streamingZhihu.value += chunk },
+                () => {
+                    zhihuArticle.value = streamingZhihu.value
+                    zhihuStreaming.value = false
+                },
+                (err) => {
+                    console.error('知乎文章生成失败:', err)
+                    zhihuFailed.value = true
+                    zhihuStreaming.value = false
+                }
+            )
+        }
     }
 
     // 从 URL 加载任务（支持刷新页面和分享链接）
@@ -760,10 +825,12 @@ export const useTaskStore = defineStore('task', () => {
         podcastScript,
         hasPodcastAudio,
         podcastError,
+        zhihuArticle,
         // 各任务 ID
         outlineTaskId,
         articleTaskId,
         podcastTaskId,
+        zhihuTaskId,
         promptsLoaded,
         prompts,
         // 流式状态
@@ -772,19 +839,23 @@ export const useTaskStore = defineStore('task', () => {
         articleStreaming,
         podcastStreaming,
         podcastSynthesizing,
+        zhihuStreaming,
         streamingOutline,
         streamingArticle,
         streamingPodcast,
+        streamingZhihu,
         // 失败状态
         outlineFailed,
         articleFailed,
         podcastFailed,
+        zhihuFailed,
 
         // 计算属性
         currentContent,
         displayOutline,
         displayArticle,
         displayPodcast,
+        displayZhihu,
 
         // 方法
         resetState,
@@ -795,6 +866,7 @@ export const useTaskStore = defineStore('task', () => {
         resetOutlinePrompts,
         resetArticlePrompts,
         resetPodcastPrompts,
+        resetZhihuPrompts,
         submitUrl,
         submitSubtitle,
         startNew,

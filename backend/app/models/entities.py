@@ -78,5 +78,18 @@ class PodcastTask:
     status_queue: Queue | None = field(default=None, repr=False)
 
 
+@dataclass
+class ZhihuArticleTask:
+    """知乎文章生成任务"""
+
+    task_id: str
+    status: TaskStatus = TaskStatus.PENDING
+    progress: str = "等待处理..."
+    transcript: str = ""  # 输入
+    zhihu_article: str = ""  # 输出
+    error: str = ""
+    created_at: float = field(default_factory=time.time)
+
+
 # 任务类型联合
-Task = VideoTask | OutlineTask | ArticleTask | PodcastTask
+Task = VideoTask | OutlineTask | ArticleTask | PodcastTask | ZhihuArticleTask

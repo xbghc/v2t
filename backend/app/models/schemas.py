@@ -34,6 +34,8 @@ class PromptsResponse(BaseModel):
     article_user: str
     podcast_system: str
     podcast_user: str
+    zhihu_system: str
+    zhihu_user: str
 
 
 class VideoTaskResponse(BaseModel):
@@ -80,4 +82,14 @@ class PodcastTaskResponse(BaseModel):
     podcast_script: str = ""
     has_podcast_audio: bool = False
     podcast_error: str = ""
+    error: str = ""
+
+
+class ZhihuArticleTaskResponse(BaseModel):
+    """知乎文章任务响应"""
+
+    task_id: str
+    status: str
+    progress: str
+    zhihu_article: str = ""
     error: str = ""

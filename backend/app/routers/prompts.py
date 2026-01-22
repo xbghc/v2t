@@ -10,6 +10,8 @@ from app.services.llm import (
     DEFAULT_OUTLINE_USER_PROMPT,
     DEFAULT_PODCAST_SYSTEM_PROMPT,
     DEFAULT_PODCAST_USER_PROMPT,
+    DEFAULT_ZHIHU_SYSTEM_PROMPT,
+    DEFAULT_ZHIHU_USER_PROMPT,
 )
 
 router = APIRouter(prefix="/api", tags=["prompts"])
@@ -25,4 +27,6 @@ async def get_prompts() -> PromptsResponse:
         article_user=DEFAULT_ARTICLE_USER_PROMPT,
         podcast_system=DEFAULT_PODCAST_SYSTEM_PROMPT,
         podcast_user=DEFAULT_PODCAST_USER_PROMPT,
+        zhihu_system=DEFAULT_ZHIHU_SYSTEM_PROMPT,
+        zhihu_user=DEFAULT_ZHIHU_USER_PROMPT,
     )

@@ -68,6 +68,8 @@ export interface PromptsResponse {
     article_user: string
     podcast_system: string
     podcast_user: string
+    zhihu_system: string
+    zhihu_user: string
 }
 
 /**
@@ -80,6 +82,8 @@ export interface CustomPrompts {
     articleUser: string
     podcastSystem: string
     podcastUser: string
+    zhihuSystem: string
+    zhihuUser: string
 }
 
 /**
@@ -134,6 +138,17 @@ export interface PodcastTaskResponse {
 }
 
 /**
+ * 知乎文章任务响应
+ */
+export interface ZhihuArticleTaskResponse {
+    task_id: string
+    status: TaskStatus
+    progress: string
+    zhihu_article: string
+    error: string
+}
+
+/**
  * SSE 状态流事件数据（VideoTask）
  */
 export interface VideoStatusStreamData {
@@ -183,7 +198,7 @@ export interface TabDefinition {
 /**
  * 侧边导航项类型
  */
-export type SideNavKey = 'podcast' | 'article' | 'outline' | 'video' | 'audio' | 'subtitle'
+export type SideNavKey = 'podcast' | 'article' | 'outline' | 'zhihu' | 'video' | 'audio' | 'subtitle'
 
 /**
  * 侧边导航项

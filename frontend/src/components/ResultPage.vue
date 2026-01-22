@@ -39,18 +39,22 @@ const {
     podcastScript,
     hasPodcastAudio,
     podcastError,
+    zhihuArticle,
     generateOptions,
     podcastStreaming,
     podcastSynthesizing,
     outlineStreaming,
     articleStreaming,
+    zhihuStreaming,
     displayOutline,
     displayArticle,
     displayPodcast,
+    displayZhihu,
     // 失败状态
     outlineFailed,
     articleFailed,
-    podcastFailed
+    podcastFailed,
+    zhihuFailed
 } = storeToRefs(taskStore)
 
 // 聚焦模式状态
@@ -112,6 +116,11 @@ const renderedPodcastScript: ComputedRef<string> = computed(() => {
     return marked.parse(displayPodcast.value) as string
 })
 
+const renderedZhihuArticle: ComputedRef<string> = computed(() => {
+    if (!displayZhihu.value) return ''
+    return marked.parse(displayZhihu.value) as string
+})
+
 // 导航项计算
 const navItems = computed<SideNavItem[]>(() => {
     const items: SideNavItem[] = []
@@ -135,6 +144,17 @@ const navItems = computed<SideNavItem[]>(() => {
             icon: 'article',
             hasContent: !!article.value || !!displayArticle.value,
             isLoading: articleStreaming.value
+        })
+    }
+
+    // 知乎（只有已有内容或正在生成时才显示）
+    if (zhihuArticle.value || zhihuStreaming.value) {
+        items.push({
+            key: 'zhihu',
+            label: '知乎',
+            icon: 'edit_document',
+            hasContent: !!zhihuArticle.value || !!displayZhihu.value,
+            isLoading: zhihuStreaming.value
         })
     }
 
@@ -210,6 +230,17 @@ const disabledItems = computed<SideNavItem[]>(() => {
         })
     }
 
+    // 知乎
+    if (!zhihuArticle.value && !zhihuStreaming.value) {
+        items.push({
+            key: 'zhihu',
+            label: '知乎',
+            icon: 'edit_document',
+            hasContent: false,
+            isLoading: false
+        })
+    }
+
     // 大纲
     if (!generateOptions.value.outline && !outline.value) {
         items.push({
@@ -242,9 +273,15 @@ const scrollToSection = (key: SideNavKey) => {
 
 // 生成单个内容
 const handleGenerateContent = (key: SideNavKey) => {
-    if (key === 'podcast' || key === 'article' || key === 'outline') {
+    if (key === 'podcast' || key === 'article' || key === 'outline' || key === 'zhihu') {
         taskStore.generateSingleContent(key)
-        toastStore.showToast(`正在生成${key === 'podcast' ? '播客' : key === 'article' ? '文章' : '大纲'}...`, 'info')
+        const labels: Record<string, string> = {
+            podcast: '播客',
+            article: '文章',
+            outline: '大纲',
+            zhihu: '知乎文章'
+        }
+        toastStore.showToast(`正在生成${labels[key]}...`, 'info')
     }
 }
 
@@ -285,6 +322,13 @@ const showOutline = computed(() => {
     return false
 })
 
+// 是否显示知乎区块
+const showZhihu = computed(() => {
+    // 已有内容或正在生成
+    if (zhihuArticle.value || zhihuStreaming.value) return true
+    return false
+})
+
 // 加载状态文本
 const getLoadingText = (key: SideNavKey): string => {
     if (taskStatus.value === 'downloading') return '正在下载视频...'
@@ -293,6 +337,7 @@ const getLoadingText = (key: SideNavKey): string => {
     if (key === 'podcast' && podcastStreaming.value) return '正在生成播客脚本...'
     if (key === 'article' && articleStreaming.value) return '正在生成文章...'
     if (key === 'outline' && outlineStreaming.value) return '正在生成大纲...'
+    if (key === 'zhihu' && zhihuStreaming.value) return '正在生成知乎文章...'
     return '加载中...'
 }
 </script>
@@ -489,6 +534,51 @@ const getLoadingText = (key: SideNavKey): string => {
                             <button
                                 class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                                 @click="handleGenerateContent('outline')"
+                            >
+                                <span class="material-symbols-outlined text-lg">refresh</span>
+                                <span>重新生成</span>
+                            </button>
+                        </div>
+                    </ContentSection>
+
+                    <!-- 知乎区块 -->
+                    <ContentSection
+                        v-if="showZhihu"
+                        id="zhihu"
+                        title="知乎文章"
+                        icon="edit_document"
+                        :is-visible="isSectionVisible('zhihu')"
+                        :is-loading="zhihuStreaming && !displayZhihu"
+                        :loading-text="getLoadingText('zhihu')"
+                    >
+                        <template #actions>
+                            <button
+                                v-if="zhihuArticle || displayZhihu"
+                                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
+                                @click="copyContent(zhihuArticle || displayZhihu)"
+                            >
+                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <span>复制</span>
+                            </button>
+                        </template>
+
+                        <div
+                            v-if="displayZhihu"
+                            class="prose prose-sm md:prose-base dark:prose-invert max-w-none"
+                            v-html="renderedZhihuArticle"
+                        />
+                        <!-- 生成失败：显示失败提示和重试按钮 -->
+                        <div
+                            v-else-if="zhihuFailed"
+                            class="flex flex-col items-center justify-center py-12 gap-4"
+                        >
+                            <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
+                            <p class="text-gray-500 dark:text-gray-400">
+                                知乎文章生成失败
+                            </p>
+                            <button
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="handleGenerateContent('zhihu')"
                             >
                                 <span class="material-symbols-outlined text-lg">refresh</span>
                                 <span>重新生成</span>
