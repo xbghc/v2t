@@ -1,25 +1,13 @@
 """视频下载测试"""
 
+import shutil
 
 import pytest
 
 from app.services.video_downloader import (
     DownloadError,
     download_video,
-    sanitize_filename,
 )
-
-
-def test_sanitize_filename():
-    """测试文件名清理"""
-    assert sanitize_filename("hello world") == "hello world"
-    assert sanitize_filename("hello<>world") == "hello__world"
-    assert sanitize_filename('test:file"name') == "test_file_name"
-
-    # 测试长文件名截断
-    long_name = "a" * 300
-    result = sanitize_filename(long_name)
-    assert len(result) <= 200
 
 
 @pytest.mark.asyncio
@@ -32,9 +20,10 @@ async def test_download_video():
         result = await download_video(test_url)
         assert result.path.exists()
         assert result.path.stat().st_size > 0
-        print(f"下载成功: {result.path}")
+        assert result.url_hash  # 应该有 url_hash
+        print(f"下载成功: {result.path}, url_hash: {result.url_hash}")
 
-        # 清理测试文件
-        result.path.unlink()
+        # 清理测试目录（url_hash 目录）
+        shutil.rmtree(result.path.parent, ignore_errors=True)
     except DownloadError as e:
         pytest.skip(f"下载测试跳过: {e}")
