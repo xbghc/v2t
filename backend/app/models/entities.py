@@ -5,7 +5,7 @@ from asyncio import Queue
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from app.models.enums import ResourceType, WorkspaceStatus
+from .enums import ResourceType, WorkspaceStatus
 
 
 @dataclass

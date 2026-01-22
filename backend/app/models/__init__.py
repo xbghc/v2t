@@ -1,8 +1,8 @@
 """数据模型模块"""
 
-from app.models.entities import Workspace, WorkspaceResource
-from app.models.enums import ResourceType, WorkspaceStatus
-from app.models.schemas import (
+from .entities import Workspace, WorkspaceResource
+from .enums import ResourceType, WorkspaceStatus
+from .schemas import (
     CreateWorkspaceRequest,
     PromptsResponse,
     StreamRequest,

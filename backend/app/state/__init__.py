@@ -1,6 +1,6 @@
 """状态管理模块"""
 
-from app.state.memory_store import (
+from .memory_store import (
     WORKSPACE_EXPIRE_SECONDS,
     cleanup_old_workspaces,
     get_workspace,

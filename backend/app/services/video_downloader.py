@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColumn
 
 from app.config import get_settings
-from app.services.xiazaitool import XiazaitoolError, parse_video_url
 from app.utils.url_hash import compute_url_hash
+
+from .xiazaitool import XiazaitoolError, parse_video_url
 
 logger = logging.getLogger(__name__)
 
