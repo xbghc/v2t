@@ -5,11 +5,9 @@ from app.state.memory_store import (
     cleanup_old_workspaces,
     get_workspace,
     register_workspace,
-    workspaces,
 )
 
 __all__ = [
-    "workspaces",
     "WORKSPACE_EXPIRE_SECONDS",
     "get_workspace",
     "register_workspace",
