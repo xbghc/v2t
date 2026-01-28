@@ -9,7 +9,7 @@ from app.models.entities import Workspace, WorkspaceResource
 from app.models.enums import ResourceType, WorkspaceStatus
 from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_audio
 from app.services.video_downloader import DownloadError, download_video
-from app.state import get_workspace
+from app.state import get_workspace, save_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,10 @@ async def update_workspace_status(
     """更新工作区状态并推送 SSE 事件"""
     workspace.status = status
     workspace.progress = progress
+
+    # 持久化到存储
+    await save_workspace(workspace)
+
     if workspace.status_queue:
         # 构建资源响应
         resources = []
@@ -71,7 +75,7 @@ async def process_workspace(workspace_id: str, url: str) -> None:
 
     支持文件复用：如果资源文件已存在，跳过对应处理步骤。
     """
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         return
 

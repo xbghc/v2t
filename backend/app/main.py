@@ -34,12 +34,41 @@ app.include_router(stream_router)
 app.include_router(prompts_router)
 
 
+async def check_mongodb_connection() -> tuple[bool, str]:
+    """检测 MongoDB 连接状态"""
+    from app.config import get_settings
+    from app.storage import get_metadata_store
+
+    settings = get_settings()
+
+    # 未配置 MongoDB，使用内存存储
+    if not settings.mongodb_uri:
+        return True, "使用内存存储（未配置 MONGODB_URI）"
+
+    # 检查 MongoDB 连接
+    store = get_metadata_store()
+
+    # MongoMetadataStore 有 check_connection 方法
+    if hasattr(store, "check_connection"):
+        return await store.check_connection()
+
+    return True, "使用内存存储"
+
+
 async def check_api_connections() -> bool:
     """检测所有 API 连接，返回是否全部成功"""
     from app.services.llm import check_llm_api
     from app.services.podcast_tts import check_tts_api
     from app.services.transcribe import check_whisper_api
     from app.services.xiazaitool import check_xiazaitool_token
+
+    # 检查 MongoDB 连接
+    ok, msg = await check_mongodb_connection()
+    if ok:
+        logger.info("✓ MongoDB: %s", msg)
+    else:
+        logger.error("✗ MongoDB: %s", msg)
+        return False
 
     # 同步检查（配置检测）
     ok, msg = check_xiazaitool_token()

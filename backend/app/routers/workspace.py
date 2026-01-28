@@ -78,12 +78,12 @@ async def create_workspace(
 ) -> WorkspaceResponse:
     """创建工作区并启动视频处理"""
     # 清理过期工作区
-    cleanup_old_workspaces()
+    await cleanup_old_workspaces()
 
     # 创建工作区
     workspace_id = str(uuid.uuid4())[:12]
     workspace = Workspace(workspace_id=workspace_id, url=request.url)
-    register_workspace(workspace)
+    await register_workspace(workspace)
 
     # 启动后台处理
     background_tasks.add_task(process_workspace, workspace_id, request.url)
@@ -94,7 +94,7 @@ async def create_workspace(
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
 async def get_workspace_info(workspace_id: str) -> WorkspaceResponse:
     """获取工作区信息"""
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在或已过期")
 
@@ -106,7 +106,7 @@ async def stream_workspace_status(
     workspace_id: str, request: Request
 ) -> StreamingResponse:
     """SSE 推送工作区状态变化"""
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在")
 
@@ -141,7 +141,7 @@ async def stream_workspace_status(
 @router.get("/{workspace_id}/resources/{resource_id}")
 async def download_resource(workspace_id: str, resource_id: str) -> FileResponse:
     """下载资源文件"""
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在")
 

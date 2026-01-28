@@ -20,7 +20,7 @@ from app.services.llm import (
     generate_zhihu_article,
 )
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
-from app.state import get_workspace
+from app.state import get_workspace, save_workspace
 from app.utils.sse import sse_data, sse_response
 
 logger = logging.getLogger(__name__)
@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/stream", tags=["stream"])
 
 
-def get_workspace_with_transcript(workspace_id: str) -> tuple[Workspace, str]:
+async def get_workspace_with_transcript(workspace_id: str) -> tuple[Workspace, str]:
     """获取带转录内容的工作区，不存在或无转录则抛异常"""
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在或已过期")
 
@@ -52,7 +52,7 @@ def get_workspace_with_transcript(workspace_id: str) -> tuple[Workspace, str]:
     return workspace, transcript
 
 
-def save_text_resource(
+async def save_text_resource(
     workspace: Workspace,
     name: str,
     content: str,
@@ -73,6 +73,8 @@ def save_text_resource(
         resource_path=resource_path,
     )
     workspace.add_resource(resource)
+    # 持久化到存储
+    await save_workspace(workspace)
     return resource
 
 
@@ -81,7 +83,7 @@ async def stream_outline(
     workspace_id: str, request: Request, body: StreamRequest
 ) -> StreamingResponse:
     """流式生成大纲"""
-    workspace, transcript = get_workspace_with_transcript(workspace_id)
+    workspace, transcript = await get_workspace_with_transcript(workspace_id)
     resource_id = str(uuid.uuid4())[:8]
 
     async def generate() -> AsyncIterator[str]:
@@ -102,7 +104,7 @@ async def stream_outline(
             # 保存资源
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "outline", content, prompt)
+            await save_text_resource(workspace, "outline", content, prompt)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 大纲生成失败: %s", workspace_id, e)
@@ -116,7 +118,7 @@ async def stream_article(
     workspace_id: str, request: Request, body: StreamRequest
 ) -> StreamingResponse:
     """流式生成文章"""
-    workspace, transcript = get_workspace_with_transcript(workspace_id)
+    workspace, transcript = await get_workspace_with_transcript(workspace_id)
     resource_id = str(uuid.uuid4())[:8]
 
     async def generate() -> AsyncIterator[str]:
@@ -136,7 +138,7 @@ async def stream_article(
 
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "article", content, prompt)
+            await save_text_resource(workspace, "article", content, prompt)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 文章生成失败: %s", workspace_id, e)
@@ -150,7 +152,7 @@ async def stream_podcast(
     workspace_id: str, request: Request, body: StreamRequest
 ) -> StreamingResponse:
     """流式生成播客脚本，完成后自动合成音频"""
-    workspace, transcript = get_workspace_with_transcript(workspace_id)
+    workspace, transcript = await get_workspace_with_transcript(workspace_id)
     settings = get_settings()
     resource_id = str(uuid.uuid4())[:8]
 
@@ -172,7 +174,7 @@ async def stream_podcast(
 
             script_content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "podcast_script", script_content, prompt)
+            await save_text_resource(workspace, "podcast_script", script_content, prompt)
             yield sse_data({"script_done": True})
 
             # 合成音频
@@ -191,6 +193,8 @@ async def stream_podcast(
                     resource_path=audio_path,
                 )
                 workspace.add_resource(audio_resource)
+                # 持久化到存储
+                await save_workspace(workspace)
                 yield sse_data({"done": True, "has_audio": True, "audio_resource_id": audio_resource_id})
             except PodcastTTSError as e:
                 logger.warning("工作区 %s 播客音频合成失败: %s", workspace_id, e)
@@ -207,7 +211,7 @@ async def stream_zhihu_article(
     workspace_id: str, request: Request, body: StreamRequest
 ) -> StreamingResponse:
     """流式生成知乎文章"""
-    workspace, transcript = get_workspace_with_transcript(workspace_id)
+    workspace, transcript = await get_workspace_with_transcript(workspace_id)
     resource_id = str(uuid.uuid4())[:8]
 
     async def generate() -> AsyncIterator[str]:
@@ -227,7 +231,7 @@ async def stream_zhihu_article(
 
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "zhihu", content, prompt)
+            await save_text_resource(workspace, "zhihu", content, prompt)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 知乎文章生成失败: %s", workspace_id, e)
