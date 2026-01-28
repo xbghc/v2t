@@ -23,6 +23,12 @@ ENV_MAPPING = {
     # MongoDB
     "mongodb_uri": "MONGODB_URI",
     "mongodb_database": "MONGODB_DATABASE",
+    # MinIO
+    "minio_endpoint": "MINIO_ENDPOINT",
+    "minio_access_key": "MINIO_ACCESS_KEY",
+    "minio_secret_key": "MINIO_SECRET_KEY",
+    "minio_bucket": "MINIO_BUCKET",
+    "minio_secure": "MINIO_SECURE",
 }
 
 
@@ -48,6 +54,13 @@ class Settings:
     # MongoDB
     mongodb_uri: str = ""
     mongodb_database: str = ""
+
+    # MinIO
+    minio_endpoint: str = ""
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_bucket: str = ""
+    minio_secure: bool = False
 
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时
@@ -80,6 +93,11 @@ def save_config(config: dict):
 _settings: Settings | None = None
 
 
+def _parse_bool(value: str) -> bool:
+    """解析布尔值字符串"""
+    return value.lower() in ("true", "1", "yes", "on")
+
+
 def get_settings() -> Settings:
     """获取配置（单例）- 环境变量优先，回退到配置文件"""
     global _settings
@@ -89,7 +107,11 @@ def get_settings() -> Settings:
         for field_name, env_name in ENV_MAPPING.items():
             env_value = os.environ.get(env_name)
             if env_value:
-                config[field_name] = env_value
+                # 处理布尔值类型
+                if field_name == "minio_secure":
+                    config[field_name] = _parse_bool(env_value)
+                else:
+                    config[field_name] = env_value
         # 只传入 Settings 支持的字段
         valid_fields = {f.name for f in Settings.__dataclass_fields__.values()}
         filtered_config = {k: v for k, v in config.items() if k in valid_fields}
