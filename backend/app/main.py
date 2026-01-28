@@ -35,24 +35,20 @@ app.include_router(prompts_router)
 
 
 async def check_mongodb_connection() -> tuple[bool, str]:
-    """检测 MongoDB 连接状态"""
+    """检测 MongoDB 连接状态（必需配置）"""
     from app.config import get_settings
     from app.storage import get_metadata_store
 
     settings = get_settings()
 
-    # 未配置 MongoDB，使用内存存储
     if not settings.mongodb_uri:
-        return True, "使用内存存储（未配置 MONGODB_URI）"
+        return False, "未配置 MONGODB_URI 环境变量"
 
-    # 检查 MongoDB 连接
+    if not settings.mongodb_database:
+        return False, "未配置 MONGODB_DATABASE 环境变量"
+
     store = get_metadata_store()
-
-    # MongoMetadataStore 有 check_connection 方法
-    if hasattr(store, "check_connection"):
-        return await store.check_connection()
-
-    return True, "使用内存存储"
+    return await store.check_connection()
 
 
 async def check_api_connections() -> bool:

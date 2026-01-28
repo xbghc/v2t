@@ -46,8 +46,8 @@ class Settings:
     dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
 
     # MongoDB
-    mongodb_uri: str = ""  # MongoDB 连接 URI，为空时使用内存存储
-    mongodb_database: str = "v2t"  # MongoDB 数据库名称
+    mongodb_uri: str = ""
+    mongodb_database: str = ""
 
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时

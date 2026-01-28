@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.storage import LocalFileStorage, MemoryMetadataStore, cleanup_old_files
+from app.storage import LocalFileStorage, MongoMetadataStore, cleanup_old_files
 from app.utils.url_hash import compute_url_hash, normalize_url
 
 
@@ -126,12 +126,24 @@ class TestLocalFileStorage:
         assert path == temp_dir / "abc123" / "video.mp4"
 
 
-class TestMemoryMetadataStore:
-    """内存元数据存储测试"""
+@pytest.mark.mongo
+class TestMongoMetadataStore:
+    """MongoDB 元数据存储测试（需要运行 MongoDB）"""
 
     @pytest.fixture
-    def store(self):
-        return MemoryMetadataStore()
+    async def store(self):
+        """创建测试用 MongoDB 存储实例"""
+        store = MongoMetadataStore(
+            uri="mongodb://localhost:27017",
+            database="v2t_test",
+        )
+        # 检查连接
+        ok, _ = await store.check_connection()
+        if not ok:
+            pytest.skip("MongoDB 不可用")
+        yield store
+        # 清理测试数据
+        await store._collection.delete_many({})
 
     @pytest.mark.asyncio
     async def test_save_and_get(self, store):
