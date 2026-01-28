@@ -7,12 +7,12 @@ Type=simple
 User=YOUR_USER
 WorkingDirectory=/path/to/v2t/backend
 # 如果部署在根路径，使用这行：
-# ExecStart=/path/to/v2t/backend/.venv/bin/uvicorn app.web:app --host 0.0.0.0 --port 8101
+# ExecStart=.venv/bin/uvicorn app.web:app --host 0.0.0.0 --port 8101
 # 如果部署在 /v2t 子路径，使用这行：
-ExecStart=/path/to/v2t/backend/.venv/bin/uvicorn app.web:app --host 0.0.0.0 --port 8101 --root-path /v2t
+ExecStart=.venv/bin/uvicorn app.web:app --host 0.0.0.0 --port 8101 --root-path /v2t
 Restart=always
 RestartSec=10
-Environment=PATH=/path/to/v2t/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=.venv/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
 WantedBy=multi-user.target

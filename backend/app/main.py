@@ -1,5 +1,10 @@
 """v2t Web API 服务入口"""
 
+# 加载 .env 文件（必须在其他模块导入前执行）
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # 配置日志（必须在其他模块导入前执行）
 from app.logging_config import setup_logging
 

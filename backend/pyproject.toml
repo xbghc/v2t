@@ -14,6 +14,7 @@ dependencies = [
     "pedalboard>=0.9.0",
     "pathvalidate>=3.0.0",
     "loguru>=0.7.3",
+    "python-dotenv>=1.2.1",
 ]
 
 [project.scripts]
