@@ -57,10 +57,12 @@ def save_text_resource(
     name: str,
     content: str,
     prompt: str = "",
+    resource_id: str | None = None,
 ) -> WorkspaceResource:
     """保存文本资源到工作区"""
     settings = get_settings()
-    resource_id = str(uuid.uuid4())[:8]
+    if resource_id is None:
+        resource_id = str(uuid.uuid4())[:8]
     resource_path = settings.temp_path / f"{workspace.workspace_id}_{name}_{resource_id}.json"
     resource_path.write_text(
         json.dumps({"prompt": prompt, "content": content}, ensure_ascii=False),
@@ -102,7 +104,7 @@ async def stream_outline(
             # 保存资源
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "outline", content, prompt)
+            save_text_resource(workspace, "outline", content, prompt, resource_id=resource_id)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 大纲生成失败: %s", workspace_id, e)
@@ -136,7 +138,7 @@ async def stream_article(
 
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "article", content, prompt)
+            save_text_resource(workspace, "article", content, prompt, resource_id=resource_id)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 文章生成失败: %s", workspace_id, e)
@@ -172,7 +174,7 @@ async def stream_podcast(
 
             script_content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "podcast_script", script_content, prompt)
+            save_text_resource(workspace, "podcast_script", script_content, prompt, resource_id=resource_id)
             yield sse_data({"script_done": True})
 
             # 合成音频
@@ -227,7 +229,7 @@ async def stream_zhihu_article(
 
             content = "".join(chunks)
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            save_text_resource(workspace, "zhihu", content, prompt)
+            save_text_resource(workspace, "zhihu", content, prompt, resource_id=resource_id)
             yield sse_data({"done": True})
         except LLMError as e:
             logger.warning("工作区 %s 知乎文章生成失败: %s", workspace_id, e)
