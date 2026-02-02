@@ -86,12 +86,6 @@ async def process_video_task(
             audio_path = resource.audio_path
             logger.info("任务 %s 复用音频资源", task_id)
 
-        # 检查视频时长
-        if video_result.duration and video_result.duration > settings.max_video_duration:
-            max_min = settings.max_video_duration // 60
-            video_min = video_result.duration // 60
-            raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
-
         # 4. 转录音频
         await update_task_status(task, TaskStatus.TRANSCRIBING, "正在转录音频...")
         from app.services.transcribe import transcribe_audio

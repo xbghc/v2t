@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
@@ -31,7 +32,62 @@ class VideoResult:
     path: Path
     title: str
     url_hash: str
-    duration: int | None = None  # 秒
+    duration: float | None = None  # 秒
+
+
+def get_remote_video_duration(video_url: str, referer: str = "") -> float | None:
+    """获取远程视频时长（秒）"""
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+    ]
+
+    # 添加 Headers (User-Agent 和 Referer)
+    headers = "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    if referer:
+        headers += f"\r\nReferer: {referer}"
+
+    cmd.extend(["-headers", headers])
+    cmd.append(video_url)
+
+    try:
+        # 设置超时防止卡死
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        logger.warning("ffprobe 获取时长失败: %s", e)
+
+    return None
+
+
+def get_local_video_duration(video_path: Path) -> float | None:
+    """获取本地视频时长（秒）"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(video_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        logger.warning("ffprobe 获取本地时长失败: %s", e)
+    return None
 
 
 def get_referer(url: str) -> str:
@@ -250,9 +306,29 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
     if video_path.exists():
         meta = _read_meta(resource_dir)
         title = meta.get("title", "") if meta else ""
+        duration = meta.get("duration") if meta else None
+
+        # 如果元数据没有时长，尝试从本地文件获取
+        if duration is None:
+            duration = get_local_video_duration(video_path)
+            if duration and meta:
+                meta["duration"] = duration
+                _write_meta(resource_dir, meta)
+
+        # 复用时也检查时长限制（防止历史下载的大文件被错误处理）
+        if duration and duration > settings.max_video_duration:
+            max_min = settings.max_video_duration // 60
+            video_min = int(duration // 60)
+            raise DownloadError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟（复用）")
+
         _touch_dir(resource_dir)  # 更新访问时间
         logger.info("复用已有视频: %s", url_hash)
-        return VideoResult(path=video_path, title=title, url_hash=url_hash)
+        return VideoResult(
+            path=video_path,
+            title=title,
+            url_hash=url_hash,
+            duration=duration,
+        )
 
     # 解析视频链接
     try:
@@ -263,13 +339,26 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
     if not video_info.video_url:
         raise DownloadError("无法获取视频下载链接")
 
+    # 获取视频时长并检查限制
+    referer = get_referer(video_info.video_url) or get_referer(url)
+    duration = get_remote_video_duration(video_info.video_url, referer)
+
+    if duration and duration > settings.max_video_duration:
+        max_min = settings.max_video_duration // 60
+        video_min = int(duration // 60)
+        raise DownloadError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
+
     # 创建目录并保存元数据
     resource_dir.mkdir(parents=True, exist_ok=True)
-    _write_meta(resource_dir, {
-        "url": url,
-        "title": video_info.title,
-        "cover_url": video_info.cover_url,
-    })
+    _write_meta(
+        resource_dir,
+        {
+            "url": url,
+            "title": video_info.title,
+            "cover_url": video_info.cover_url,
+            "duration": duration,
+        },
+    )
 
     # 下载视频
     await _download_with_aria2c(
@@ -278,4 +367,35 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
         save_path=video_path,
     )
 
-    return VideoResult(path=video_path, title=video_info.title, url_hash=url_hash)
+    # 如果远程获取时长失败，下载后再次检查
+    if duration is None:
+        duration = get_local_video_duration(video_path)
+        if duration:
+            # 更新元数据
+            _write_meta(
+                resource_dir,
+                {
+                    "url": url,
+                    "title": video_info.title,
+                    "cover_url": video_info.cover_url,
+                    "duration": duration,
+                },
+            )
+
+            # 检查限制
+            if duration > settings.max_video_duration:
+                # 删除文件
+                try:
+                    video_path.unlink()
+                except OSError:
+                    pass
+                max_min = settings.max_video_duration // 60
+                video_min = int(duration // 60)
+                raise DownloadError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
+
+    return VideoResult(
+        path=video_path,
+        title=video_info.title,
+        url_hash=url_hash,
+        duration=duration,
+    )
