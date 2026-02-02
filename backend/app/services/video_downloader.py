@@ -32,7 +32,7 @@ class VideoResult:
     path: Path
     title: str
     url_hash: str
-    duration: float | None = None  # 秒
+    duration: float  # 秒
 
 
 def get_remote_video_duration(video_url: str, referer: str = "") -> float | None:
@@ -315,8 +315,11 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
                 meta["duration"] = duration
                 _write_meta(resource_dir, meta)
 
+        if duration is None:
+            raise DownloadError("无法获取视频时长（复用）")
+
         # 复用时也检查时长限制（防止历史下载的大文件被错误处理）
-        if duration and duration > settings.max_video_duration:
+        if duration > settings.max_video_duration:
             max_min = settings.max_video_duration // 60
             video_min = int(duration // 60)
             raise DownloadError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟（复用）")
@@ -392,6 +395,13 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
                 max_min = settings.max_video_duration // 60
                 video_min = int(duration // 60)
                 raise DownloadError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
+        else:
+            # 依然无法获取时长，删除文件并报错
+            try:
+                video_path.unlink()
+            except OSError:
+                pass
+            raise DownloadError("无法获取视频时长")
 
     return VideoResult(
         path=video_path,
