@@ -148,3 +148,66 @@ export interface SideNavItem {
     hasContent: boolean
     isLoading: boolean
 }
+
+// ============ 状态机类型 ============
+
+/**
+ * 任务主状态机状态
+ */
+export type TaskMachineState =
+    | 'idle'        // 初始状态，等待用户输入
+    | 'submitting'  // 正在提交任务
+    | 'processing'  // 后端处理中（下载、转录）
+    | 'generating'  // 正在生成内容
+    | 'completed'   // 任务完成
+    | 'failed'      // 任务失败
+
+/**
+ * 内容生成器状态
+ */
+export type ContentGeneratorState =
+    | 'idle'         // 未开始
+    | 'streaming'    // 正在流式生成
+    | 'synthesizing' // 正在合成（仅播客）
+    | 'completed'    // 生成完成
+    | 'failed'       // 生成失败
+
+/**
+ * 内容生成器类型
+ */
+export type ContentType = 'outline' | 'article' | 'podcast' | 'zhihu'
+
+/**
+ * 内容生成器上下文
+ */
+export interface ContentGeneratorContext {
+    state: ContentGeneratorState
+    content: string
+    streamingContent: string
+    error: string
+    audioUrl: string | null  // 仅播客使用
+}
+
+/**
+ * 状态机事件类型
+ */
+export type TaskMachineEvent =
+    | { type: 'SUBMIT'; url: string }
+    | { type: 'SUBMIT_SUCCESS'; workspaceId: string }
+    | { type: 'SUBMIT_ERROR'; error: string }
+    | { type: 'STATUS_UPDATE'; status: WorkspaceStatus; data: WorkspaceResponse }
+    | { type: 'READY_TO_GENERATE' }
+    | { type: 'GENERATION_COMPLETE' }
+    | { type: 'RESET' }
+    | { type: 'RETRY' }
+
+/**
+ * 内容生成器事件类型
+ */
+export type ContentGeneratorEvent =
+    | { type: 'START' }
+    | { type: 'CHUNK'; content: string }
+    | { type: 'SYNTHESIZE_START' }
+    | { type: 'COMPLETE'; audioUrl?: string; audioError?: string }
+    | { type: 'ERROR'; error: string }
+    | { type: 'RESET' }
