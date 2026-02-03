@@ -1,3 +1,4 @@
+ARGS ?=
 .PHONY: install install-backend install-frontend backend frontend build test lint lint-fix clean deploy help
 
 # 默认目标
@@ -22,10 +23,10 @@ install-frontend: ## 安装前端依赖
 # ==================== 开发 ====================
 
 backend: ## 启动后端开发服务器
-	cd backend && uv run v2t-web
+	cd backend && uv run v2t-web $(ARGS)
 
 frontend: ## 启动前端开发服务器
-	cd frontend && npm run dev
+	cd frontend && npm run dev -- $(ARGS)
 
 # ==================== 构建 ====================
 
@@ -33,34 +34,34 @@ build: build-frontend ## 构建项目
 
 build-frontend: ## 构建前端
 ifeq ($(DEPLOY_DIR),)
-	cd frontend && npm run build
+	cd frontend && npm run build -- $(ARGS)
 else
 	@echo "构建到 $(DEPLOY_DIR)..."
-	cd frontend && npm run build -- --outDir $(DEPLOY_DIR) --emptyOutDir
+	cd frontend && npm run build -- $(ARGS) --outDir $(DEPLOY_DIR) --emptyOutDir
 endif
 
 # ==================== 测试 ====================
 
 test: ## 运行所有测试
-	cd backend && uv run pytest
+	cd backend && uv run pytest $(ARGS)
 
 test-v: ## 运行测试 (详细输出)
-	cd backend && uv run pytest -v
+	cd backend && uv run pytest $(ARGS) -v
 
 # ==================== Lint ====================
 
 lint: lint-backend lint-frontend ## 运行所有 lint 检查
 
 lint-backend: ## 运行 Python lint (ruff)
-	cd backend && uv run ruff check app/ tests/
+	cd backend && uv run ruff check app/ tests/ $(ARGS)
 
 lint-frontend: ## 运行前端 lint (eslint + typecheck)
-	cd frontend && npm run lint && npm run type-check
+	cd frontend && npm run lint -- $(ARGS) && npm run type-check
 
 lint-fix: lint-fix-backend lint-fix-frontend ## 自动修复所有 lint 问题
 
 lint-fix-backend: ## 自动修复 Python lint 问题
-	cd backend && uv run ruff check app/ tests/ --fix
+	cd backend && uv run ruff check app/ tests/ $(ARGS) --fix
 
 lint-fix-frontend: ## 自动修复前端 lint 问题
 	cd frontend && npm run lint:fix
@@ -77,22 +78,22 @@ clean: ## 清理构建产物和缓存
 # ==================== Docker ====================
 
 docker-build: ## 构建 Docker 镜像
-	docker build -t v2t:latest .
+	docker build -t v2t:latest . $(ARGS)
 
 docker-up: ## 启动 Docker 容器
-	docker-compose up -d
+	docker-compose up -d $(ARGS)
 
 docker-down: ## 停止 Docker 容器
-	docker-compose down
+	docker-compose down $(ARGS)
 
 docker-logs: ## 查看 Docker 日志
-	docker-compose logs -f
+	docker-compose logs -f $(ARGS)
 
 # ==================== 帮助 ====================
 
 help: ## 显示帮助信息
 	@echo "v2t - 视频转文字工具"
 	@echo ""
-	@echo "用法: make [目标]"
+	@echo "用法: make [目标] [ARGS=...]"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
