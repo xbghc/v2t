@@ -93,7 +93,7 @@ async def check_api_connections() -> bool:
     return all_ok
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8101) -> None:
+def run_server(host: str = "0.0.0.0", port: int = 8103) -> None:
     """启动服务器"""
     from app.deps import check_dependencies, get_install_hint
 
