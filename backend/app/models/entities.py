@@ -3,7 +3,6 @@
 import time
 from asyncio import Queue
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from .enums import ResourceType, WorkspaceStatus
 
@@ -15,7 +14,8 @@ class WorkspaceResource:
     resource_id: str
     name: str  # video, audio, transcript, outline, article, podcast, zhihu
     resource_type: ResourceType
-    resource_path: Path | None = None
+    storage_key: str | None = None  # 存储路径
+    prompt: str | None = None  # 生成时的 prompt（TEXT 类型资源的元数据）
     created_at: float = field(default_factory=time.time)
 
 

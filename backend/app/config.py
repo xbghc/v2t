@@ -20,6 +20,11 @@ ENV_MAPPING = {
     # 其他服务
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
+    # MongoDB
+    "mongodb_uri": "MONGODB_URI",
+    "mongodb_database": "MONGODB_DATABASE",
+    # 存储
+    "data_dir": "DATA_DIR",
 }
 
 
@@ -42,9 +47,23 @@ class Settings:
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
     dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
 
+    # MongoDB
+    mongodb_uri: str = ""
+    mongodb_database: str = ""
+
+    # 文件存储
+    data_dir: str = "/data/v2t"
+
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时
     temp_dir: str = "/tmp/v2t"  # 临时文件目录
+
+    @property
+    def data_path(self) -> Path:
+        """数据存储目录"""
+        path = Path(self.data_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     @property
     def temp_path(self) -> Path:

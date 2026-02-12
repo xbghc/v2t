@@ -30,8 +30,6 @@ v2t/
 │   ├── package.json
 │   └── vite.config.ts
 ├── Makefile                    # 根级构建脚本
-├── Dockerfile
-├── docker-compose.yml
 └── deploy/
     ├── v2t.service            # systemd 服务
     └── nginx-local.conf       # 本地 nginx 配置
@@ -68,13 +66,6 @@ cd frontend
 npm install                      # 安装依赖
 npm run dev                      # 开发服务器 (Vite，代理 /api 到 8100)
 npm run build                    # 构建到 frontend/dist/
-```
-
-### Docker
-
-```bash
-docker build -t v2t:latest .
-docker-compose up -d
 ```
 
 ## 架构概览

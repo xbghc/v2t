@@ -159,6 +159,7 @@ async def _download_with_aria2c(
         )
 
         error_output = []
+        error_lines = []  # 关键错误行
         with Progress(
             "[progress.description]{task.description}",
             BarColumn(),
@@ -175,6 +176,10 @@ async def _download_with_aria2c(
                 line_str = line.decode(errors="ignore")
                 error_output.append(line_str)
 
+                # 收集关键错误信息
+                if any(kw in line_str for kw in ("[ERROR]", "errorCode=", "Exception")):
+                    error_lines.append(line_str.strip())
+
                 # 解析进度
                 result = parse_aria2c_progress(line_str)
                 if result:
@@ -186,8 +191,11 @@ async def _download_with_aria2c(
         await process.wait()
 
         if process.returncode != 0:
-            error_msg = "".join(error_output[-10:])  # 只取最后几行
-            raise DownloadError(f"aria2c 下载失败: {error_msg}")
+            if error_lines:
+                error_msg = "; ".join(error_lines)
+            else:
+                error_msg = "".join(error_output[-5:]).strip()
+            raise DownloadError(error_msg)
 
         if not save_path.exists():
             # aria2c 可能使用了服务器指定的文件名，查找最新下载的文件

@@ -1,6 +1,5 @@
 """工作区后台任务"""
 
-import json
 import logging
 import uuid
 
@@ -9,7 +8,8 @@ from app.models.entities import Workspace, WorkspaceResource
 from app.models.enums import ResourceType, WorkspaceStatus
 from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_audio
 from app.services.video_downloader import DownloadError, download_video
-from app.state import get_workspace
+from app.state import get_status_queue, get_workspace, save_workspace
+from app.storage import get_file_storage
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,15 @@ async def update_workspace_status(
     """更新工作区状态并推送 SSE 事件"""
     workspace.status = status
     workspace.progress = progress
-    if workspace.status_queue:
+
+    # 持久化到存储
+    await save_workspace(workspace)
+
+    # 从全局缓存查找 queue（SSE 端点注册的）
+    queue = get_status_queue(workspace.workspace_id)
+    if queue:
+        storage = get_file_storage()
+
         # 构建资源响应
         resources = []
         for res in workspace.resources:
@@ -34,16 +42,15 @@ async def update_workspace_status(
                 "content": None,
                 "created_at": res.created_at,
             }
-            # TEXT 类型读取内容
-            if res.resource_type == ResourceType.TEXT and res.resource_path and res.resource_path.exists():
+            if res.resource_type == ResourceType.TEXT and res.storage_key:
                 try:
-                    data = json.loads(res.resource_path.read_text(encoding="utf-8"))
-                    res_data["content"] = data.get("content", "")
-                except (json.JSONDecodeError, OSError):
+                    content_bytes = await storage.get_bytes(res.storage_key)
+                    res_data["content"] = content_bytes.decode("utf-8")
+                except Exception:
                     pass
             resources.append(res_data)
 
-        await workspace.status_queue.put(
+        await queue.put(
             {
                 "workspace_id": workspace.workspace_id,
                 "url": workspace.url,
@@ -63,21 +70,19 @@ async def process_workspace(workspace_id: str, url: str) -> None:
     后台处理工作区任务（下载和转录）。
 
     资源文件组织结构：
-        {temp_dir}/{url_hash}/
-            meta.json         # 元数据
+        {url_hash}/
             video.mp4         # 视频
             audio.mp3         # 音频
-            transcript.json   # 转录文本
-
-    支持文件复用：如果资源文件已存在，跳过对应处理步骤。
+            transcript.txt    # 转录文本
     """
-    workspace = get_workspace(workspace_id)
+    workspace = await get_workspace(workspace_id)
     if not workspace:
         return
 
     logger.info("工作区 %s 开始处理: %s", workspace_id, url)
 
     settings = get_settings()
+    storage = get_file_storage()
     output_dir = settings.temp_path
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -92,12 +97,15 @@ async def process_workspace(workspace_id: str, url: str) -> None:
         url_hash = video_result.url_hash
         resource_dir = output_dir / url_hash
 
-        # 添加视频资源
+        # 保存视频
+        video_key = f"{url_hash}/video.mp4"
+        await storage.save_file(video_key, video_result.path)
+
         video_resource = WorkspaceResource(
             resource_id=str(uuid.uuid4())[:8],
             name="video",
             resource_type=ResourceType.VIDEO,
-            resource_path=video_result.path,
+            storage_key=video_key,
         )
         workspace.add_resource(video_resource)
 
@@ -112,12 +120,15 @@ async def process_workspace(workspace_id: str, url: str) -> None:
         audio_path = resource_dir / "audio.mp3"
         audio_path = await extract_audio_async(video_result.path, audio_path=audio_path)
 
-        # 添加音频资源
+        # 保存音频
+        audio_key = f"{url_hash}/audio.mp3"
+        await storage.save_file(audio_key, audio_path)
+
         audio_resource = WorkspaceResource(
             resource_id=str(uuid.uuid4())[:8],
             name="audio",
             resource_type=ResourceType.AUDIO,
-            resource_path=audio_path,
+            storage_key=audio_key,
         )
         workspace.add_resource(audio_resource)
 
@@ -128,37 +139,20 @@ async def process_workspace(workspace_id: str, url: str) -> None:
             raise ValueError(f"视频时长 {video_min} 分钟，超过限制 {max_min} 分钟")
 
         # 3. 转录音频
-        transcript_path = resource_dir / "transcript.json"
+        await update_workspace_status(
+            workspace, WorkspaceStatus.TRANSCRIBING, "正在转录音频..."
+        )
+        transcript = await transcribe_audio(audio_path)
 
-        # 检查转录是否已存在（复用）
-        if transcript_path.exists():
-            try:
-                data = json.loads(transcript_path.read_text(encoding="utf-8"))
-                transcript = data.get("content", "")
-                logger.info("复用已有转录: %s", url_hash)
-            except (json.JSONDecodeError, OSError):
-                transcript = None
-        else:
-            transcript = None
+        # 保存转录文本
+        transcript_key = f"{url_hash}/transcript.txt"
+        await storage.save_bytes(transcript_key, transcript.encode("utf-8"))
 
-        if not transcript:
-            await update_workspace_status(
-                workspace, WorkspaceStatus.TRANSCRIBING, "正在转录音频..."
-            )
-            transcript = await transcribe_audio(audio_path)
-
-            # 保存转录结果
-            transcript_path.write_text(
-                json.dumps({"prompt": "", "content": transcript}, ensure_ascii=False),
-                encoding="utf-8",
-            )
-
-        # 添加转录资源（TEXT 类型）
         transcript_resource = WorkspaceResource(
             resource_id=str(uuid.uuid4())[:8],
             name="transcript",
             resource_type=ResourceType.TEXT,
-            resource_path=transcript_path,
+            storage_key=transcript_key,
         )
         workspace.add_resource(transcript_resource)
 

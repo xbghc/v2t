@@ -34,6 +34,23 @@ app.include_router(stream_router)
 app.include_router(prompts_router)
 
 
+async def check_mongodb_connection() -> tuple[bool, str]:
+    """检测 MongoDB 连接状态（必需配置）"""
+    from app.config import get_settings
+    from app.storage import get_metadata_store
+
+    settings = get_settings()
+
+    if not settings.mongodb_uri:
+        return False, "未配置 MONGODB_URI 环境变量"
+
+    if not settings.mongodb_database:
+        return False, "未配置 MONGODB_DATABASE 环境变量"
+
+    store = get_metadata_store()
+    return await store.check_connection()
+
+
 async def check_api_connections() -> bool:
     """检测所有 API 连接，返回是否全部成功"""
     from app.services.llm import check_llm_api
@@ -41,12 +58,20 @@ async def check_api_connections() -> bool:
     from app.services.transcribe import check_whisper_api
     from app.services.xiazaitool import check_xiazaitool_token
 
+    # 检查 MongoDB 连接
+    ok, msg = await check_mongodb_connection()
+    if ok:
+        logger.info("✓ MongoDB: {}", msg)
+    else:
+        logger.error("✗ MongoDB: {}", msg)
+        return False
+
     # 同步检查（配置检测）
     ok, msg = check_xiazaitool_token()
     if ok:
-        logger.info("✓ Xiazaitool: %s", msg)
+        logger.info("✓ Xiazaitool: {}", msg)
     else:
-        logger.error("✗ Xiazaitool: %s", msg)
+        logger.error("✗ Xiazaitool: {}", msg)
         return False
 
     # 异步检查（API 连接检测）
@@ -60,9 +85,9 @@ async def check_api_connections() -> bool:
     for name, coro in checks:
         ok, msg = await coro
         if ok:
-            logger.info("✓ %s API: %s", name, msg)
+            logger.info("✓ {} API: {}", name, msg)
         else:
-            logger.error("✗ %s API: %s", name, msg)
+            logger.error("✗ {} API: {}", name, msg)
             all_ok = False
 
     return all_ok
@@ -75,7 +100,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8101) -> None:
     missing = check_dependencies()
     if missing:
         deps_str = ", ".join(f"{cmd} ({desc})" for cmd, desc in missing)
-        logger.error("缺少系统依赖: %s", deps_str)
+        logger.error("缺少系统依赖: {}", deps_str)
         logger.error(get_install_hint())
         raise SystemExit(1)
 
@@ -83,6 +108,11 @@ def run_server(host: str = "0.0.0.0", port: int = 8101) -> None:
     if not asyncio.run(check_api_connections()):
         logger.error("API 检测失败，服务无法启动")
         raise SystemExit(1)
+
+    # 重置存储单例，避免 motor 客户端绑定到已关闭的事件循环
+    from app.storage import reset_stores
+
+    reset_stores()
 
     import uvicorn
 
