@@ -23,6 +23,11 @@ export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast' | 'zhi
  */
 export type InputMode = 'url' | 'subtitle'
 
+/**
+ * 内容类型（状态机使用）
+ */
+export type ContentType = 'outline' | 'article' | 'podcast' | 'zhihu'
+
 // ============ Workspace 类型 ============
 
 /**

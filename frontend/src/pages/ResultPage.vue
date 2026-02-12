@@ -319,7 +319,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                             :src="videoDownloadUrl"
                             :title="title"
                             :available="!!videoUrl"
-                            :is-processing="workspaceStatus === 'downloading'"
+                            :is-processing="isProcessing"
                         />
                     </ContentSection>
 
@@ -336,7 +336,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                             :src="audioDownloadUrl"
                             :title="title"
                             :available="!!audioUrl"
-                            :is-processing="workspaceStatus === 'downloading'"
+                            :is-processing="isProcessing"
                         />
                     </ContentSection>
 

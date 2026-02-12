@@ -12,10 +12,18 @@ import {
     streamWorkspaceStatus
 } from '@/api/workspace'
 import { useToastStore } from '@/stores/toast'
+import {
+    createWorkspaceMachine,
+    createContentMachine,
+    createInitialWorkspaceContext,
+    createInitialContentContext,
+} from '@/machines'
+import type { WorkspaceEvent, WorkspaceContext, ContentEvent, ContentContext, ContentState } from '@/machines'
 import type {
     WorkspaceStatus,
     WorkspaceResponse,
     WorkspaceResource,
+    ContentType,
     CurrentTab,
     CustomPrompts,
     GenerateOptions,
@@ -23,104 +31,172 @@ import type {
     StreamPrompts
 } from '@/types'
 
+// 所有内容类型
+const CONTENT_TYPES: ContentType[] = ['outline', 'article', 'podcast', 'zhihu']
+
+// 流式 API 函数映射（outline/article/zhihu 共用签名）
+const SIMPLE_STREAM_FN = {
+    outline: streamOutline,
+    article: streamArticle,
+    zhihu: streamZhihuArticle,
+} as const
+
+// 提示词字段映射
+const PROMPT_KEYS: Record<ContentType, { system: keyof CustomPrompts; user: keyof CustomPrompts }> = {
+    outline: { system: 'outlineSystem', user: 'outlineUser' },
+    article: { system: 'articleSystem', user: 'articleUser' },
+    podcast: { system: 'podcastSystem', user: 'podcastUser' },
+    zhihu:   { system: 'zhihuSystem', user: 'zhihuUser' },
+}
+
 export const useTaskStore = defineStore('task', () => {
-    // 输入模式
+    // ==================== 状态机实例 ====================
+
+    const workspaceMachine = createWorkspaceMachine()
+    const contentMachines = {
+        outline: createContentMachine('outline'),
+        article: createContentMachine('article'),
+        podcast: createContentMachine('podcast'),
+        zhihu:   createContentMachine('zhihu'),
+    } as const
+
+    // ==================== 响应式状态（机器状态的 Vue 包装）====================
+
+    const wsState = ref(workspaceMachine.getState())
+    const wsCtx = reactive<WorkspaceContext>({ ...createInitialWorkspaceContext() })
+
+    const contentStates = reactive<Record<ContentType, ContentState>>({
+        outline: 'idle', article: 'idle', podcast: 'idle', zhihu: 'idle',
+    })
+    const contentCtxs = reactive<Record<ContentType, ContentContext>>({
+        outline: { ...createInitialContentContext() },
+        article: { ...createInitialContentContext() },
+        podcast: { ...createInitialContentContext() },
+        zhihu:   { ...createInitialContentContext() },
+    })
+
+    // ==================== 机器事件发送 ====================
+
+    function sendWorkspace(event: WorkspaceEvent): void {
+        const result = workspaceMachine.send(event)
+        wsState.value = result.state
+        Object.assign(wsCtx, result.context)
+    }
+
+    function sendContent(type: ContentType, event: ContentEvent): void {
+        const result = contentMachines[type].send(event)
+        contentStates[type] = result.state
+        Object.assign(contentCtxs[type], result.context)
+    }
+
+    // ==================== 非机器状态 ====================
+
     const inputMode: Ref<InputMode> = ref('url')
-
-    // 表单输入
     const url: Ref<string> = ref('')
+    const currentTab: Ref<CurrentTab> = ref('article')
 
-    // 生成选项
     const generateOptions: GenerateOptions = reactive({
         outline: true,
         article: true,
-        podcast: false
+        podcast: false,
     })
 
-    // 计算属性：是否仅下载
+    const promptsLoaded: Ref<boolean> = ref(false)
+    const prompts: CustomPrompts = reactive({
+        outlineSystem: '', outlineUser: '',
+        articleSystem: '', articleUser: '',
+        podcastSystem: '', podcastUser: '',
+        zhihuSystem: '', zhihuUser: '',
+    })
+
+    const PROMPTS_STORAGE_KEY = 'v2t_custom_prompts'
+    let lastUrl = ''
+
+    // SSE / 流式清理函数
+    let statusStreamCleanup: (() => void) | null = null
+    const streamCleanups: Record<ContentType, (() => void) | null> = {
+        outline: null, article: null, podcast: null, zhihu: null,
+    }
+
+    // ==================== 向后兼容的 computed 属性 ====================
+
+    // 工作区状态 → 后端 WorkspaceStatus（组件继续用这个值）
+    const workspaceStatus: ComputedRef<WorkspaceStatus> = computed(() => {
+        const s = wsState.value
+        if (s === 'idle' || s === 'pending') return 'pending'
+        if (s === 'downloading') return 'downloading'
+        if (s === 'transcribing') return 'transcribing'
+        if (s === 'ready' || s === 'generating' || s === 'completed') return 'ready'
+        return 'failed'
+    })
+
     const isDownloadOnly: ComputedRef<boolean> = computed(() =>
         !generateOptions.outline && !generateOptions.article && !generateOptions.podcast
     )
 
-    // 工作区状态
-    const workspaceId: Ref<string | null> = ref(null)
-    const workspaceStatus: Ref<WorkspaceStatus> = ref('pending')
-    const currentTab: Ref<CurrentTab> = ref('article')
-    const errorMessage: Ref<string> = ref('无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。')
+    // 工作区 context
+    const workspaceId = computed(() => wsCtx.workspaceId)
+    const title = computed(() => wsCtx.title)
+    const progressText = computed(() => wsCtx.progressText)
+    const progressTitle = computed(() => wsCtx.progressTitle)
+    const errorMessage = computed(() => wsCtx.errorMessage)
+    const videoUrl = computed(() => wsCtx.videoUrl)
+    const audioUrl = computed(() => wsCtx.audioUrl)
+    const transcript = computed(() => wsCtx.transcript)
 
-    // 进度文本
-    const progressText: Ref<string> = ref('准备中...')
-    const progressTitle: Ref<string> = ref('')
+    // 内容流式状态
+    const outlineStreaming = computed(() => contentStates.outline === 'streaming')
+    const articleStreaming = computed(() => contentStates.article === 'streaming')
+    const podcastStreaming = computed(() =>
+        contentStates.podcast === 'streaming' || contentStates.podcast === 'synthesizing'
+    )
+    const podcastSynthesizing = computed(() => contentStates.podcast === 'synthesizing')
+    const zhihuStreaming = computed(() => contentStates.zhihu === 'streaming')
 
-    // 工作区资源
-    const title: Ref<string> = ref('')
-    const videoUrl: Ref<string | null> = ref(null)
-    const audioUrl: Ref<string | null> = ref(null)
-    const transcript: Ref<string> = ref('')
+    // 内容失败状态
+    const outlineFailed = computed(() => contentStates.outline === 'failed')
+    const articleFailed = computed(() => contentStates.article === 'failed')
+    const podcastFailed = computed(() => contentStates.podcast === 'failed')
+    const zhihuFailed = computed(() => contentStates.zhihu === 'failed')
 
-    // 生成内容结果
-    const outline: Ref<string> = ref('')
-    const article: Ref<string> = ref('')
-    const podcastScript: Ref<string> = ref('')
-    const podcastAudioUrl: Ref<string | null> = ref(null)
-    const podcastError: Ref<string> = ref('')
-    const zhihuArticle: Ref<string> = ref('')
+    // 最终内容
+    const outline = computed(() => contentCtxs.outline.finalContent)
+    const article = computed(() => contentCtxs.article.finalContent)
+    const podcastScript = computed(() => contentCtxs.podcast.finalContent)
+    const zhihuArticle = computed(() => contentCtxs.zhihu.finalContent)
 
-    // 提示词状态
-    const promptsLoaded: Ref<boolean> = ref(false)
-    const prompts: CustomPrompts = reactive({
-        outlineSystem: '',
-        outlineUser: '',
-        articleSystem: '',
-        articleUser: '',
-        podcastSystem: '',
-        podcastUser: '',
-        zhihuSystem: '',
-        zhihuUser: ''
-    })
+    // 流式缓冲区
+    const streamingOutline = computed(() => contentCtxs.outline.streamBuffer)
+    const streamingArticle = computed(() => contentCtxs.article.streamBuffer)
+    const streamingPodcast = computed(() => contentCtxs.podcast.streamBuffer)
+    const streamingZhihu = computed(() => contentCtxs.zhihu.streamBuffer)
 
-    // localStorage key
-    const PROMPTS_STORAGE_KEY = 'v2t_custom_prompts'
+    // 播客专属
+    const podcastAudioUrl = computed(() => contentCtxs.podcast.audioUrl)
+    const podcastError = computed(() => contentCtxs.podcast.audioError)
+    const hasPodcastAudio: ComputedRef<boolean> = computed(() => !!contentCtxs.podcast.audioUrl)
 
-    // 保存最后一次提交的参数，用于重试
-    let lastUrl: string = ''
-    // SSE 状态流清理函数
-    let statusStreamCleanup: (() => void) | null = null
-
-    // 每种内容的流式状态独立管理
-    const outlineStreaming: Ref<boolean> = ref(false)
-    const articleStreaming: Ref<boolean> = ref(false)
-    const podcastStreaming: Ref<boolean> = ref(false)
-    const podcastSynthesizing: Ref<boolean> = ref(false)
-    const zhihuStreaming: Ref<boolean> = ref(false)
-
-    // 生成失败状态跟踪
-    const outlineFailed: Ref<boolean> = ref(false)
-    const articleFailed: Ref<boolean> = ref(false)
-    const podcastFailed: Ref<boolean> = ref(false)
-    const zhihuFailed: Ref<boolean> = ref(false)
-
-    // 流式内容缓冲区
-    const streamingOutline: Ref<string> = ref('')
-    const streamingArticle: Ref<string> = ref('')
-    const streamingPodcast: Ref<string> = ref('')
-    const streamingZhihu: Ref<string> = ref('')
-
-    // 清理函数
-    let outlineCleanup: (() => void) | null = null
-    let articleCleanup: (() => void) | null = null
-    let podcastCleanup: (() => void) | null = null
-    let zhihuCleanup: (() => void) | null = null
-
-    // 计算属性：是否正在流式生成
+    // 聚合状态
     const isStreaming: ComputedRef<boolean> = computed(() =>
-        outlineStreaming.value || articleStreaming.value || podcastStreaming.value || zhihuStreaming.value
+        CONTENT_TYPES.some(t => contentStates[t] === 'streaming' || contentStates[t] === 'synthesizing')
     )
 
-    // 计算属性：是否有播客音频
-    const hasPodcastAudio: ComputedRef<boolean> = computed(() => !!podcastAudioUrl.value)
+    // 显示内容（流式优先，完成后显示最终版）
+    const displayOutline = computed(() =>
+        contentStates.outline === 'streaming' ? contentCtxs.outline.streamBuffer : contentCtxs.outline.finalContent
+    )
+    const displayArticle = computed(() =>
+        contentStates.article === 'streaming' ? contentCtxs.article.streamBuffer : contentCtxs.article.finalContent
+    )
+    const displayPodcast = computed(() =>
+        contentStates.podcast === 'streaming' || contentStates.podcast === 'synthesizing'
+            ? contentCtxs.podcast.streamBuffer : contentCtxs.podcast.finalContent
+    )
+    const displayZhihu = computed(() =>
+        contentStates.zhihu === 'streaming' ? contentCtxs.zhihu.streamBuffer : contentCtxs.zhihu.finalContent
+    )
 
-    // 计算属性：当前内容（用于复制）
+    // 当前标签内容（用于复制）
     const currentContent: ComputedRef<string> = computed(() => {
         if (currentTab.value === 'article') return article.value || streamingArticle.value || ''
         if (currentTab.value === 'outline') return outline.value || streamingOutline.value || ''
@@ -129,23 +205,9 @@ export const useTaskStore = defineStore('task', () => {
         return transcript.value || ''
     })
 
-    // 计算属性：显示内容
-    const displayOutline: ComputedRef<string> = computed(() =>
-        outlineStreaming.value ? streamingOutline.value : outline.value
-    )
-    const displayArticle: ComputedRef<string> = computed(() =>
-        articleStreaming.value ? streamingArticle.value : article.value
-    )
-    const displayPodcast: ComputedRef<string> = computed(() =>
-        podcastStreaming.value ? streamingPodcast.value : podcastScript.value
-    )
-    const displayZhihu: ComputedRef<string> = computed(() =>
-        zhihuStreaming.value ? streamingZhihu.value : zhihuArticle.value
-    )
+    // ==================== 辅助函数 ====================
 
-    // 从资源列表获取内容的辅助函数
     const getResourceContent = (resources: WorkspaceResource[], name: string): string => {
-        // 获取最新的资源
         const resource = [...resources].reverse().find(r => r.name === name)
         return resource?.content || ''
     }
@@ -155,55 +217,217 @@ export const useTaskStore = defineStore('task', () => {
         return resource?.download_url || null
     }
 
-    // 重置状态
-    const resetState = (): void => {
-        workspaceId.value = null
-        workspaceStatus.value = 'pending'
-        currentTab.value = 'article'
-        errorMessage.value = '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。'
-        progressText.value = '准备中...'
-        progressTitle.value = ''
-        title.value = ''
-        videoUrl.value = null
-        audioUrl.value = null
-        transcript.value = ''
-        outline.value = ''
-        article.value = ''
-        podcastScript.value = ''
-        podcastAudioUrl.value = null
-        podcastError.value = ''
-        zhihuArticle.value = ''
-        // 重置流式状态
-        outlineStreaming.value = false
-        articleStreaming.value = false
-        podcastStreaming.value = false
-        podcastSynthesizing.value = false
-        zhihuStreaming.value = false
-        streamingOutline.value = ''
-        streamingArticle.value = ''
-        streamingPodcast.value = ''
-        streamingZhihu.value = ''
-        // 重置失败状态
-        outlineFailed.value = false
-        articleFailed.value = false
-        podcastFailed.value = false
-        zhihuFailed.value = false
+    function getPromptsForType(type: ContentType): StreamPrompts {
+        const keys = PROMPT_KEYS[type]
+        return { systemPrompt: prompts[keys.system], userPrompt: prompts[keys.user] }
     }
 
-    // 从 localStorage 加载提示词
+    function shouldAutoGenerate(type: ContentType): boolean {
+        if (type === 'outline') return generateOptions.outline
+        if (type === 'article') return generateOptions.article
+        if (type === 'podcast') return generateOptions.podcast
+        return false // zhihu 始终手动触发
+    }
+
+    // ==================== SSE / 流式管理 ====================
+
+    const stopStatusStream = (): void => {
+        if (statusStreamCleanup) {
+            statusStreamCleanup()
+            statusStreamCleanup = null
+        }
+    }
+
+    const stopAllStreaming = (): void => {
+        for (const type of CONTENT_TYPES) {
+            if (streamCleanups[type]) {
+                streamCleanups[type]!()
+                streamCleanups[type] = null
+            }
+        }
+    }
+
+    // ==================== 核心流式逻辑 ====================
+
+    function startSingleContentStream(wsId: string, type: ContentType): void {
+        // 如果已在流式中，不重复启动
+        if (contentStates[type] === 'streaming' || contentStates[type] === 'synthesizing') return
+
+        sendContent(type, { type: 'START' })
+        const promptPair = getPromptsForType(type)
+
+        if (type === 'podcast') {
+            streamCleanups.podcast = streamPodcast(
+                wsId,
+                promptPair,
+                () => {},
+                (chunk) => sendContent('podcast', { type: 'CHUNK', content: chunk }),
+                () => {},
+                () => sendContent('podcast', { type: 'SYNTHESIZE_START' }),
+                (hasAudio, audioResourceId, audioErr) => {
+                    sendContent('podcast', {
+                        type: 'COMPLETE',
+                        audioUrl: hasAudio && audioResourceId
+                            ? `/api/workspaces/${wsId}/resources/${audioResourceId}`
+                            : undefined,
+                        audioError: audioErr,
+                    })
+                    checkAllStreamingDone()
+                },
+                (err) => {
+                    console.error('播客生成失败:', err)
+                    sendContent('podcast', { type: 'FAIL', error: err })
+                    checkAllStreamingDone()
+                }
+            )
+        } else {
+            const streamFn = SIMPLE_STREAM_FN[type]
+            streamCleanups[type] = streamFn(
+                wsId,
+                promptPair,
+                () => {},
+                (chunk) => sendContent(type, { type: 'CHUNK', content: chunk }),
+                () => {
+                    sendContent(type, { type: 'COMPLETE' })
+                    checkAllStreamingDone()
+                },
+                (err) => {
+                    console.error(`${type}生成失败:`, err)
+                    sendContent(type, { type: 'FAIL', error: err })
+                    checkAllStreamingDone()
+                }
+            )
+        }
+    }
+
+    function startGenerating(wsId: string): void {
+        sendWorkspace({ type: 'START_GENERATING' })
+
+        let started = false
+        for (const type of CONTENT_TYPES) {
+            if (shouldAutoGenerate(type)) {
+                startSingleContentStream(wsId, type)
+                started = true
+            }
+        }
+
+        if (!started) {
+            sendWorkspace({ type: 'GENERATION_COMPLETE' })
+            handleTaskComplete()
+        }
+    }
+
+    function checkAllStreamingDone(): void {
+        const allDone = CONTENT_TYPES.every(t => {
+            const s = contentStates[t]
+            return s === 'idle' || s === 'done' || s === 'failed'
+        })
+        if (allDone && wsState.value === 'generating') {
+            sendWorkspace({ type: 'GENERATION_COMPLETE' })
+            handleTaskComplete()
+        }
+    }
+
+    // ==================== 工作区状态更新 ====================
+
+    const updateWorkspaceState = (data: WorkspaceResponse): void => {
+        // 更新工作区机器状态
+        sendWorkspace({
+            type: 'STATUS_UPDATE',
+            status: data.status,
+            error: data.error || undefined,
+        })
+
+        // 更新资源数据
+        const resources = data.resources
+        sendWorkspace({
+            type: 'UPDATE_RESOURCES',
+            title: data.title,
+            videoUrl: getResourceUrl(resources, 'video'),
+            audioUrl: getResourceUrl(resources, 'audio'),
+            transcript: getResourceContent(resources, 'transcript'),
+            progressText: data.progress || undefined,
+        })
+
+        // 加载已有的生成内容到内容机器
+        const contentMap: Record<ContentType, string> = {
+            outline: getResourceContent(resources, 'outline'),
+            article: getResourceContent(resources, 'article'),
+            podcast: getResourceContent(resources, 'podcast_script'),
+            zhihu: getResourceContent(resources, 'zhihu'),
+        }
+        for (const type of CONTENT_TYPES) {
+            if (contentMap[type] && contentStates[type] === 'idle') {
+                // 手动设置 finalContent，不经过 streaming 流程
+                contentCtxs[type].finalContent = contentMap[type]
+            }
+        }
+
+        // 播客音频 URL
+        const podcastAudioResource = getResourceUrl(resources, 'podcast')
+        if (podcastAudioResource) {
+            contentCtxs.podcast.audioUrl = podcastAudioResource
+        }
+    }
+
+    const handleStatusStreamUpdate = (data: WorkspaceResponse): void => {
+        updateWorkspaceState(data)
+
+        if (data.status === 'ready') {
+            stopStatusStream()
+            startGenerating(wsCtx.workspaceId!)
+        } else if (data.status === 'failed') {
+            stopStatusStream()
+        }
+    }
+
+    const startStatusStream = (id: string): void => {
+        stopStatusStream()
+        statusStreamCleanup = streamWorkspaceStatus(
+            id,
+            handleStatusStreamUpdate,
+            (err) => console.error('状态流错误:', err)
+        )
+    }
+
+    // ==================== 任务完成处理 ====================
+
+    const handleTaskComplete = (): void => {
+        if (contentCtxs.article.finalContent) {
+            currentTab.value = 'article'
+        } else if (contentCtxs.zhihu.finalContent) {
+            currentTab.value = 'zhihu'
+        } else if (contentCtxs.outline.finalContent) {
+            currentTab.value = 'outline'
+        } else if (contentCtxs.podcast.finalContent) {
+            currentTab.value = 'podcast'
+        } else {
+            currentTab.value = 'transcript'
+        }
+    }
+
+    // ==================== 重置 ====================
+
+    const resetState = (): void => {
+        sendWorkspace({ type: 'RESET' })
+        for (const type of CONTENT_TYPES) {
+            sendContent(type, { type: 'RESET' })
+        }
+        currentTab.value = 'article'
+    }
+
+    // ==================== 提示词管理（不变）====================
+
     const loadPromptsFromStorage = (): CustomPrompts | null => {
         try {
             const stored = localStorage.getItem(PROMPTS_STORAGE_KEY)
-            if (stored) {
-                return JSON.parse(stored) as CustomPrompts
-            }
+            if (stored) return JSON.parse(stored) as CustomPrompts
         } catch (error) {
             console.error('读取 localStorage 失败:', error)
         }
         return null
     }
 
-    // 保存提示词到 localStorage
     const savePromptsToStorage = (): void => {
         try {
             localStorage.setItem(PROMPTS_STORAGE_KEY, JSON.stringify(prompts))
@@ -212,7 +436,6 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 初始化提示词
     const loadPrompts = async (): Promise<void> => {
         if (promptsLoaded.value) return
 
@@ -239,7 +462,6 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 重置所有提示词为默认值
     const resetPrompts = async (): Promise<void> => {
         localStorage.removeItem(PROMPTS_STORAGE_KEY)
         try {
@@ -257,7 +479,6 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 重置单个提示词
     const resetOutlinePrompts = async (): Promise<void> => {
         try {
             const defaults = await getDefaultPrompts()
@@ -302,230 +523,8 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // 停止状态流
-    const stopStatusStream = (): void => {
-        if (statusStreamCleanup) {
-            statusStreamCleanup()
-            statusStreamCleanup = null
-        }
-    }
+    // ==================== 公共操作 ====================
 
-    // 停止所有流式连接
-    const stopAllStreaming = (): void => {
-        if (outlineCleanup) {
-            outlineCleanup()
-            outlineCleanup = null
-        }
-        if (articleCleanup) {
-            articleCleanup()
-            articleCleanup = null
-        }
-        if (podcastCleanup) {
-            podcastCleanup()
-            podcastCleanup = null
-        }
-        if (zhihuCleanup) {
-            zhihuCleanup()
-            zhihuCleanup = null
-        }
-        outlineStreaming.value = false
-        articleStreaming.value = false
-        podcastStreaming.value = false
-        podcastSynthesizing.value = false
-        zhihuStreaming.value = false
-    }
-
-    // 检查是否所有流式生成都完成
-    const checkAllStreamingDone = (): void => {
-        if (!outlineStreaming.value && !articleStreaming.value && !podcastStreaming.value && !zhihuStreaming.value) {
-            progressText.value = '处理完成'
-            handleTaskComplete()
-        }
-    }
-
-    // 并行启动所有流式生成
-    const startGenerating = (wsId: string): void => {
-        progressText.value = '正在生成内容...'
-
-        if (generateOptions.outline) {
-            outlineStreaming.value = true
-            streamingOutline.value = ''
-            const outlinePrompts: StreamPrompts = {
-                systemPrompt: prompts.outlineSystem,
-                userPrompt: prompts.outlineUser
-            }
-            outlineCleanup = streamOutline(
-                wsId,
-                outlinePrompts,
-                () => { /* resource created */ },
-                (chunk) => { streamingOutline.value += chunk },
-                () => {
-                    outline.value = streamingOutline.value
-                    outlineStreaming.value = false
-                    checkAllStreamingDone()
-                },
-                (err) => {
-                    console.error('大纲生成失败:', err)
-                    outlineFailed.value = true
-                    outlineStreaming.value = false
-                    checkAllStreamingDone()
-                }
-            )
-        }
-
-        if (generateOptions.article) {
-            articleStreaming.value = true
-            streamingArticle.value = ''
-            const articlePrompts: StreamPrompts = {
-                systemPrompt: prompts.articleSystem,
-                userPrompt: prompts.articleUser
-            }
-            articleCleanup = streamArticle(
-                wsId,
-                articlePrompts,
-                () => { /* resource created */ },
-                (chunk) => { streamingArticle.value += chunk },
-                () => {
-                    article.value = streamingArticle.value
-                    articleStreaming.value = false
-                    checkAllStreamingDone()
-                },
-                (err) => {
-                    console.error('文章生成失败:', err)
-                    articleFailed.value = true
-                    articleStreaming.value = false
-                    checkAllStreamingDone()
-                }
-            )
-        }
-
-        if (generateOptions.podcast) {
-            podcastStreaming.value = true
-            streamingPodcast.value = ''
-            const podcastPrompts: StreamPrompts = {
-                systemPrompt: prompts.podcastSystem,
-                userPrompt: prompts.podcastUser
-            }
-            podcastCleanup = streamPodcast(
-                wsId,
-                podcastPrompts,
-                () => { /* resource created */ },
-                (chunk) => { streamingPodcast.value += chunk },
-                () => { /* script done */ },
-                () => {
-                    podcastSynthesizing.value = true
-                    progressText.value = '正在合成播客音频...'
-                },
-                (hasAudio, audioResourceId, audioErr) => {
-                    podcastScript.value = streamingPodcast.value
-                    if (hasAudio && audioResourceId && workspaceId.value) {
-                        podcastAudioUrl.value = `/api/workspaces/${workspaceId.value}/resources/${audioResourceId}`
-                    }
-                    if (audioErr) podcastError.value = audioErr
-                    podcastStreaming.value = false
-                    podcastSynthesizing.value = false
-                    checkAllStreamingDone()
-                },
-                (err) => {
-                    console.error('播客生成失败:', err)
-                    podcastFailed.value = true
-                    podcastStreaming.value = false
-                    podcastSynthesizing.value = false
-                    checkAllStreamingDone()
-                }
-            )
-        }
-
-        // 如果没有选择任何生成选项，直接完成
-        if (!generateOptions.outline && !generateOptions.article && !generateOptions.podcast) {
-            progressText.value = '处理完成'
-            handleTaskComplete()
-        }
-    }
-
-    // 更新工作区状态
-    const updateWorkspaceState = (data: WorkspaceResponse): void => {
-        workspaceStatus.value = data.status
-        title.value = data.title
-        progressTitle.value = data.title
-        progressText.value = data.progress || getProgressText(data.status)
-
-        if (data.error) {
-            errorMessage.value = data.error
-        }
-
-        // 从资源列表获取内容
-        const resources = data.resources
-        videoUrl.value = getResourceUrl(resources, 'video')
-        audioUrl.value = getResourceUrl(resources, 'audio')
-        transcript.value = getResourceContent(resources, 'transcript')
-
-        // 如果已有生成内容，从资源中获取
-        if (!outline.value) outline.value = getResourceContent(resources, 'outline')
-        if (!article.value) article.value = getResourceContent(resources, 'article')
-        if (!podcastScript.value) podcastScript.value = getResourceContent(resources, 'podcast_script')
-        if (!zhihuArticle.value) zhihuArticle.value = getResourceContent(resources, 'zhihu')
-
-        // 获取播客音频 URL
-        const podcastAudio = getResourceUrl(resources, 'podcast')
-        if (podcastAudio) podcastAudioUrl.value = podcastAudio
-    }
-
-    // 处理 SSE 状态更新
-    const handleStatusStreamUpdate = (data: WorkspaceResponse): void => {
-        updateWorkspaceState(data)
-
-        if (data.status === 'ready') {
-            stopStatusStream()
-            if (workspaceId.value) {
-                startGenerating(workspaceId.value)
-            }
-        } else if (data.status === 'failed') {
-            stopStatusStream()
-        }
-    }
-
-    // 启动状态流监听
-    const startStatusStream = (id: string): void => {
-        workspaceId.value = id
-        stopStatusStream()
-        statusStreamCleanup = streamWorkspaceStatus(
-            id,
-            handleStatusStreamUpdate,
-            (err) => {
-                console.error('状态流错误:', err)
-            }
-        )
-    }
-
-    // 根据状态获取进度文本
-    const getProgressText = (status: WorkspaceStatus): string => {
-        switch (status) {
-        case 'pending': return '等待处理...'
-        case 'downloading': return '正在下载视频...'
-        case 'transcribing': return '正在转录音频...'
-        case 'ready': return '准备生成内容...'
-        case 'failed': return '处理失败'
-        default: return '处理中...'
-        }
-    }
-
-    // 处理任务完成
-    const handleTaskComplete = (): void => {
-        if (article.value) {
-            currentTab.value = 'article'
-        } else if (zhihuArticle.value) {
-            currentTab.value = 'zhihu'
-        } else if (outline.value) {
-            currentTab.value = 'outline'
-        } else if (podcastScript.value) {
-            currentTab.value = 'podcast'
-        } else {
-            currentTab.value = 'transcript'
-        }
-    }
-
-    // 提交 URL，返回 workspace_id 或 null
     const submitUrl = async (): Promise<string | null> => {
         const toastStore = useToastStore()
         if (!url.value.trim()) {
@@ -535,20 +534,21 @@ export const useTaskStore = defineStore('task', () => {
 
         lastUrl = url.value
         savePromptsToStorage()
+        stopStatusStream()
+        stopAllStreaming()
         resetState()
 
         try {
             const data = await createWorkspace(url.value)
+            sendWorkspace({ type: 'SUBMIT', workspaceId: data.workspace_id })
             startStatusStream(data.workspace_id)
             return data.workspace_id
         } catch (error) {
-            errorMessage.value = (error as Error).message
-            workspaceStatus.value = 'failed'
+            sendWorkspace({ type: 'FAIL', error: (error as Error).message })
             return null
         }
     }
 
-    // 开始新任务
     const startNew = (): void => {
         stopStatusStream()
         stopAllStreaming()
@@ -556,7 +556,6 @@ export const useTaskStore = defineStore('task', () => {
         url.value = ''
     }
 
-    // 重试任务
     const retryTask = async (): Promise<string | null> => {
         stopStatusStream()
         stopAllStreaming()
@@ -565,7 +564,6 @@ export const useTaskStore = defineStore('task', () => {
         return submitUrl()
     }
 
-    // 复制当前内容
     const copyContent = (): void => {
         if (!currentContent.value) return
         const toastStore = useToastStore()
@@ -576,137 +574,58 @@ export const useTaskStore = defineStore('task', () => {
         })
     }
 
-    // 生成单个内容类型
-    const generateSingleContent = (type: 'outline' | 'article' | 'podcast' | 'zhihu'): void => {
-        if (!workspaceId.value) return
+    const generateSingleContent = (type: ContentType): void => {
+        const wsId = wsCtx.workspaceId
+        if (!wsId) return
 
-        const wsId = workspaceId.value
+        // 标记生成选项（zhihu 除外）
+        if (type === 'outline') generateOptions.outline = true
+        if (type === 'article') generateOptions.article = true
+        if (type === 'podcast') generateOptions.podcast = true
 
-        if (type === 'outline' && !outlineStreaming.value) {
-            generateOptions.outline = true
-            outlineFailed.value = false
-            outlineStreaming.value = true
-            streamingOutline.value = ''
-            const outlinePrompts: StreamPrompts = {
-                systemPrompt: prompts.outlineSystem,
-                userPrompt: prompts.outlineUser
-            }
-            outlineCleanup = streamOutline(
-                wsId,
-                outlinePrompts,
-                () => {},
-                (chunk) => { streamingOutline.value += chunk },
-                () => {
-                    outline.value = streamingOutline.value
-                    outlineStreaming.value = false
-                },
-                (err) => {
-                    console.error('大纲生成失败:', err)
-                    outlineFailed.value = true
-                    outlineStreaming.value = false
-                }
-            )
-        }
-
-        if (type === 'article' && !articleStreaming.value) {
-            generateOptions.article = true
-            articleFailed.value = false
-            articleStreaming.value = true
-            streamingArticle.value = ''
-            const articlePrompts: StreamPrompts = {
-                systemPrompt: prompts.articleSystem,
-                userPrompt: prompts.articleUser
-            }
-            articleCleanup = streamArticle(
-                wsId,
-                articlePrompts,
-                () => {},
-                (chunk) => { streamingArticle.value += chunk },
-                () => {
-                    article.value = streamingArticle.value
-                    articleStreaming.value = false
-                },
-                (err) => {
-                    console.error('文章生成失败:', err)
-                    articleFailed.value = true
-                    articleStreaming.value = false
-                }
-            )
-        }
-
-        if (type === 'podcast' && !podcastStreaming.value) {
-            generateOptions.podcast = true
-            podcastFailed.value = false
-            podcastStreaming.value = true
-            streamingPodcast.value = ''
-            const podcastPrompts: StreamPrompts = {
-                systemPrompt: prompts.podcastSystem,
-                userPrompt: prompts.podcastUser
-            }
-            podcastCleanup = streamPodcast(
-                wsId,
-                podcastPrompts,
-                () => {},
-                (chunk) => { streamingPodcast.value += chunk },
-                () => {},
-                () => { podcastSynthesizing.value = true },
-                (hasAudio, audioResourceId, audioErr) => {
-                    podcastScript.value = streamingPodcast.value
-                    if (hasAudio && audioResourceId && workspaceId.value) {
-                        podcastAudioUrl.value = `/api/workspaces/${workspaceId.value}/resources/${audioResourceId}`
-                    }
-                    if (audioErr) podcastError.value = audioErr
-                    podcastStreaming.value = false
-                    podcastSynthesizing.value = false
-                },
-                (err) => {
-                    console.error('播客生成失败:', err)
-                    podcastFailed.value = true
-                    podcastStreaming.value = false
-                    podcastSynthesizing.value = false
-                }
-            )
-        }
-
-        if (type === 'zhihu' && !zhihuStreaming.value) {
-            zhihuFailed.value = false
-            zhihuStreaming.value = true
-            streamingZhihu.value = ''
-            const zhihuPrompts: StreamPrompts = {
-                systemPrompt: prompts.zhihuSystem,
-                userPrompt: prompts.zhihuUser
-            }
-            zhihuCleanup = streamZhihuArticle(
-                wsId,
-                zhihuPrompts,
-                () => {},
-                (chunk) => { streamingZhihu.value += chunk },
-                () => {
-                    zhihuArticle.value = streamingZhihu.value
-                    zhihuStreaming.value = false
-                },
-                (err) => {
-                    console.error('知乎文章生成失败:', err)
-                    zhihuFailed.value = true
-                    zhihuStreaming.value = false
-                }
-            )
-        }
+        startSingleContentStream(wsId, type)
     }
 
-    // 从 URL 加载工作区
     const loadWorkspaceById = async (id: string): Promise<boolean> => {
-        if (workspaceId.value === id) {
-            return true
-        }
+        if (wsCtx.workspaceId === id) return true
 
         stopStatusStream()
         stopAllStreaming()
 
         try {
             const data = await getWorkspace(id)
-            workspaceId.value = id
-            updateWorkspaceState(data)
+            sendWorkspace({ type: 'LOAD_WORKSPACE', status: data.status })
+            sendWorkspace({
+                type: 'UPDATE_RESOURCES',
+                title: data.title,
+                videoUrl: getResourceUrl(data.resources, 'video'),
+                audioUrl: getResourceUrl(data.resources, 'audio'),
+                transcript: getResourceContent(data.resources, 'transcript'),
+                progressText: data.progress || undefined,
+            })
+            // 手动设置 workspaceId（LOAD_WORKSPACE 不设置 id）
+            wsCtx.workspaceId = id
+
+            // 加载已有内容
+            const contentMap: Record<ContentType, string> = {
+                outline: getResourceContent(data.resources, 'outline'),
+                article: getResourceContent(data.resources, 'article'),
+                podcast: getResourceContent(data.resources, 'podcast_script'),
+                zhihu: getResourceContent(data.resources, 'zhihu'),
+            }
+            for (const type of CONTENT_TYPES) {
+                if (contentMap[type]) {
+                    contentCtxs[type].finalContent = contentMap[type]
+                }
+            }
+            const podcastAudioResource = getResourceUrl(data.resources, 'podcast')
+            if (podcastAudioResource) {
+                contentCtxs.podcast.audioUrl = podcastAudioResource
+            }
+
+            if (data.error) {
+                wsCtx.errorMessage = data.error
+            }
 
             if (data.status === 'ready') {
                 startGenerating(id)
@@ -720,6 +639,8 @@ export const useTaskStore = defineStore('task', () => {
             return false
         }
     }
+
+    // ==================== 导出（与原 store 完全一致的属性名）====================
 
     return {
         // 状态
@@ -784,7 +705,7 @@ export const useTaskStore = defineStore('task', () => {
         retryTask,
         copyContent,
         loadWorkspaceById,
-        generateSingleContent
+        generateSingleContent,
     }
 })
 
