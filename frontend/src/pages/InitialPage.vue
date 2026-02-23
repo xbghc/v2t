@@ -3,6 +3,8 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
+import IconLink from '~icons/material-symbols/link'
+import IconChevronRight from '~icons/material-symbols/chevron-right'
 
 const router = useRouter()
 const taskStore = useTaskStore()
@@ -43,7 +45,7 @@ onMounted(() => {
                 <label class="flex flex-col min-w-40 h-14 w-full max-w-input @[480px]:h-16">
                     <div class="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm">
                         <div class="text-gray-400 dark:text-dark-text-muted flex border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card items-center justify-center pl-4 rounded-l-lg border-r-0">
-                            <span class="material-symbols-outlined text-xl">link</span>
+                            <IconLink class="text-xl" />
                         </div>
                         <input
                             v-model="url"
@@ -105,10 +107,10 @@ onMounted(() => {
                     class="text-sm text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary flex items-center gap-1 cursor-pointer transition-colors duration-200"
                     @click="showAdvanced = !showAdvanced"
                 >
-                    <span
-                        class="material-symbols-outlined text-base transition-transform duration-200"
+                    <IconChevronRight
+                        class="text-base transition-transform duration-200"
                         :class="{ 'rotate-90': showAdvanced }"
-                    >chevron_right</span>
+                    />
                     <span>高级选项 - 自定义提示词</span>
                 </button>
             </div>

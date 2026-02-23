@@ -2,6 +2,8 @@
 import { toRef } from 'vue'
 import { useMarkdown } from '@/composables/useMarkdown'
 import type { GeneratableContentKey } from '@/types'
+import IconError from '~icons/material-symbols/error-outline'
+import IconRefresh from '~icons/material-symbols/refresh'
 
 const props = defineProps<{
     /** 内容类型标识 */
@@ -35,7 +37,7 @@ const renderedContent = useMarkdown(toRef(props, 'displayContent'))
         v-else-if="isFailed"
         class="flex flex-col items-center justify-center py-12 gap-4"
     >
-        <span class="material-symbols-outlined text-4xl text-red-400">error_outline</span>
+        <IconError class="text-4xl text-red-400" />
         <p class="text-gray-500 dark:text-gray-400">
             {{ label }}生成失败
         </p>
@@ -43,7 +45,7 @@ const renderedContent = useMarkdown(toRef(props, 'displayContent'))
             class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
             @click="emit('retry', contentKey)"
         >
-            <span class="material-symbols-outlined text-lg">refresh</span>
+            <IconRefresh class="text-lg" />
             <span>重新生成</span>
         </button>
     </div>

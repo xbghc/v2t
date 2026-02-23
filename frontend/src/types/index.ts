@@ -1,3 +1,5 @@
+import type { Component } from 'vue'
+
 /**
  * 工作区状态值，与后端 WorkspaceStatus 枚举对应
  */
@@ -149,7 +151,7 @@ export type GeneratableContentKey = 'podcast' | 'article' | 'outline' | 'zhihu'
 export interface SideNavItem {
     key: SideNavKey
     label: string
-    icon: string
+    icon: Component
     hasContent: boolean
     isLoading: boolean
 }

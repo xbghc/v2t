@@ -15,6 +15,15 @@ import AudioSection from '@/components/AudioSection.vue'
 import SubtitleSection from '@/components/SubtitleSection.vue'
 import PodcastPlayer from '@/components/PodcastPlayer.vue'
 import MarkdownContent from '@/components/MarkdownContent.vue'
+import IconRefresh from '~icons/material-symbols/refresh'
+import IconContentCopy from '~icons/material-symbols/content-copy-outline'
+import IconPodcasts from '~icons/material-symbols/podcasts'
+import IconArticle from '~icons/material-symbols/article-outline'
+import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
+import IconEditDocument from '~icons/material-symbols/edit-document-outline'
+import IconVideocam from '~icons/material-symbols/videocam-outline'
+import IconMusicNote from '~icons/material-symbols/music-note'
+import IconSubtitles from '~icons/material-symbols/subtitles-outline'
 
 const route = useRoute()
 const router = useRouter()
@@ -159,7 +168,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                             class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                             @click="handleRetry"
                         >
-                            <span class="material-symbols-outlined">refresh</span>
+                            <IconRefresh />
                             <span>重新尝试</span>
                         </button>
                     </div>
@@ -183,7 +192,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         v-if="showPodcast"
                         id="podcast"
                         title="播客"
-                        icon="podcasts"
+                        :icon="IconPodcasts"
                         :is-visible="isSectionVisible('podcast')"
                         :is-loading="podcastStreaming || podcastSynthesizing"
                         :loading-text="getLoadingText('podcast', loadingState)"
@@ -194,7 +203,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
                                 @click="copyContent(podcastScript)"
                             >
-                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <IconContentCopy class="text-lg" />
                                 <span>复制脚本</span>
                             </button>
                         </template>
@@ -224,7 +233,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         v-if="showArticle"
                         id="article"
                         title="文章"
-                        icon="article"
+                        :icon="IconArticle"
                         :is-visible="isSectionVisible('article')"
                         :is-loading="articleStreaming && !displayArticle"
                         :loading-text="getLoadingText('article', loadingState)"
@@ -235,7 +244,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
                                 @click="copyContent(article || displayArticle)"
                             >
-                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <IconContentCopy class="text-lg" />
                                 <span>复制</span>
                             </button>
                         </template>
@@ -254,7 +263,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         v-if="showOutline"
                         id="outline"
                         title="大纲"
-                        icon="format_list_bulleted"
+                        :icon="IconFormatListBulleted"
                         :is-visible="isSectionVisible('outline')"
                         :is-loading="outlineStreaming && !displayOutline"
                         :loading-text="getLoadingText('outline', loadingState)"
@@ -265,7 +274,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
                                 @click="copyContent(outline || displayOutline)"
                             >
-                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <IconContentCopy class="text-lg" />
                                 <span>复制</span>
                             </button>
                         </template>
@@ -284,7 +293,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         v-if="showZhihu"
                         id="zhihu"
                         title="知乎文章"
-                        icon="edit_document"
+                        :icon="IconEditDocument"
                         :is-visible="isSectionVisible('zhihu')"
                         :is-loading="zhihuStreaming && !displayZhihu"
                         :loading-text="getLoadingText('zhihu', loadingState)"
@@ -295,7 +304,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                                 class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
                                 @click="copyContent(zhihuArticle || displayZhihu)"
                             >
-                                <span class="material-symbols-outlined text-lg">content_copy</span>
+                                <IconContentCopy class="text-lg" />
                                 <span>复制</span>
                             </button>
                         </template>
@@ -313,7 +322,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                     <ContentSection
                         id="video"
                         title="视频"
-                        icon="videocam"
+                        :icon="IconVideocam"
                         :is-visible="isSectionVisible('video')"
                         :is-loading="workspaceStatus === 'downloading' && !videoUrl"
                         :loading-text="getLoadingText('video', loadingState)"
@@ -330,7 +339,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                     <ContentSection
                         id="audio"
                         title="音频"
-                        icon="music_note"
+                        :icon="IconMusicNote"
                         :is-visible="isSectionVisible('audio')"
                         :is-loading="workspaceStatus === 'downloading' && !audioUrl"
                         :loading-text="getLoadingText('audio', loadingState)"
@@ -347,7 +356,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                     <ContentSection
                         id="subtitle"
                         title="字幕"
-                        icon="subtitles"
+                        :icon="IconSubtitles"
                         :is-visible="isSectionVisible('subtitle')"
                         :is-loading="workspaceStatus === 'transcribing' && !transcript"
                         :loading-text="getLoadingText('subtitle', loadingState)"

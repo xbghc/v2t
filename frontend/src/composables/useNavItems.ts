@@ -2,6 +2,13 @@ import { computed, type ComputedRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
 import type { SideNavItem } from '@/types'
+import IconPodcasts from '~icons/material-symbols/podcasts'
+import IconArticle from '~icons/material-symbols/article-outline'
+import IconEditDocument from '~icons/material-symbols/edit-document-outline'
+import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
+import IconVideocam from '~icons/material-symbols/videocam-outline'
+import IconMusicNote from '~icons/material-symbols/music-note'
+import IconSubtitles from '~icons/material-symbols/subtitles-outline'
 
 export interface UseNavItemsReturn {
     navItems: ComputedRef<SideNavItem[]>
@@ -47,7 +54,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'podcast',
                 label: '播客',
-                icon: 'podcasts',
+                icon: IconPodcasts,
                 hasContent: !!podcastScript.value || hasPodcastAudio.value,
                 isLoading: podcastStreaming.value || podcastSynthesizing.value
             })
@@ -58,7 +65,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'article',
                 label: '文章',
-                icon: 'article',
+                icon: IconArticle,
                 hasContent: !!article.value,
                 isLoading: articleStreaming.value
             })
@@ -69,7 +76,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'zhihu',
                 label: '知乎',
-                icon: 'edit_document',
+                icon: IconEditDocument,
                 hasContent: !!zhihuArticle.value,
                 isLoading: zhihuStreaming.value
             })
@@ -80,7 +87,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'outline',
                 label: '大纲',
-                icon: 'format_list_bulleted',
+                icon: IconFormatListBulleted,
                 hasContent: !!outline.value,
                 isLoading: outlineStreaming.value
             })
@@ -90,7 +97,7 @@ export function useNavItems(): UseNavItemsReturn {
         items.push({
             key: 'video',
             label: '视频',
-            icon: 'videocam',
+            icon: IconVideocam,
             hasContent: !!videoUrl.value,
             isLoading: workspaceStatus.value === 'downloading'
         })
@@ -99,7 +106,7 @@ export function useNavItems(): UseNavItemsReturn {
         items.push({
             key: 'audio',
             label: '音频',
-            icon: 'music_note',
+            icon: IconMusicNote,
             hasContent: !!audioUrl.value,
             isLoading: workspaceStatus.value === 'downloading'
         })
@@ -108,7 +115,7 @@ export function useNavItems(): UseNavItemsReturn {
         items.push({
             key: 'subtitle',
             label: '字幕',
-            icon: 'subtitles',
+            icon: IconSubtitles,
             hasContent: !!transcript.value,
             isLoading: workspaceStatus.value === 'transcribing'
         })
@@ -129,7 +136,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'podcast',
                 label: '播客',
-                icon: 'podcasts',
+                icon: IconPodcasts,
                 hasContent: false,
                 isLoading: false
             })
@@ -140,7 +147,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'article',
                 label: '文章',
-                icon: 'article',
+                icon: IconArticle,
                 hasContent: false,
                 isLoading: false
             })
@@ -151,7 +158,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'zhihu',
                 label: '知乎',
-                icon: 'edit_document',
+                icon: IconEditDocument,
                 hasContent: false,
                 isLoading: false
             })
@@ -162,7 +169,7 @@ export function useNavItems(): UseNavItemsReturn {
             items.push({
                 key: 'outline',
                 label: '大纲',
-                icon: 'format_list_bulleted',
+                icon: IconFormatListBulleted,
                 hasContent: false,
                 isLoading: false
             })

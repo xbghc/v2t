@@ -19,6 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
 
+    "types": ["unplugin-icons/types/vue"],
     "paths": {
       "@/*": ["./src/*"]
     }

@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { useToastStore } from '@/stores/toast'
 import type { ToastType } from '@/stores/toast'
+import type { Component } from 'vue'
+import IconError from '~icons/material-symbols/error-outline'
+import IconCheckCircle from '~icons/material-symbols/check-circle-outline'
+import IconWarning from '~icons/material-symbols/warning-outline'
+import IconInfo from '~icons/material-symbols/info-outline'
+import IconClose from '~icons/material-symbols/close'
 
 const toastStore = useToastStore()
 
@@ -17,16 +23,16 @@ const getTypeStyles = (type: ToastType): string => {
     }
 }
 
-const getIcon = (type: ToastType): string => {
+const getIcon = (type: ToastType): Component => {
     switch (type) {
     case 'error':
-        return 'error'
+        return IconError
     case 'success':
-        return 'check_circle'
+        return IconCheckCircle
     case 'warning':
-        return 'warning'
+        return IconWarning
     case 'info':
-        return 'info'
+        return IconInfo
     }
 }
 </script>
@@ -41,15 +47,13 @@ const getIcon = (type: ToastType): string => {
                     class="pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg min-w-[200px] max-w-[400px]"
                     :class="getTypeStyles(toast.type)"
                 >
-                    <span class="material-symbols-outlined text-xl flex-shrink-0">
-                        {{ getIcon(toast.type) }}
-                    </span>
+                    <component :is="getIcon(toast.type)" class="text-xl flex-shrink-0" />
                     <span class="text-sm flex-1">{{ toast.message }}</span>
                     <button
                         class="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
                         @click="toastStore.removeToast(toast.id)"
                     >
-                        <span class="material-symbols-outlined text-lg">close</span>
+                        <IconClose class="text-lg" />
                     </button>
                 </div>
             </TransitionGroup>

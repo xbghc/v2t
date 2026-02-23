@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useToastStore } from '@/stores/toast'
+import IconSubtitlesOff from '~icons/material-symbols/subtitles-off-outline'
+import IconContentCopy from '~icons/material-symbols/content-copy-outline'
+import IconDownload from '~icons/material-symbols/download'
 
 interface Props {
     content: string
@@ -57,9 +60,7 @@ const downloadContent = () => {
             v-else-if="!hasContent"
             class="flex flex-col items-center justify-center py-12 bg-gray-100 dark:bg-dark-bg rounded-lg"
         >
-            <span class="material-symbols-outlined text-4xl text-gray-400 dark:text-gray-600 mb-3">
-                subtitles_off
-            </span>
+            <IconSubtitlesOff class="text-4xl text-gray-400 dark:text-gray-600 mb-3" />
             <span class="text-sm text-gray-500 dark:text-gray-400">暂无字幕内容</span>
         </div>
 
@@ -71,14 +72,14 @@ const downloadContent = () => {
                     class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-border hover:bg-gray-200 dark:hover:bg-dark-border-light text-gray-700 dark:text-gray-300 text-sm transition-colors"
                     @click="copyContent"
                 >
-                    <span class="material-symbols-outlined text-lg">content_copy</span>
+                    <IconContentCopy class="text-lg" />
                     <span>复制</span>
                 </button>
                 <button
                     class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-border hover:bg-gray-200 dark:hover:bg-dark-border-light text-gray-700 dark:text-gray-300 text-sm transition-colors"
                     @click="downloadContent"
                 >
-                    <span class="material-symbols-outlined text-lg">download</span>
+                    <IconDownload class="text-lg" />
                     <span>下载 TXT</span>
                 </button>
             </div>

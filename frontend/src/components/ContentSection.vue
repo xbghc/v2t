@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
+
 interface Props {
     id: string
     title: string
-    icon: string
+    icon: Component
     isVisible?: boolean
     isLoading?: boolean
     loadingText?: string
@@ -24,9 +26,7 @@ withDefaults(defineProps<Props>(), {
         <!-- 标题栏 -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg">
             <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined text-xl text-primary">
-                    {{ icon }}
-                </span>
+                <component :is="icon" class="text-xl text-primary" />
                 <h3 class="text-base font-semibold text-gray-900 dark:text-white">
                     {{ title }}
                 </h3>

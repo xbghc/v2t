@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { SideNavItem, SideNavKey } from '@/types'
+import IconClose from '~icons/material-symbols/close'
+import IconMenu from '~icons/material-symbols/menu'
+import IconArrowForward from '~icons/material-symbols/arrow-forward'
+import IconAddCircle from '~icons/material-symbols/add-circle-outline'
+import IconHourglassEmpty from '~icons/material-symbols/hourglass-empty'
+import IconVisibility from '~icons/material-symbols/visibility-outline'
 
 interface Props {
     items: SideNavItem[]
@@ -57,9 +63,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
         class="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-dark-card shadow-lg border border-gray-200 dark:border-dark-border"
         @click="toggleMobileMenu"
     >
-        <span class="material-symbols-outlined text-gray-700 dark:text-gray-300">
-            {{ isMobileMenuOpen ? 'close' : 'menu' }}
-        </span>
+        <component :is="isMobileMenuOpen ? IconClose : IconMenu" class="text-gray-700 dark:text-gray-300" />
     </button>
 
     <!-- 移动端遮罩层 -->
@@ -100,12 +104,11 @@ const isItemFocused = (key: SideNavKey): boolean => {
                     @click="handleItemClick(item.key, $emit)"
                 >
                     <div class="flex items-center gap-3 flex-1 min-w-0">
-                        <span
-                            class="material-symbols-outlined text-xl"
+                        <component
+                            :is="item.icon"
+                            class="text-xl"
                             :class="isItemFocused(item.key) ? 'text-primary' : 'text-gray-500 dark:text-gray-400'"
-                        >
-                            {{ item.icon }}
-                        </span>
+                        />
                         <span
                             class="text-sm font-medium truncate"
                             :class="isItemFocused(item.key) ? 'text-primary' : 'text-gray-700 dark:text-gray-300'"
@@ -125,9 +128,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
                         title="跳转到此区块"
                         @click.stop="handleScrollClick(item.key, $emit)"
                     >
-                        <span class="material-symbols-outlined text-lg text-gray-500 dark:text-gray-400">
-                            arrow_forward
-                        </span>
+                        <IconArrowForward class="text-lg text-gray-500 dark:text-gray-400" />
                     </button>
                 </div>
             </div>
@@ -150,18 +151,14 @@ const isItemFocused = (key: SideNavKey): boolean => {
                     @click="handleGenerateClick(item.key, $emit)"
                 >
                     <div class="flex items-center gap-3 flex-1 min-w-0">
-                        <span class="material-symbols-outlined text-xl">
-                            {{ item.icon }}
-                        </span>
+                        <component :is="item.icon" class="text-xl" />
                         <span class="text-sm font-medium truncate">
                             {{ item.label }}
                         </span>
                     </div>
 
                     <!-- 生成按钮 -->
-                    <span class="material-symbols-outlined text-lg flex-shrink-0">
-                        add_circle
-                    </span>
+                    <IconAddCircle class="text-lg flex-shrink-0" />
                 </div>
             </div>
 
@@ -170,7 +167,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
                 v-if="items.length === 0 && disabledItems.length === 0"
                 class="px-4 py-8 text-center text-gray-400 dark:text-gray-500"
             >
-                <span class="material-symbols-outlined text-4xl mb-2">hourglass_empty</span>
+                <IconHourglassEmpty class="text-4xl mb-2" />
                 <p class="text-sm">
                     等待内容加载...
                 </p>
@@ -184,7 +181,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
                 class="p-3 border-t border-gray-200 dark:border-dark-border bg-primary/5 dark:bg-primary/10"
             >
                 <div class="flex items-center gap-2 text-sm text-primary">
-                    <span class="material-symbols-outlined text-lg">visibility</span>
+                    <IconVisibility class="text-lg" />
                     <span>聚焦模式</span>
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">

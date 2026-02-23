@@ -1,5 +1,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import IconDownloading from '~icons/material-symbols/downloading'
+import IconVideocamOff from '~icons/material-symbols/videocam-off-outline'
+import IconPlayArrow from '~icons/material-symbols/play-arrow'
+import IconPause from '~icons/material-symbols/pause'
+import IconReplay10 from '~icons/material-symbols/replay-10'
+import IconForward10 from '~icons/material-symbols/forward-10'
+import IconFullscreen from '~icons/material-symbols/fullscreen'
+import IconFullscreenExit from '~icons/material-symbols/fullscreen-exit'
+import IconDownload from '~icons/material-symbols/download'
 
 interface Props {
     src: string
@@ -102,9 +111,7 @@ const skip = (seconds: number) => {
             v-if="!available && isProcessing"
             class="flex flex-col items-center justify-center py-12 bg-gray-100 dark:bg-dark-bg rounded-lg"
         >
-            <span class="material-symbols-outlined text-4xl text-gray-400 dark:text-gray-600 mb-3 animate-pulse">
-                downloading
-            </span>
+            <IconDownloading class="text-4xl text-gray-400 dark:text-gray-600 mb-3 animate-pulse" />
             <span class="text-sm text-gray-500 dark:text-gray-400">正在下载视频...</span>
         </div>
 
@@ -113,9 +120,7 @@ const skip = (seconds: number) => {
             v-else-if="!available && !isProcessing"
             class="flex flex-col items-center justify-center py-12 bg-gray-100 dark:bg-dark-bg rounded-lg"
         >
-            <span class="material-symbols-outlined text-4xl text-gray-400 dark:text-gray-600 mb-3">
-                videocam_off
-            </span>
+            <IconVideocamOff class="text-4xl text-gray-400 dark:text-gray-600 mb-3" />
             <span class="text-sm text-gray-500 dark:text-gray-400">视频不可用</span>
         </div>
 
@@ -142,7 +147,7 @@ const skip = (seconds: number) => {
                     @click="togglePlay"
                 >
                     <div class="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                        <span class="material-symbols-outlined text-4xl text-gray-800 ml-1">play_arrow</span>
+                        <IconPlayArrow class="text-4xl text-gray-800 ml-1" />
                     </div>
                 </div>
             </div>
@@ -177,7 +182,7 @@ const skip = (seconds: number) => {
                             title="后退 10 秒"
                             @click="skip(-10)"
                         >
-                            <span class="material-symbols-outlined text-gray-600 dark:text-gray-400">replay_10</span>
+                            <IconReplay10 class="text-gray-600 dark:text-gray-400" />
                         </button>
 
                         <!-- 播放/暂停 -->
@@ -185,9 +190,7 @@ const skip = (seconds: number) => {
                             class="p-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
                             @click="togglePlay"
                         >
-                            <span class="material-symbols-outlined">
-                                {{ isPlaying ? 'pause' : 'play_arrow' }}
-                            </span>
+                            <component :is="isPlaying ? IconPause : IconPlayArrow" />
                         </button>
 
                         <!-- 快进 10s -->
@@ -196,7 +199,7 @@ const skip = (seconds: number) => {
                             title="快进 10 秒"
                             @click="skip(10)"
                         >
-                            <span class="material-symbols-outlined text-gray-600 dark:text-gray-400">forward_10</span>
+                            <IconForward10 class="text-gray-600 dark:text-gray-400" />
                         </button>
                     </div>
 
@@ -207,9 +210,7 @@ const skip = (seconds: number) => {
                             title="全屏"
                             @click="toggleFullscreen"
                         >
-                            <span class="material-symbols-outlined text-gray-600 dark:text-gray-400">
-                                {{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}
-                            </span>
+                            <component :is="isFullscreen ? IconFullscreenExit : IconFullscreen" class="text-gray-600 dark:text-gray-400" />
                         </button>
 
                         <!-- 下载 -->
@@ -218,7 +219,7 @@ const skip = (seconds: number) => {
                             download
                             class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-dark-border hover:bg-gray-200 dark:hover:bg-dark-border-light text-gray-700 dark:text-gray-300 text-sm transition-colors"
                         >
-                            <span class="material-symbols-outlined text-lg">download</span>
+                            <IconDownload class="text-lg" />
                             <span>下载视频</span>
                         </a>
                     </div>

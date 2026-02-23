@@ -1,5 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
+import IconPodcasts from '~icons/material-symbols/podcasts'
+import IconHourglassEmpty from '~icons/material-symbols/hourglass-empty'
+import IconPlayArrow from '~icons/material-symbols/play-arrow'
+import IconPause from '~icons/material-symbols/pause'
+import IconReplay10 from '~icons/material-symbols/replay-10'
+import IconForward10 from '~icons/material-symbols/forward-10'
+import IconDownload from '~icons/material-symbols/download'
 
 interface Props {
     src: string
@@ -94,7 +101,7 @@ onUnmounted(() => {
     <div class="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-xl border border-purple-100 dark:border-purple-800/30">
         <!-- Header -->
         <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-purple-600 dark:text-purple-400">podcasts</span>
+            <IconPodcasts class="text-purple-600 dark:text-purple-400" />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">播客音频</span>
         </div>
 
@@ -103,7 +110,7 @@ onUnmounted(() => {
             v-if="!available && isProcessing"
             class="flex items-center justify-center gap-2 py-4"
         >
-            <span class="material-symbols-outlined text-purple-500 animate-pulse">hourglass_empty</span>
+            <IconHourglassEmpty class="text-purple-500 animate-pulse" />
             <span class="text-sm text-gray-500 dark:text-gray-400">正在合成音频...</span>
         </div>
 
@@ -112,7 +119,7 @@ onUnmounted(() => {
             v-else-if="!available && !isProcessing"
             class="flex items-center justify-center gap-2 py-4"
         >
-            <span class="material-symbols-outlined text-gray-400 dark:text-gray-600">podcasts</span>
+            <IconPodcasts class="text-gray-400 dark:text-gray-600" />
             <span class="text-sm text-gray-400 dark:text-gray-600">{{ error || '播客音频不可用' }}</span>
         </div>
 
@@ -137,7 +144,7 @@ onUnmounted(() => {
                     title="后退 10 秒"
                     @click="skip(-10)"
                 >
-                    <span class="material-symbols-outlined text-xl">replay_10</span>
+                    <IconReplay10 class="text-xl" />
                 </button>
 
                 <!-- Play/Pause -->
@@ -145,9 +152,7 @@ onUnmounted(() => {
                     class="flex items-center justify-center w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-700 text-white shadow-lg transition-colors"
                     @click="togglePlay"
                 >
-                    <span class="material-symbols-outlined text-2xl">
-                        {{ isPlaying ? 'pause' : 'play_arrow' }}
-                    </span>
+                    <component :is="isPlaying ? IconPause : IconPlayArrow" class="text-2xl" />
                 </button>
 
                 <!-- Forward 10s -->
@@ -156,7 +161,7 @@ onUnmounted(() => {
                     title="快进 10 秒"
                     @click="skip(10)"
                 >
-                    <span class="material-symbols-outlined text-xl">forward_10</span>
+                    <IconForward10 class="text-xl" />
                 </button>
             </div>
 
@@ -184,7 +189,7 @@ onUnmounted(() => {
                 :href="src"
                 class="flex items-center justify-center gap-2 mt-1 py-2 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
             >
-                <span class="material-symbols-outlined text-lg">download</span>
+                <IconDownload class="text-lg" />
                 <span>下载音频</span>
             </a>
         </template>
