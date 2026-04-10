@@ -119,6 +119,7 @@ function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceC
     case 'RESET':
         return createInitialWorkspaceContext()
     }
+    return ctx
 }
 
 // --- 工厂函数 ---

@@ -1,6 +1,7 @@
 """Redis 元数据存储实现"""
 
 import json
+import logging
 import time
 
 from redis.asyncio import Redis
@@ -101,7 +102,15 @@ class RedisMetadataStore:
     async def _get_resources(self, workspace_id: str) -> list[WorkspaceResource]:
         """获取工作区的资源列表"""
         raw_list = await self._redis.lrange(self._resources_key(workspace_id), 0, -1)
-        return [self._json_to_resource(item) for item in raw_list]
+        resources = []
+        for item in raw_list:
+            try:
+                resources.append(self._json_to_resource(item))
+            except (json.JSONDecodeError, KeyError, ValueError) as e:
+                logging.getLogger(__name__).warning(
+                    "跳过损坏的资源数据: %s", e
+                )
+        return resources
 
     async def save_workspace(self, workspace: Workspace) -> None:
         """保存工作区（upsert），设置 TTL"""

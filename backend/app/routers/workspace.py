@@ -57,21 +57,26 @@ async def stream_workspace_status(
         raise HTTPException(status_code=404, detail="工作区不存在")
 
     async def generate():
-        # 先发送当前状态
-        response = await build_workspace_response(workspace)
-        yield f"data: {response.model_dump_json()}\n\n"
-
-        # 如果已完成或失败，直接返回
-        if workspace.status in (WorkspaceStatus.READY, WorkspaceStatus.FAILED):
-            return
-
-        # 订阅 Redis Pub/Sub channel
+        # 先订阅 Redis Pub/Sub channel（在读取当前状态之前！）
+        # 这样即使 worker 在我们读取状态后立即发布消息，也不会丢失
         redis = get_redis()
         pubsub = redis.pubsub()
         channel = f"workspace:{workspace_id}:status"
         await pubsub.subscribe(channel)
 
         try:
+            # 发送当前状态
+            current = await get_workspace(workspace_id)
+            if not current:
+                return
+            response = await build_workspace_response(current)
+            yield f"data: {response.model_dump_json()}\n\n"
+
+            # 如果已完成或失败，直接返回
+            if current.status in (WorkspaceStatus.READY, WorkspaceStatus.FAILED):
+                return
+
+            # 持续监听状态变化
             while True:
                 if await request.is_disconnected():
                     break
