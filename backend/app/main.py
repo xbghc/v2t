@@ -34,18 +34,15 @@ app.include_router(stream_router)
 app.include_router(prompts_router)
 
 
-async def check_mongodb_connection() -> tuple[bool, str]:
-    """检测 MongoDB 连接状态（必需配置）"""
+async def check_redis_connection() -> tuple[bool, str]:
+    """检测 Redis 连接状态（必需配置）"""
     from app.config import get_settings
     from app.storage import get_metadata_store
 
     settings = get_settings()
 
-    if not settings.mongodb_uri:
-        return False, "未配置 MONGODB_URI 环境变量"
-
-    if not settings.mongodb_database:
-        return False, "未配置 MONGODB_DATABASE 环境变量"
+    if not settings.redis_url:
+        return False, "未配置 REDIS_URL 环境变量"
 
     store = get_metadata_store()
     return await store.check_connection()
@@ -58,12 +55,12 @@ async def check_api_connections() -> bool:
     from app.services.transcribe import check_whisper_api
     from app.services.xiazaitool import check_xiazaitool_token
 
-    # 检查 MongoDB 连接
-    ok, msg = await check_mongodb_connection()
+    # 检查 Redis 连接
+    ok, msg = await check_redis_connection()
     if ok:
-        logger.info("✓ MongoDB: {}", msg)
+        logger.info("✓ Redis: {}", msg)
     else:
-        logger.error("✗ MongoDB: {}", msg)
+        logger.error("✗ Redis: {}", msg)
         return False
 
     # 同步检查（配置检测）
@@ -109,7 +106,7 @@ def run_server(host: str = "0.0.0.0", port: int = 8103) -> None:
         logger.error("API 检测失败，服务无法启动")
         raise SystemExit(1)
 
-    # 重置存储单例，避免 motor 客户端绑定到已关闭的事件循环
+    # 重置存储单例，避免客户端绑定到已关闭的事件循环
     from app.storage import reset_stores
 
     reset_stores()

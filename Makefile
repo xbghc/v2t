@@ -24,6 +24,9 @@ install-frontend: ## 安装前端依赖
 backend: ## 启动后端开发服务器
 	cd backend && uv run v2t-web
 
+worker: ## 启动 arq worker
+	cd backend && uv run arq app.worker.WorkerSettings
+
 frontend: ## 启动前端开发服务器
 	cd frontend && npm run dev
 

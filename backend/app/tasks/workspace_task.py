@@ -8,8 +8,9 @@ from app.models.entities import Workspace, WorkspaceResource
 from app.models.enums import ResourceType, WorkspaceStatus
 from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_audio
 from app.services.video_downloader import DownloadError, download_video
-from app.state import get_status_queue, get_workspace, save_workspace
-from app.storage import get_file_storage
+from app.state import get_workspace, save_workspace
+from app.storage import get_file_storage, get_redis
+from app.utils.response import build_workspace_response
 
 logger = logging.getLogger(__name__)
 
@@ -17,52 +18,18 @@ logger = logging.getLogger(__name__)
 async def update_workspace_status(
     workspace: Workspace, status: WorkspaceStatus, progress: str
 ) -> None:
-    """更新工作区状态并推送 SSE 事件"""
+    """更新工作区状态并通过 Redis Pub/Sub 推送 SSE 事件"""
     workspace.status = status
     workspace.progress = progress
 
-    # 持久化到存储
+    # 持久化到 Redis
     await save_workspace(workspace)
 
-    # 从全局缓存查找 queue（SSE 端点注册的）
-    queue = get_status_queue(workspace.workspace_id)
-    if queue:
-        storage = get_file_storage()
-
-        # 构建资源响应
-        resources = []
-        for res in workspace.resources:
-            res_data = {
-                "resource_id": res.resource_id,
-                "name": res.name,
-                "resource_type": res.resource_type.value,
-                "download_url": f"/api/workspaces/{workspace.workspace_id}/resources/{res.resource_id}"
-                if res.resource_type in (ResourceType.VIDEO, ResourceType.AUDIO)
-                else None,
-                "content": None,
-                "created_at": res.created_at,
-            }
-            if res.resource_type == ResourceType.TEXT and res.storage_key:
-                try:
-                    content_bytes = await storage.get_bytes(res.storage_key)
-                    res_data["content"] = content_bytes.decode("utf-8")
-                except Exception:
-                    pass
-            resources.append(res_data)
-
-        await queue.put(
-            {
-                "workspace_id": workspace.workspace_id,
-                "url": workspace.url,
-                "title": workspace.title,
-                "status": status.value,
-                "progress": progress,
-                "error": workspace.error,
-                "resources": resources,
-                "created_at": workspace.created_at,
-                "last_accessed_at": workspace.last_accessed_at,
-            }
-        )
+    # 通过 Redis Pub/Sub 发布状态
+    redis = get_redis()
+    response = await build_workspace_response(workspace)
+    channel = f"workspace:{workspace.workspace_id}:status"
+    await redis.publish(channel, response.model_dump_json())
 
 
 async def process_workspace(workspace_id: str, url: str) -> None:

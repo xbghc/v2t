@@ -72,7 +72,7 @@ async def save_text_resource(
         name=name,
         resource_type=ResourceType.TEXT,
         storage_key=storage_key,
-        prompt=prompt,  # prompt 存储在 MongoDB 元数据中
+        prompt=prompt,
     )
     workspace.add_resource(resource)
     # 持久化到存储

@@ -1,0 +1,15 @@
+[Unit]
+Description=v2t arq Worker
+After=network.target redis.service
+
+[Service]
+Type=simple
+User=YOUR_USER
+WorkingDirectory=/path/to/v2t/backend
+ExecStart=.venv/bin/arq app.worker.WorkerSettings
+Restart=always
+RestartSec=10
+Environment=PATH=.venv/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target

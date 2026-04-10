@@ -1,7 +1,6 @@
 """数据实体定义"""
 
 import time
-from asyncio import Queue
 from dataclasses import dataclass, field
 
 from .enums import ResourceType, WorkspaceStatus
@@ -32,7 +31,6 @@ class Workspace:
     resources: list[WorkspaceResource] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_accessed_at: float = field(default_factory=time.time)
-    status_queue: Queue | None = field(default=None, repr=False)
 
     def get_resource(self, name: str) -> WorkspaceResource | None:
         """获取指定名称的最新资源"""
