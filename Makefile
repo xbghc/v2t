@@ -80,16 +80,16 @@ clean: ## 清理构建产物和缓存
 # ==================== Docker ====================
 
 docker-build: ## 构建 Docker 镜像
-	docker build -t v2t:latest .
+	docker compose build
 
-docker-up: ## 启动 Docker 容器
-	docker-compose up -d
+docker-up: ## 启动所有服务
+	docker compose up -d
 
-docker-down: ## 停止 Docker 容器
-	docker-compose down
+docker-down: ## 停止所有服务
+	docker compose down
 
-docker-logs: ## 查看 Docker 日志
-	docker-compose logs -f
+docker-logs: ## 查看服务日志
+	docker compose logs -f
 
 # ==================== 帮助 ====================
 

@@ -187,11 +187,6 @@ export const useTaskStore = defineStore('task', () => {
     const podcastError = computed(() => contentCtxs.podcast.audioError)
     const hasPodcastAudio: ComputedRef<boolean> = computed(() => !!contentCtxs.podcast.audioUrl)
 
-    // 聚合状态
-    const isStreaming: ComputedRef<boolean> = computed(() =>
-        CONTENT_TYPES.some(t => contentStates[t] === 'streaming' || contentStates[t] === 'synthesizing')
-    )
-
     // 显示内容（流式优先，完成后显示最终版）
     const displayOutline = computed(() =>
         contentStates.outline === 'streaming' ? contentCtxs.outline.streamBuffer : contentCtxs.outline.finalContent
@@ -688,7 +683,6 @@ export const useTaskStore = defineStore('task', () => {
         promptsLoaded,
         prompts,
         // 流式状态
-        isStreaming,
         isGenerating,
         hasGeneratedContent,
         outlineStreaming,

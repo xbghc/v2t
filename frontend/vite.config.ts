@@ -5,7 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
     plugins: [vue(), tailwindcss()],
-    base: '/v2t/',
+    base: '/',
     resolve: {
         alias: {
             '@': resolve(__dirname, 'src')
@@ -17,10 +17,9 @@ export default defineConfig({
     },
     server: {
         proxy: {
-            '/v2t/api': {
+            '/api': {
                 target: 'http://localhost:8103',
                 changeOrigin: true,
-                rewrite: (path) => path.replace(/^\/v2t/, ''),
             },
         },
     },

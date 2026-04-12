@@ -13,8 +13,7 @@ from app.models.schemas import (
     CreateWorkspaceRequest,
     WorkspaceResponse,
 )
-from app.state import get_workspace, register_workspace
-from app.storage import get_file_storage, get_redis
+from app.storage import get_file_storage, get_redis, get_workspace, register_workspace
 from app.utils.response import build_workspace_response
 from app.utils.sse import sse_heartbeat, sse_response
 

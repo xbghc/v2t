@@ -21,7 +21,7 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-    history: createWebHistory('/v2t/'),
+    history: createWebHistory('/'),
     routes,
 })
 

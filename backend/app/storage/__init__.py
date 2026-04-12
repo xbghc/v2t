@@ -4,6 +4,8 @@ import logging
 
 from redis.asyncio import Redis
 
+from app.models.entities import Workspace
+
 from .local_file import LocalFileStorage, cleanup_old_files
 from .metadata_store import MetadataStore
 from .redis_store import RedisMetadataStore
@@ -72,6 +74,25 @@ def reset_stores() -> None:
     _redis = None
 
 
+# --- 便捷函数（替代 state/ 层） ---
+
+
+async def get_workspace(workspace_id: str) -> Workspace | None:
+    """获取工作区。"""
+    store = get_metadata_store()
+    return await store.get_workspace(workspace_id)
+
+
+async def save_workspace(workspace: Workspace) -> None:
+    """保存（或注册）工作区。"""
+    store = get_metadata_store()
+    await store.save_workspace(workspace)
+
+
+# 兼容别名
+register_workspace = save_workspace
+
+
 __all__ = [
     "LocalFileStorage",
     "MetadataStore",
@@ -80,5 +101,8 @@ __all__ = [
     "get_file_storage",
     "get_metadata_store",
     "get_redis",
+    "get_workspace",
+    "register_workspace",
     "reset_stores",
+    "save_workspace",
 ]

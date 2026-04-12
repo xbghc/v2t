@@ -36,10 +36,10 @@ class Settings:
     openai_base_url: str = "https://api.deepseek.com"
     openai_model: str = "deepseek-reasoner"
 
-    # Whisper 兼容 API（音频转录）
+    # Whisper 兼容 API（音频转录：Groq、OpenAI、自托管 Qwen3-ASR 等）
     whisper_api_key: str = ""
-    whisper_base_url: str = "https://api.groq.com/openai/v1"
-    whisper_model: str = "whisper-large-v3"
+    whisper_base_url: str = ""
+    whisper_model: str = ""
 
     # 其他服务
     xiazaitool_token: str = ""
