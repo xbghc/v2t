@@ -58,12 +58,12 @@ async def save_text_resource(
     content: str,
     prompt: str = "",
 ) -> WorkspaceResource:
-    """保存文本资源到 MinIO（纯文本），prompt 存储在元数据中"""
+    """保存文本资源（纯文本），prompt 存储在元数据中"""
     storage = get_file_storage()
     resource_id = str(uuid.uuid4())[:8]
     storage_key = f"{workspace.workspace_id}/{name}_{resource_id}.txt"
 
-    # 保存纯文本到 MinIO
+    # 保存纯文本到本地存储
     await storage.save_bytes(storage_key, content.encode("utf-8"))
 
     resource = WorkspaceResource(
@@ -188,7 +188,7 @@ async def stream_podcast(
                 await generate_podcast_audio(
                     script_content, audio_path, temp_dir=settings.temp_path
                 )
-                # 上传到 MinIO
+                # 保存音频文件
                 audio_key = f"{workspace_id}/podcast_{audio_resource_id}.mp3"
                 await storage.save_file(audio_key, audio_path)
 

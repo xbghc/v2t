@@ -7,7 +7,6 @@ from redis.asyncio import Redis
 from app.models.entities import Workspace
 
 from .local_file import LocalFileStorage, cleanup_old_files
-from .metadata_store import MetadataStore
 from .redis_store import RedisMetadataStore
 
 logger = logging.getLogger(__name__)
@@ -95,7 +94,6 @@ register_workspace = save_workspace
 
 __all__ = [
     "LocalFileStorage",
-    "MetadataStore",
     "RedisMetadataStore",
     "cleanup_old_files",
     "get_file_storage",
