@@ -14,6 +14,11 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
+      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
     volumes:
       - v2t-data:/data/v2t
       - v2t-tmp:/tmp/v2t
@@ -29,6 +34,11 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
+      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
     volumes:
       - v2t-data:/data/v2t
       - v2t-tmp:/tmp/v2t
