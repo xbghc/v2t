@@ -1,12 +1,12 @@
 [Unit]
-Description=v2t Web Service
+Description=v2t arq Worker
 After=network.target redis.service
 
 [Service]
 Type=simple
 User=YOUR_USER
 WorkingDirectory=/path/to/v2t/backend
-ExecStart=.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8101
+ExecStart=.venv/bin/arq app.worker.WorkerSettings
 Restart=always
 RestartSec=10
 Environment=PATH=.venv/bin:/usr/local/bin:/usr/bin:/bin

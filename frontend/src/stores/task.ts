@@ -118,20 +118,31 @@ export const useTaskStore = defineStore('task', () => {
         outline: null, article: null, podcast: null, zhihu: null,
     }
 
+    // 生成是否已启动的标记（替代 workspace generating 状态）
+    let generationStarted = false
+
     // ==================== 向后兼容的 computed 属性 ====================
 
     // 工作区状态 → 后端 WorkspaceStatus（组件继续用这个值）
     const workspaceStatus: ComputedRef<WorkspaceStatus> = computed(() => {
         const s = wsState.value
-        if (s === 'idle' || s === 'pending') return 'pending'
-        if (s === 'downloading') return 'downloading'
-        if (s === 'transcribing') return 'transcribing'
-        if (s === 'ready' || s === 'generating' || s === 'completed') return 'ready'
-        return 'failed'
+        if (s === 'idle') return 'pending'
+        return s  // 1:1 映射
     })
 
     const isDownloadOnly: ComputedRef<boolean> = computed(() =>
         !generateOptions.outline && !generateOptions.article && !generateOptions.podcast
+    )
+
+    // 派生 computed（替代 generating/completed 状态）
+    const isGenerating: ComputedRef<boolean> = computed(() =>
+        CONTENT_TYPES.some(t =>
+            contentStates[t] === 'streaming' || contentStates[t] === 'synthesizing'
+        )
+    )
+
+    const hasGeneratedContent: ComputedRef<boolean> = computed(() =>
+        CONTENT_TYPES.some(t => !!contentCtxs[t].finalContent)
     )
 
     // 工作区 context
@@ -175,11 +186,6 @@ export const useTaskStore = defineStore('task', () => {
     const podcastAudioUrl = computed(() => contentCtxs.podcast.audioUrl)
     const podcastError = computed(() => contentCtxs.podcast.audioError)
     const hasPodcastAudio: ComputedRef<boolean> = computed(() => !!contentCtxs.podcast.audioUrl)
-
-    // 聚合状态
-    const isStreaming: ComputedRef<boolean> = computed(() =>
-        CONTENT_TYPES.some(t => contentStates[t] === 'streaming' || contentStates[t] === 'synthesizing')
-    )
 
     // 显示内容（流式优先，完成后显示最终版）
     const displayOutline = computed(() =>
@@ -301,7 +307,7 @@ export const useTaskStore = defineStore('task', () => {
     }
 
     function startGenerating(wsId: string): void {
-        sendWorkspace({ type: 'START_GENERATING' })
+        generationStarted = true
 
         let started = false
         for (const type of CONTENT_TYPES) {
@@ -312,7 +318,7 @@ export const useTaskStore = defineStore('task', () => {
         }
 
         if (!started) {
-            sendWorkspace({ type: 'GENERATION_COMPLETE' })
+            generationStarted = false
             handleTaskComplete()
         }
     }
@@ -322,8 +328,8 @@ export const useTaskStore = defineStore('task', () => {
             const s = contentStates[t]
             return s === 'idle' || s === 'done' || s === 'failed'
         })
-        if (allDone && wsState.value === 'generating') {
-            sendWorkspace({ type: 'GENERATION_COMPLETE' })
+        if (allDone && generationStarted) {
+            generationStarted = false
             handleTaskComplete()
         }
     }
@@ -413,6 +419,7 @@ export const useTaskStore = defineStore('task', () => {
         for (const type of CONTENT_TYPES) {
             sendContent(type, { type: 'RESET' })
         }
+        generationStarted = false
         currentTab.value = 'article'
     }
 
@@ -627,9 +634,17 @@ export const useTaskStore = defineStore('task', () => {
                 wsCtx.errorMessage = data.error
             }
 
-            if (data.status === 'ready') {
+            // 根据 status + resources 决定行为
+            const hasContent = CONTENT_TYPES.some(t => !!contentMap[t])
+
+            if (data.status === 'ready' && hasContent) {
+                // resources 已有内容 → 直接显示，不重新生成
+                handleTaskComplete()
+            } else if (data.status === 'ready') {
+                // 无内容 → 正常启动生成
                 startGenerating(id)
             } else if (data.status !== 'failed') {
+                // 还在处理中 → 监听 SSE
                 startStatusStream(id)
             }
 
@@ -640,7 +655,7 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    // ==================== 导出（与原 store 完全一致的属性名）====================
+    // ==================== 导出 ====================
 
     return {
         // 状态
@@ -668,7 +683,8 @@ export const useTaskStore = defineStore('task', () => {
         promptsLoaded,
         prompts,
         // 流式状态
-        isStreaming,
+        isGenerating,
+        hasGeneratedContent,
         outlineStreaming,
         articleStreaming,
         podcastStreaming,

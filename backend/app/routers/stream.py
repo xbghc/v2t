@@ -19,8 +19,7 @@ from app.services.llm import (
     generate_zhihu_article,
 )
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
-from app.state import get_workspace, save_workspace
-from app.storage import get_file_storage
+from app.storage import get_file_storage, get_workspace, save_workspace
 from app.utils.sse import sse_data, sse_response
 
 logger = logging.getLogger(__name__)
@@ -59,12 +58,12 @@ async def save_text_resource(
     content: str,
     prompt: str = "",
 ) -> WorkspaceResource:
-    """保存文本资源到 MinIO（纯文本），prompt 存储在元数据中"""
+    """保存文本资源（纯文本），prompt 存储在元数据中"""
     storage = get_file_storage()
     resource_id = str(uuid.uuid4())[:8]
     storage_key = f"{workspace.workspace_id}/{name}_{resource_id}.txt"
 
-    # 保存纯文本到 MinIO
+    # 保存纯文本到本地存储
     await storage.save_bytes(storage_key, content.encode("utf-8"))
 
     resource = WorkspaceResource(
@@ -72,7 +71,7 @@ async def save_text_resource(
         name=name,
         resource_type=ResourceType.TEXT,
         storage_key=storage_key,
-        prompt=prompt,  # prompt 存储在 MongoDB 元数据中
+        prompt=prompt,
     )
     workspace.add_resource(resource)
     # 持久化到存储
@@ -189,7 +188,7 @@ async def stream_podcast(
                 await generate_podcast_audio(
                     script_content, audio_path, temp_dir=settings.temp_path
                 )
-                # 上传到 MinIO
+                # 保存音频文件
                 audio_key = f"{workspace_id}/podcast_{audio_resource_id}.mp3"
                 await storage.save_file(audio_key, audio_path)
 

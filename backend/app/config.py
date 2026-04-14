@@ -20,9 +20,8 @@ ENV_MAPPING = {
     # 其他服务
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
-    # MongoDB
-    "mongodb_uri": "MONGODB_URI",
-    "mongodb_database": "MONGODB_DATABASE",
+    # Redis
+    "redis_url": "REDIS_URL",
     # 存储
     "data_dir": "DATA_DIR",
 }
@@ -37,19 +36,18 @@ class Settings:
     openai_base_url: str = "https://api.deepseek.com"
     openai_model: str = "deepseek-reasoner"
 
-    # Whisper 兼容 API（音频转录）
+    # Whisper 兼容 API（音频转录：Groq、OpenAI、自托管 Qwen3-ASR 等）
     whisper_api_key: str = ""
-    whisper_base_url: str = "https://api.groq.com/openai/v1"
-    whisper_model: str = "whisper-large-v3"
+    whisper_base_url: str = ""
+    whisper_model: str = ""
 
     # 其他服务
     xiazaitool_token: str = ""
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
     dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
 
-    # MongoDB
-    mongodb_uri: str = ""
-    mongodb_database: str = ""
+    # Redis
+    redis_url: str = "redis://localhost:6379"
 
     # 文件存储
     data_dir: str = "/data/v2t"

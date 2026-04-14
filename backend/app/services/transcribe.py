@@ -141,6 +141,8 @@ def get_whisper_client() -> AsyncOpenAI:
     global _whisper_client
     if _whisper_client is None:
         settings = get_settings()
+        if not settings.whisper_base_url:
+            raise TranscribeError("WHISPER_BASE_URL 未配置")
         if not settings.whisper_api_key:
             raise TranscribeError("WHISPER_API_KEY 未配置")
         _whisper_client = AsyncOpenAI(
@@ -153,6 +155,8 @@ def get_whisper_client() -> AsyncOpenAI:
 async def check_whisper_api() -> tuple[bool, str]:
     """检测 Whisper API 是否可用"""
     settings = get_settings()
+    if not settings.whisper_base_url:
+        return False, "WHISPER_BASE_URL 未配置"
     if not settings.whisper_api_key:
         return False, "WHISPER_API_KEY 未配置"
     try:

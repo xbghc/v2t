@@ -1,0 +1,60 @@
+services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      target: backend
+    depends_on:
+      - redis
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
+      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
+    volumes:
+      - v2t-data:/data/v2t
+      - v2t-tmp:/tmp/v2t
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      target: backend
+    command: [".venv/bin/arq", "app.worker.WorkerSettings"]
+    depends_on:
+      - redis
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
+      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
+    volumes:
+      - v2t-data:/data/v2t
+      - v2t-tmp:/tmp/v2t
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      target: nginx
+    ports:
+      - "8100:80"
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  v2t-data:
+  v2t-tmp:

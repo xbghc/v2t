@@ -2,15 +2,36 @@
 
 import logging
 
+from redis.asyncio import Redis
+
+from app.models.entities import Workspace
+
 from .local_file import LocalFileStorage, cleanup_old_files
-from .metadata_store import MetadataStore
-from .mongo_metadata import MongoMetadataStore
+from .redis_store import RedisMetadataStore
 
 logger = logging.getLogger(__name__)
 
 # 全局存储实例（延迟初始化）
-_metadata_store: MongoMetadataStore | None = None
+_metadata_store: RedisMetadataStore | None = None
 _file_storage: LocalFileStorage | None = None
+_redis: Redis | None = None
+
+
+def get_redis() -> Redis:
+    """返回全局 Redis 连接实例。"""
+    global _redis
+
+    if _redis is not None:
+        return _redis
+
+    from app.config import get_settings
+
+    settings = get_settings()
+
+    _redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    logger.info("Redis 连接: %s", settings.redis_url)
+
+    return _redis
 
 
 def get_file_storage() -> LocalFileStorage:
@@ -30,43 +51,56 @@ def get_file_storage() -> LocalFileStorage:
     return _file_storage
 
 
-def get_metadata_store() -> MongoMetadataStore:
-    """
-    返回 MongoDB 元数据存储实例。
-
-    必须配置 MONGODB_URI 环境变量。
-    """
+def get_metadata_store() -> RedisMetadataStore:
+    """返回 Redis 元数据存储实例。"""
     global _metadata_store
 
     if _metadata_store is not None:
         return _metadata_store
 
-    from app.config import get_settings
-
-    settings = get_settings()
-
-    _metadata_store = MongoMetadataStore(
-        uri=settings.mongodb_uri,
-        database=settings.mongodb_database,
-    )
-    logger.info("使用 MongoDB 元数据存储: %s", settings.mongodb_database)
+    redis = get_redis()
+    _metadata_store = RedisMetadataStore(redis=redis)
+    logger.info("使用 Redis 元数据存储")
 
     return _metadata_store
 
 
 def reset_stores() -> None:
-    """重置全局存储实例，用于事件循环切换后重新创建连接。"""
-    global _metadata_store, _file_storage
+    """重置全局存储实例。"""
+    global _metadata_store, _file_storage, _redis
     _metadata_store = None
     _file_storage = None
+    _redis = None
+
+
+# --- 便捷函数（替代 state/ 层） ---
+
+
+async def get_workspace(workspace_id: str) -> Workspace | None:
+    """获取工作区。"""
+    store = get_metadata_store()
+    return await store.get_workspace(workspace_id)
+
+
+async def save_workspace(workspace: Workspace) -> None:
+    """保存（或注册）工作区。"""
+    store = get_metadata_store()
+    await store.save_workspace(workspace)
+
+
+# 兼容别名
+register_workspace = save_workspace
 
 
 __all__ = [
     "LocalFileStorage",
-    "MetadataStore",
-    "MongoMetadataStore",
+    "RedisMetadataStore",
     "cleanup_old_files",
     "get_file_storage",
     "get_metadata_store",
+    "get_redis",
+    "get_workspace",
+    "register_workspace",
     "reset_stores",
+    "save_workspace",
 ]

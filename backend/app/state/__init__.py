@@ -1,21 +1,9 @@
-"""状态管理模块"""
+"""状态管理模块 — 已迁移到 app.storage，保留兼容导出"""
 
-from .memory_store import (
-    WORKSPACE_EXPIRE_SECONDS,
-    cleanup_old_workspaces,
-    get_status_queue,
-    get_workspace,
-    register_workspace,
-    save_workspace,
-    set_status_queue,
-)
+from app.storage import get_workspace, register_workspace, save_workspace
 
 __all__ = [
-    "WORKSPACE_EXPIRE_SECONDS",
-    "cleanup_old_workspaces",
-    "get_status_queue",
     "get_workspace",
     "register_workspace",
     "save_workspace",
-    "set_status_queue",
 ]

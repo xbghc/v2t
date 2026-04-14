@@ -1,10 +1,10 @@
 /**
  * 工作区状态机
  *
- * 状态流转：
- * idle → pending → downloading → transcribing → ready → generating → completed
- *                                                 ↗                      ↓
- *                               failed ←──────────────────────────────────
+ * 状态流转（1:1 镜像后端 WorkspaceStatus）：
+ * idle → pending → downloading → transcribing → ready
+ *                                                 ↗
+ *                               failed ←──────────
  */
 
 // --- 状态 ---
@@ -14,16 +14,12 @@ export type WorkspaceState =
     | 'downloading'
     | 'transcribing'
     | 'ready'
-    | 'generating'
-    | 'completed'
     | 'failed'
 
 // --- 事件 ---
 export type WorkspaceEvent =
     | { type: 'SUBMIT'; workspaceId: string }
     | { type: 'STATUS_UPDATE'; status: 'pending' | 'downloading' | 'transcribing' | 'ready' | 'failed'; error?: string }
-    | { type: 'START_GENERATING' }
-    | { type: 'GENERATION_COMPLETE' }
     | { type: 'FAIL'; error: string }
     | { type: 'RESET' }
     | { type: 'LOAD_WORKSPACE'; status: 'pending' | 'downloading' | 'transcribing' | 'ready' | 'failed' }
@@ -64,9 +60,7 @@ const TRANSITIONS: TransitionMap = {
     pending:      { STATUS_UPDATE: '*', FAIL: 'failed', RESET: 'idle', UPDATE_RESOURCES: 'pending' },
     downloading:  { STATUS_UPDATE: '*', FAIL: 'failed', RESET: 'idle', UPDATE_RESOURCES: 'downloading' },
     transcribing: { STATUS_UPDATE: '*', FAIL: 'failed', RESET: 'idle', UPDATE_RESOURCES: 'transcribing' },
-    ready:        { START_GENERATING: 'generating', RESET: 'idle', UPDATE_RESOURCES: 'ready' },
-    generating:   { GENERATION_COMPLETE: 'completed', FAIL: 'failed', RESET: 'idle', UPDATE_RESOURCES: 'generating' },
-    completed:    { START_GENERATING: 'generating', RESET: 'idle', UPDATE_RESOURCES: 'completed' },
+    ready:        { RESET: 'idle', UPDATE_RESOURCES: 'ready', FAIL: 'failed' },
     failed:       { SUBMIT: 'pending', RESET: 'idle', LOAD_WORKSPACE: '*' },
 }
 
@@ -120,15 +114,12 @@ function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceC
             transcript: event.transcript ?? ctx.transcript,
             progressText: event.progressText ?? ctx.progressText,
         }
-    case 'START_GENERATING':
-        return { ...ctx, progressText: '正在生成内容...' }
-    case 'GENERATION_COMPLETE':
-        return { ...ctx, progressText: '处理完成' }
     case 'FAIL':
         return { ...ctx, errorMessage: event.error, progressText: '处理失败' }
     case 'RESET':
         return createInitialWorkspaceContext()
     }
+    return ctx
 }
 
 // --- 工厂函数 ---

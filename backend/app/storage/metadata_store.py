@@ -10,7 +10,7 @@ class MetadataStore(Protocol):
     """
     元数据存储协议。
 
-    定义工作区元数据存储的抽象接口，支持内存存储和数据库（如 MongoDB）。
+    定义工作区元数据存储的抽象接口。
     """
 
     async def get_workspace(self, workspace_id: str) -> "Workspace | None":
@@ -40,17 +40,5 @@ class MetadataStore(Protocol):
 
         Args:
             workspace_id: 工作区 ID
-        """
-        ...
-
-    async def list_expired_workspaces(self, expire_seconds: int) -> "list[Workspace]":
-        """
-        列出过期的工作区。
-
-        Args:
-            expire_seconds: 过期时间（秒），基于 last_accessed_at
-
-        Returns:
-            过期的工作区列表
         """
         ...
