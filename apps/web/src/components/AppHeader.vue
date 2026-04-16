@@ -29,7 +29,7 @@ defineEmits<{
         >
             <AppLogo :size="variant === 'result' ? '6' : '5'" />
             <h2 class="text-lg font-bold leading-tight tracking-tight-sm text-gray-900 dark:text-white">
-                V2T 视频转文字
+                Prism 棱镜
             </h2>
         </RouterLink>
         <button
