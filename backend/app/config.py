@@ -17,6 +17,8 @@ ENV_MAPPING = {
     "whisper_api_key": "WHISPER_API_KEY",
     "whisper_base_url": "WHISPER_BASE_URL",
     "whisper_model": "WHISPER_MODEL",
+    # DashScope STT
+    "dashscope_stt_model": "DASHSCOPE_STT_MODEL",
     # 其他服务
     "xiazaitool_token": "XIAZAITOOL_TOKEN",
     "dashscope_api_key": "DASHSCOPE_API_KEY",
@@ -41,10 +43,13 @@ class Settings:
     whisper_base_url: str = ""
     whisper_model: str = ""
 
+    # DashScope STT（阿里云百炼语音识别）
+    dashscope_stt_model: str = "paraformer-realtime-v2"
+
     # 其他服务
     xiazaitool_token: str = ""
     xiazaitool_api_url: str = "https://api.xiazaitool.com/api/parseVideoUrl"
-    dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS 服务）
+    dashscope_api_key: str = ""  # 阿里云百炼 API Key（TTS + STT）
 
     # Redis
     redis_url: str = "redis://localhost:6379"

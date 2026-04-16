@@ -185,20 +185,11 @@ def format_segments(segments: list) -> str:
     return "\n".join(lines)
 
 
-async def transcribe_audio(
+async def _transcribe_audio_whisper(
     audio_path: Path,
     language: str | None = None,
 ) -> str:
-    """
-    转写音频文件
-
-    Args:
-        audio_path: 音频文件路径
-        language: 语言代码（如 "zh", "en"），None 为自动检测
-
-    Returns:
-        str: 带时间戳的转写文本
-    """
+    """使用 Whisper API 转写音频文件"""
     settings = get_settings()
     client = get_whisper_client()
 
@@ -222,12 +213,55 @@ async def transcribe_audio(
     except openai.APIError as e:
         raise TranscribeError(f"转录 API 错误: {e.message}")
 
-    # 格式化为带时间戳的文本
     if hasattr(response, "segments") and response.segments:
         return format_segments(response.segments)
 
-    # 如果没有分段，返回纯文本
     return response.text if hasattr(response, "text") else str(response)
+
+
+async def transcribe_audio(
+    audio_path: Path,
+    language: str | None = None,
+) -> str:
+    """
+    转写音频文件
+
+    策略：Whisper 已配置时优先使用，失败降级到 DashScope STT（阿里云百炼）
+
+    Args:
+        audio_path: 音频文件路径
+        language: 语言代码（如 "zh", "en"），None 为自动检测
+
+    Returns:
+        str: 带时间戳的转写文本
+    """
+    from app.services.dashscope_stt import transcribe_audio_dashscope
+
+    settings = get_settings()
+    if settings.whisper_api_key:
+        try:
+            return await _transcribe_audio_whisper(audio_path, language)
+        except TranscribeError as e:
+            logger.warning("Whisper 转录失败: %s，降级到 DashScope STT", e)
+
+    return await transcribe_audio_dashscope(audio_path, language)
+
+
+async def check_stt_api() -> tuple[bool, str]:
+    """检测 STT 引擎是否可用（Whisper + DashScope）"""
+    from app.services.dashscope_stt import check_dashscope_stt
+
+    results = []
+
+    whisper_ok, whisper_msg = await check_whisper_api()
+    results.append(f"Whisper: {whisper_msg}")
+
+    dashscope_ok, dashscope_msg = await check_dashscope_stt()
+    results.append(f"DashScope STT: {dashscope_msg}")
+
+    ok = whisper_ok or dashscope_ok
+    return ok, "; ".join(results)
+
 
 
 async def transcribe_video(

@@ -52,7 +52,7 @@ async def check_api_connections() -> bool:
     """检测所有 API 连接，返回是否全部成功"""
     from app.services.llm import check_llm_api
     from app.services.podcast_tts import check_tts_api
-    from app.services.transcribe import check_whisper_api
+    from app.services.transcribe import check_stt_api
     from app.services.xiazaitool import check_xiazaitool_token
 
     # 检查 Redis 连接
@@ -74,7 +74,7 @@ async def check_api_connections() -> bool:
     # 异步检查（API 连接检测）
     checks = [
         ("LLM", check_llm_api()),
-        ("Whisper", check_whisper_api()),
+        ("STT", check_stt_api()),
         ("TTS", check_tts_api()),
     ]
 
