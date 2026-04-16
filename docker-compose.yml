@@ -15,9 +15,11 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
-      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
-      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
-      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:-}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_STT_MODEL: ${DASHSCOPE_STT_MODEL:-paraformer-realtime-v2}
       XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
     volumes:
       - v2t-data:/data/v2t
@@ -35,9 +37,11 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
-      WHISPER_API_KEY: ${WHISPER_API_KEY:?请在 .env 中设置 WHISPER_API_KEY}
-      WHISPER_BASE_URL: ${WHISPER_BASE_URL:?请在 .env 中设置 WHISPER_BASE_URL}
-      WHISPER_MODEL: ${WHISPER_MODEL:?请在 .env 中设置 WHISPER_MODEL}
+      WHISPER_API_KEY: ${WHISPER_API_KEY:-}
+      WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_STT_MODEL: ${DASHSCOPE_STT_MODEL:-paraformer-realtime-v2}
       XIAZAITOOL_TOKEN: ${XIAZAITOOL_TOKEN:?请在 .env 中设置 XIAZAITOOL_TOKEN}
     volumes:
       - v2t-data:/data/v2t
