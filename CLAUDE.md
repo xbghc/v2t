@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 v2t 是一个视频转文字 Web 应用，提供视频下载、音频转录、AI内容生成功能。支持 B站、抖音、小红书等多平台。
 
-## 项目结构 (Monorepo)
+## 项目结构 (pnpm Monorepo + Python backend)
 
 ```
 v2t/
-├── backend/                    # Python 后端
+├── backend/                    # Python 后端（不在 pnpm workspace 里）
 │   ├── app/
 │   │   ├── main.py            # 应用入口 (FastAPI)
 │   │   ├── worker.py          # arq worker 配置
@@ -23,14 +23,21 @@ v2t/
 │   │   └── services/          # 业务服务层
 │   ├── tests/
 │   └── pyproject.toml
-├── frontend/                   # Vue 前端
-│   ├── src/
-│   │   ├── router/            # Vue Router 路由
-│   │   ├── stores/            # Pinia 状态管理
-│   │   ├── machines/          # 状态机
-│   │   └── pages/             # 页面组件
-│   ├── package.json
-│   └── vite.config.ts
+├── apps/
+│   ├── web/                    # Vue 前端（@v2t/web）
+│   │   ├── src/
+│   │   │   ├── router/        # Vue Router 路由
+│   │   │   ├── stores/        # Pinia 状态管理
+│   │   │   ├── machines/      # 状态机
+│   │   │   └── pages/         # 页面组件
+│   │   ├── package.json
+│   │   └── vite.config.ts
+│   └── mobile/                 # React Native（@v2t/mobile，规划中）
+├── packages/
+│   └── shared/                 # 共享 TS 类型（@v2t/shared）
+│       └── src/api-types.ts   # 后端通信 schema
+├── pnpm-workspace.yaml         # workspace 配置
+├── package.json                # workspace 根
 ├── Dockerfile                  # 多阶段构建
 ├── docker-compose.yml          # 服务编排
 ├── Makefile                    # 构建脚本
@@ -46,11 +53,11 @@ v2t/
 ### Makefile
 
 ```bash
-make install              # 安装所有依赖
+make install              # 安装所有依赖（pnpm install + uv sync）
 make backend              # 启动后端 (端口 8103)
 make worker               # 启动 arq worker
 make frontend             # 启动前端开发服务器
-make build                # 构建前端到 frontend/dist/
+make build                # 构建前端到 apps/web/dist/
 make test                 # 运行测试
 make lint                 # 运行 lint 检查
 make lint-fix             # 自动修复 lint 问题
@@ -75,14 +82,21 @@ uv run arq app.worker.WorkerSettings  # 启动 arq worker
 uv run pytest                    # 运行测试
 ```
 
-### 前端 (frontend/)
+### 前端 (apps/web/)
 
 ```bash
-cd frontend
-npm install                      # 安装依赖
-npm run dev                      # 开发服务器 (代理 /api 到 8103)
-npm run build                    # 构建到 frontend/dist/
+# 所有 pnpm 命令都在仓库根目录执行（workspace 模式）
+pnpm install                              # 安装所有 workspace 依赖
+pnpm --filter @v2t/web dev                # 开发服务器 (代理 /api 到 8103)
+pnpm --filter @v2t/web build              # 构建到 apps/web/dist/
+pnpm --filter @v2t/web type-check         # 类型检查
 ```
+
+### 共享类型 (packages/shared/)
+
+- 后端响应 schema（`WorkspaceResponse`、`WorkspaceStatus` 等）统一定义在 `packages/shared/src/api-types.ts`
+- 通过 `import { ... } from '@v2t/shared'` 使用
+- 新增后端接口时改这里，web 和 mobile 会自动同步
 
 ## 架构概览
 
@@ -142,7 +156,7 @@ pending → downloading → transcribing → ready / failed
 ### 前端架构 (Vue 3 + Vite + Vue Router)
 
 ```
-frontend/src/
+apps/web/src/
 ├── router/index.ts         # 路由: / (首页) 和 /w/:id (工作区)
 ├── stores/task.ts          # Pinia 状态管理
 ├── machines/

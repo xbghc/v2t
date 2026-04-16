@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend build test lint lint-fix clean deploy help
+.PHONY: install install-backend install-frontend backend worker frontend build build-frontend test test-v lint lint-backend lint-frontend lint-fix lint-fix-backend lint-fix-frontend clean docker-build docker-up docker-down docker-logs help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -16,8 +16,8 @@ install: install-backend install-frontend ## 安装所有依赖
 install-backend: ## 安装 Python 依赖
 	cd backend && uv sync
 
-install-frontend: ## 安装前端依赖
-	cd frontend && npm install
+install-frontend: ## 安装前端依赖（pnpm workspace）
+	pnpm install
 
 # ==================== 开发 ====================
 
@@ -28,7 +28,7 @@ worker: ## 启动 arq worker
 	cd backend && uv run arq app.worker.WorkerSettings
 
 frontend: ## 启动前端开发服务器
-	cd frontend && npm run dev
+	pnpm --filter @v2t/web dev
 
 # ==================== 构建 ====================
 
@@ -36,10 +36,10 @@ build: build-frontend ## 构建项目
 
 build-frontend: ## 构建前端
 ifeq ($(DEPLOY_DIR),)
-	cd frontend && npm run build
+	pnpm --filter @v2t/web build
 else
 	@echo "构建到 $(DEPLOY_DIR)..."
-	cd frontend && npm run build -- --outDir $(DEPLOY_DIR) --emptyOutDir
+	pnpm --filter @v2t/web build -- --outDir $(DEPLOY_DIR) --emptyOutDir
 endif
 
 # ==================== 测试 ====================
@@ -58,7 +58,7 @@ lint-backend: ## 运行 Python lint (ruff)
 	cd backend && uv run ruff check app/ tests/
 
 lint-frontend: ## 运行前端 lint (eslint + typecheck)
-	cd frontend && npm run lint && npm run type-check
+	pnpm --filter @v2t/web lint && pnpm --filter @v2t/web type-check
 
 lint-fix: lint-fix-backend lint-fix-frontend ## 自动修复所有 lint 问题
 
@@ -66,12 +66,12 @@ lint-fix-backend: ## 自动修复 Python lint 问题
 	cd backend && uv run ruff check app/ tests/ --fix
 
 lint-fix-frontend: ## 自动修复前端 lint 问题
-	cd frontend && npm run lint:fix
+	pnpm --filter @v2t/web lint:fix
 
 # ==================== 清理 ====================
 
 clean: ## 清理构建产物和缓存
-	rm -rf frontend/dist
+	rm -rf apps/web/dist
 	rm -rf backend/.pytest_cache
 	rm -rf backend/__pycache__
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

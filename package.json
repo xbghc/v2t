@@ -1,0 +1,11 @@
+{
+  "name": "v2t",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "scripts": {
+    "dev": "pnpm --filter @v2t/web dev",
+    "build": "pnpm --filter @v2t/web build",
+    "lint": "pnpm -r lint",
+    "type-check": "pnpm -r type-check"
+  }
+}
