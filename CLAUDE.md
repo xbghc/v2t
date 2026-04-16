@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-v2t 是一个视频转文字 Web 应用，提供视频下载、音频转录、AI内容生成功能。支持 B站、抖音、小红书等多平台。
+Prism（棱镜）是一个 AI 驱动的视频内容转化 Web 应用，把一段视频折射成文字、大纲、文章与播客等多种形态。提供视频下载、音频转录、AI 内容生成功能。支持 B站、抖音、小红书等多平台。（仓库目录与包名仍沿用历史标识 `v2t`。）
 
 ## 项目结构 (pnpm Monorepo + Python backend)
 
