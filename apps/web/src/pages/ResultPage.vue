@@ -94,7 +94,9 @@ const isFailed: ComputedRef<boolean> = computed(() => {
 
 const statusTitle: ComputedRef<string> = computed(() => {
     if (isFailed.value) return '转换失败'
-    if (isProcessing.value) return '正在处理'
+    if (workspaceStatus.value === 'pending') return '等待处理'
+    if (workspaceStatus.value === 'downloading') return '正在下载'
+    if (workspaceStatus.value === 'transcribing') return '正在转录'
     if (isGenerating.value) return '正在生成'
     return '转换完成'
 })

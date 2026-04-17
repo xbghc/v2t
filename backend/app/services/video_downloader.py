@@ -263,6 +263,7 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
         return VideoResult(path=video_path, title=title, url_hash=url_hash)
 
     # 解析视频链接
+    logger.info("开始解析视频链接: %s", url)
     try:
         video_info = await parse_video_url(url)
     except XiazaitoolError as e:
@@ -270,6 +271,7 @@ async def download_video(url: str, output_dir: Path | None = None) -> VideoResul
 
     if not video_info.video_url:
         raise DownloadError("无法获取视频下载链接")
+    logger.info("链接解析完成: title=%s", video_info.title)
 
     # 创建目录并保存元数据
     resource_dir.mkdir(parents=True, exist_ok=True)

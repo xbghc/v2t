@@ -29,6 +29,7 @@ async def update_workspace_status(
     response = await build_workspace_response(workspace)
     channel = f"workspace:{workspace.workspace_id}:status"
     await redis.publish(channel, response.model_dump_json())
+    logger.info("工作区 %s → %s (%s)", workspace.workspace_id, status.value, progress)
 
 
 async def process_workspace(workspace_id: str, url: str) -> None:

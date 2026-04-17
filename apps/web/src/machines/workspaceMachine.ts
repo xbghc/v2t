@@ -92,7 +92,11 @@ function resolveNextState(current: WorkspaceState, target: TransitionTarget, eve
 function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceContext {
     switch (event.type) {
     case 'SUBMIT':
-        return { ...createInitialWorkspaceContext(), workspaceId: event.workspaceId }
+        return {
+            ...createInitialWorkspaceContext(),
+            workspaceId: event.workspaceId,
+            progressText: PROGRESS_TEXT.pending ?? '等待处理...',
+        }
     case 'STATUS_UPDATE':
         return {
             ...ctx,

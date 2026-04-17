@@ -1,6 +1,7 @@
 """工作区路由"""
 
 import json
+import logging
 import uuid
 
 from arq.connections import ArqRedis
@@ -17,6 +18,8 @@ from app.storage import get_file_storage, get_redis, get_workspace, register_wor
 from app.utils.response import build_workspace_response
 from app.utils.sse import sse_heartbeat, sse_response
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/workspaces", tags=["workspace"])
 
 
@@ -32,6 +35,7 @@ async def create_workspace(request: CreateWorkspaceRequest) -> WorkspaceResponse
     redis = get_redis()
     arq_redis = ArqRedis(redis.connection_pool)
     await arq_redis.enqueue_job("run_process_workspace", workspace_id, request.url)
+    logger.info("工作区 %s 已入队，等待 worker pickup: %s", workspace_id, request.url)
 
     return await build_workspace_response(workspace)
 
@@ -62,6 +66,7 @@ async def stream_workspace_status(
         pubsub = redis.pubsub()
         channel = f"workspace:{workspace_id}:status"
         await pubsub.subscribe(channel)
+        logger.info("工作区 %s SSE 已连接，当前状态: %s", workspace_id, workspace.status.value)
 
         try:
             # 发送当前状态
@@ -94,6 +99,7 @@ async def stream_workspace_status(
         finally:
             await pubsub.unsubscribe(channel)
             await pubsub.aclose()
+            logger.info("工作区 %s SSE 已断开", workspace_id)
 
     return sse_response(generate)
 
