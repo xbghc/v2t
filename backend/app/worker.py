@@ -69,7 +69,4 @@ class WorkerSettings:
     max_jobs = 3
     job_timeout = 1800  # 30 分钟
 
-    @staticmethod
-    def redis_settings() -> RedisSettings:
-        settings = get_settings()
-        return RedisSettings.from_dsn(settings.redis_url)
+    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
