@@ -1,8 +1,8 @@
-"""AI 内容生成服务 - 使用 OpenAI 兼容 API"""
+"""AI 内容生成服务 - 使用 Anthropic 兼容 API"""
 
 from collections.abc import AsyncGenerator
 
-from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 
 from app.config import get_settings
 
@@ -105,19 +105,19 @@ DEFAULT_ZHIHU_USER_PROMPT = """请将以下内容改写为知乎专栏文章：
 - 按知乎文章风格重新组织内容
 - 输出格式为 Markdown"""
 
-_client: AsyncOpenAI | None = None
+_client: AsyncAnthropic | None = None
 
 
-def get_client() -> AsyncOpenAI:
-    """获取 OpenAI 兼容客户端（单例模式，复用连接）"""
+def get_client() -> AsyncAnthropic:
+    """获取 Anthropic 兼容客户端（单例模式，复用连接）"""
     global _client
     if _client is None:
         settings = get_settings()
-        if not settings.openai_api_key:
-            raise LLMError("OPENAI_API_KEY 未配置")
-        _client = AsyncOpenAI(
-            base_url=settings.openai_base_url,
-            api_key=settings.openai_api_key,
+        if not settings.anthropic_api_key:
+            raise LLMError("ANTHROPIC_API_KEY 未配置")
+        _client = AsyncAnthropic(
+            base_url=settings.anthropic_base_url or None,
+            api_key=settings.anthropic_api_key,
         )
     return _client
 
@@ -125,14 +125,31 @@ def get_client() -> AsyncOpenAI:
 async def check_llm_api() -> tuple[bool, str]:
     """检测 LLM API 是否可用"""
     settings = get_settings()
-    if not settings.openai_api_key:
-        return False, "OPENAI_API_KEY 未配置"
+    if not settings.anthropic_api_key:
+        return False, "ANTHROPIC_API_KEY 未配置"
     try:
         client = get_client()
-        await client.models.list()
+        await client.messages.create(
+            model=settings.anthropic_model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
         return True, "OK"
     except Exception as e:
         return False, str(e)
+
+
+def _split_messages(messages: list[dict]) -> tuple[str | None, list[dict]]:
+    """从消息列表中分离 system 和 conversation，适配 Anthropic API 格式"""
+    system_parts = []
+    convo = []
+    for msg in messages:
+        if msg["role"] == "system":
+            system_parts.append(msg["content"])
+        else:
+            convo.append(msg)
+    system = "\n\n".join(system_parts) if system_parts else None
+    return system, convo
 
 
 async def chat(
@@ -145,10 +162,10 @@ async def chat(
     流式调用 AI 聊天接口，逐块 yield 内容
 
     Args:
-        messages: 消息列表
+        messages: 消息列表（支持 system/user/assistant role）
         max_tokens: 最大 token 数
         temperature: 温度参数
-        response_format: 响应格式，如 {"type": "json_object"}
+        response_format: 响应格式，如 {"type": "json_object"}（通过 prefill 实现）
 
     Yields:
         str: 响应内容片段
@@ -156,22 +173,24 @@ async def chat(
     settings = get_settings()
     client = get_client()
 
-    # 构建请求参数
-    kwargs = {
-        "model": settings.openai_model,
-        "messages": messages,
-        "stream": True,
+    system, convo = _split_messages(messages)
+
+    if response_format and response_format.get("type") == "json_object":
+        convo = [*convo, {"role": "assistant", "content": "{"}]
+        yield "{"
+
+    kwargs: dict = {
+        "model": settings.anthropic_model,
+        "messages": convo,
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    if response_format:
-        kwargs["response_format"] = response_format
+    if system:
+        kwargs["system"] = system
 
-    stream = await client.chat.completions.create(**kwargs)
-
-    async for chunk in stream:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+    async with client.messages.stream(**kwargs) as stream:
+        async for text in stream.text_stream:
+            yield text
 
 
 async def chat_complete(

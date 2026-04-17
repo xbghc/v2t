@@ -14,7 +14,9 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?请在 .env 中设置 ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       WHISPER_API_KEY: ${WHISPER_API_KEY:-}
       WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-}
@@ -36,7 +38,9 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?请在 .env 中设置 OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?请在 .env 中设置 ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       WHISPER_API_KEY: ${WHISPER_API_KEY:-}
       WHISPER_BASE_URL: ${WHISPER_BASE_URL:-}
       WHISPER_MODEL: ${WHISPER_MODEL:-}

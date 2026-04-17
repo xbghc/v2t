@@ -9,10 +9,10 @@ CONFIG_PATH = Path.home() / ".config" / "v2t" / "config.json"
 
 # 环境变量映射
 ENV_MAPPING = {
-    # OpenAI 兼容 API（内容生成）
-    "openai_api_key": "OPENAI_API_KEY",
-    "openai_base_url": "OPENAI_BASE_URL",
-    "openai_model": "OPENAI_MODEL",
+    # Anthropic 兼容 API（内容生成）
+    "anthropic_api_key": "ANTHROPIC_API_KEY",
+    "anthropic_base_url": "ANTHROPIC_BASE_URL",
+    "anthropic_model": "ANTHROPIC_MODEL",
     # Whisper 兼容 API（音频转录）
     "whisper_api_key": "WHISPER_API_KEY",
     "whisper_base_url": "WHISPER_BASE_URL",
@@ -33,10 +33,10 @@ ENV_MAPPING = {
 class Settings:
     """应用配置"""
 
-    # OpenAI 兼容 API（内容生成）
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.deepseek.com"
-    openai_model: str = "deepseek-reasoner"
+    # Anthropic 兼容 API（内容生成）
+    anthropic_api_key: str = ""
+    anthropic_base_url: str = ""
+    anthropic_model: str = ""
 
     # Whisper 兼容 API（音频转录：Groq、OpenAI、自托管 Qwen3-ASR 等）
     whisper_api_key: str = ""
