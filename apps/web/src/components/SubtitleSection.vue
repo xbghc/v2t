@@ -8,12 +8,10 @@ import IconDownload from '~icons/material-symbols/download'
 interface Props {
     content: string
     title?: string
-    isLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    title: '字幕',
-    isLoading: false
+    title: '字幕'
 })
 
 const toastStore = useToastStore()
@@ -46,18 +44,9 @@ const downloadContent = () => {
 
 <template>
     <div class="flex flex-col gap-4">
-        <!-- 加载中状态 -->
-        <div
-            v-if="isLoading"
-            class="flex flex-col items-center justify-center py-12"
-        >
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-3" />
-            <span class="text-sm text-gray-500 dark:text-gray-400">正在转录...</span>
-        </div>
-
         <!-- 无内容状态 -->
         <div
-            v-else-if="!hasContent"
+            v-if="!hasContent"
             class="flex flex-col items-center justify-center py-12 bg-gray-100 dark:bg-dark-bg rounded-lg"
         >
             <IconSubtitlesOff class="text-4xl text-gray-400 dark:text-gray-600 mb-3" />

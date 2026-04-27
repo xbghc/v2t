@@ -329,7 +329,23 @@ const loadingState = computed<LoadingTextState>(() => ({
                         />
                     </ContentSection>
 
-                    <!-- 视频区块 -->
+                    <!-- 字幕区块（视频下载完后出现，loading 时显示后端转录进度） -->
+                    <ContentSection
+                        v-if="!!videoUrl"
+                        id="subtitle"
+                        title="字幕"
+                        :icon="IconSubtitles"
+                        :is-visible="isSectionVisible('subtitle')"
+                        :is-loading="workspaceStatus === 'processing' && !transcript"
+                        :loading-text="progressText || '正在转录...'"
+                    >
+                        <SubtitleSection
+                            :content="transcript"
+                            :title="title"
+                        />
+                    </ContentSection>
+
+                    <!-- 视频区块（始终显示，最初阶段唯一可见的块） -->
                     <ContentSection
                         id="video"
                         title="视频"
@@ -343,22 +359,6 @@ const loadingState = computed<LoadingTextState>(() => ({
                             :title="title"
                             :available="!!videoUrl"
                             :is-processing="isProcessing"
-                        />
-                    </ContentSection>
-
-                    <!-- 字幕区块 -->
-                    <ContentSection
-                        id="subtitle"
-                        title="字幕"
-                        :icon="IconSubtitles"
-                        :is-visible="isSectionVisible('subtitle')"
-                        :is-loading="workspaceStatus === 'processing' && !transcript"
-                        :loading-text="getLoadingText('subtitle', loadingState)"
-                    >
-                        <SubtitleSection
-                            :content="transcript"
-                            :title="title"
-                            :is-loading="workspaceStatus === 'processing' && !!videoUrl"
                         />
                     </ContentSection>
                 </div>

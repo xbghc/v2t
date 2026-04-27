@@ -93,22 +93,24 @@ export function useNavItems(): UseNavItemsReturn {
 
         const isProcessing = workspaceStatus.value === 'processing'
 
-        // 视频：processing 中且 URL 还没就绪 → loading
+        // 字幕：仅在视频下载完后出现，与 ResultPage 区块同步
+        if (videoUrl.value || transcript.value) {
+            items.push({
+                key: 'subtitle',
+                label: '字幕',
+                icon: IconSubtitles,
+                hasContent: !!transcript.value,
+                isLoading: isProcessing && !transcript.value
+            })
+        }
+
+        // 视频：始终显示，processing 中且 URL 还没就绪 → loading
         items.push({
             key: 'video',
             label: '视频',
             icon: IconVideocam,
             hasContent: !!videoUrl.value,
             isLoading: isProcessing && !videoUrl.value
-        })
-
-        // 字幕：processing 中（哪怕已有部分流式内容，仍标 loading）
-        items.push({
-            key: 'subtitle',
-            label: '字幕',
-            icon: IconSubtitles,
-            hasContent: !!transcript.value,
-            isLoading: isProcessing
         })
 
         return items
