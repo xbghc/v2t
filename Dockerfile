@@ -13,11 +13,19 @@ COPY apps/web ./apps/web
 RUN pnpm --filter @v2t/web build
 
 # Stage 2: Python 后端（web + worker 共用）
-FROM python:3.12-slim AS backend
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg aria2 \
+# pin 到 bookworm（Debian 12），避免 trixie 上 ffmpeg 拖整个图形栈（mesa/llvm 等）
+FROM python:3.12-slim-bookworm AS backend
+# 切清华镜像源（buildkit 默认走 deb.debian.org 偏慢）
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+        /etc/apt/sources.list.d/debian.sources \
+        /etc/apt/sources.list 2>/dev/null || true \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg aria2 libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# 切清华 PyPI 镜像（uv 0.4+ 用 UV_DEFAULT_INDEX，老版本兼容 UV_INDEX_URL）
+ENV UV_DEFAULT_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple \
+    UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev
