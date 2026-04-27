@@ -8,13 +8,20 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from app.models.entities import Workspace
+from app.models.entities import Workspace, WorkspaceResource
 from app.models.enums import ResourceType, WorkspaceStatus
 from app.models.schemas import (
+    CreateFromTranscriptRequest,
     CreateWorkspaceRequest,
     WorkspaceResponse,
 )
-from app.storage import get_file_storage, get_redis, get_workspace, register_workspace
+from app.storage import (
+    get_file_storage,
+    get_redis,
+    get_workspace,
+    register_workspace,
+    save_workspace,
+)
 from app.utils.response import build_workspace_response
 from app.utils.sse import sse_heartbeat, sse_response
 
@@ -36,6 +43,38 @@ async def create_workspace(request: CreateWorkspaceRequest) -> WorkspaceResponse
     arq_redis = ArqRedis(redis.connection_pool)
     await arq_redis.enqueue_job("run_process_workspace", workspace_id, request.url)
     logger.info("工作区 %s 已入队，等待 worker pickup: %s", workspace_id, request.url)
+
+    return await build_workspace_response(workspace)
+
+
+@router.post("/from-transcript", response_model=WorkspaceResponse)
+async def create_workspace_from_transcript(
+    request: CreateFromTranscriptRequest,
+) -> WorkspaceResponse:
+    """从已有转录文本直接创建工作区，跳过下载/转录流程，状态直接置 ready。"""
+    workspace_id = str(uuid.uuid4())[:12]
+    workspace = Workspace(
+        workspace_id=workspace_id,
+        url=request.source_url,
+        title=request.title,
+        status=WorkspaceStatus.READY,
+        progress="转录已就绪",
+    )
+
+    storage = get_file_storage()
+    transcript_key = f"{workspace_id}/transcript.txt"
+    await storage.save_bytes(transcript_key, request.transcript.encode("utf-8"))
+
+    transcript_resource = WorkspaceResource(
+        resource_id=str(uuid.uuid4())[:8],
+        name="transcript",
+        resource_type=ResourceType.TEXT,
+        storage_key=transcript_key,
+    )
+    workspace.add_resource(transcript_resource)
+
+    await save_workspace(workspace)
+    logger.info("工作区 %s 从 transcript 直接创建（ready）", workspace_id)
 
     return await build_workspace_response(workspace)
 

@@ -11,6 +11,14 @@ class CreateWorkspaceRequest(BaseModel):
     url: str
 
 
+class CreateFromTranscriptRequest(BaseModel):
+    """从已有转录文本直接创建工作区"""
+
+    transcript: str
+    title: str = ""
+    source_url: str = ""
+
+
 class WorkspaceResourceResponse(BaseModel):
     """资源响应"""
 
