@@ -75,6 +75,7 @@ export function streamWorkspaceStatus(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
+            if (!ev.data) return
             const data = JSON.parse(ev.data) as WorkspaceResponse
             onStatusChange(data)
             // 终态自动关闭连接
@@ -145,6 +146,7 @@ export function streamOutline(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
+            if (!ev.data) return
             const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
@@ -205,6 +207,7 @@ export function streamArticle(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
+            if (!ev.data) return
             const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
@@ -267,6 +270,7 @@ export function streamPodcast(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
+            if (!ev.data) return
             const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
@@ -331,6 +335,7 @@ export function streamZhihuArticle(
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
+            if (!ev.data) return
             const data = JSON.parse(ev.data) as StreamEventData
             if (data.error) {
                 onError(data.error)
