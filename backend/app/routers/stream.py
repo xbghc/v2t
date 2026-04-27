@@ -4,7 +4,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.config import get_settings
@@ -150,9 +150,12 @@ async def stream_article(
 
 @router.post("/podcast")
 async def stream_podcast(
-    workspace_id: str, request: Request, body: StreamRequest
+    workspace_id: str,
+    request: Request,
+    body: StreamRequest,
+    skip_audio: bool = Query(False),
 ) -> StreamingResponse:
-    """流式生成播客脚本，完成后自动合成音频"""
+    """流式生成播客脚本，完成后自动合成音频。skip_audio=true 时只产出脚本，不进 TTS。"""
     workspace, transcript = await get_workspace_with_transcript(workspace_id)
     settings = get_settings()
     storage = get_file_storage()
@@ -178,6 +181,10 @@ async def stream_podcast(
             prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
             await save_text_resource(workspace, "podcast_script", script_content, prompt)
             yield sse_data({"script_done": True})
+
+            if skip_audio:
+                yield sse_data({"done": True, "has_audio": False})
+                return
 
             # 合成音频
             yield sse_data({"synthesizing": True})
