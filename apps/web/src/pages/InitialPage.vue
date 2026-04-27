@@ -3,6 +3,9 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
+import { lookupWorkspaceBySeries } from '@/api/workspace'
+import BilibiliPagesPicker from '@/components/BilibiliPagesPicker.vue'
+import type { BilibiliPage } from '@/types'
 import IconLink from '~icons/material-symbols/link'
 import IconChevronRight from '~icons/material-symbols/chevron-right'
 
@@ -12,9 +15,28 @@ const { url, generateOptions, isDownloadOnly, prompts, promptsLoaded } = storeTo
 
 const showAdvanced = ref(false)
 
-// 提交 URL 并导航
+// 提交 URL 并导航（普通流程，单视频或当前页 URL）
 const handleSubmitUrl = async () => {
     const workspaceId = await taskStore.submitUrl()
+    if (workspaceId) {
+        router.push({ name: 'workspace', params: { id: workspaceId } })
+    } else if (taskStore.workspaceStatus === 'failed') {
+        router.push({ name: 'workspace', params: { id: 'error' } })
+    }
+}
+
+// 选了某一集分 P：先 lookup 命中跳转，未命中则创建
+const handleSelectPage = async (page: BilibiliPage, bvid: string) => {
+    const existingId = await lookupWorkspaceBySeries(bvid, page.page)
+    if (existingId) {
+        router.push({ name: 'workspace', params: { id: existingId } })
+        return
+    }
+    const workspaceId = await taskStore.submitUrl({
+        overrideUrl: page.url,
+        seriesBvid: bvid,
+        seriesIndex: page.page,
+    })
     if (workspaceId) {
         router.push({ name: 'workspace', params: { id: workspaceId } })
     } else if (taskStore.workspaceStatus === 'failed') {
@@ -63,6 +85,12 @@ onMounted(() => {
                         </div>
                     </div>
                 </label>
+
+                <!-- 分 P 探测（仅 B 站合集时显示） -->
+                <BilibiliPagesPicker
+                    :url="url"
+                    @select="handleSelectPage"
+                />
 
                 <!-- 生成选项多选组 -->
                 <div class="flex flex-col items-center gap-2">

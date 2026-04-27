@@ -95,6 +95,10 @@ export const useTaskStore = defineStore('task', () => {
     const url: Ref<string> = ref('')
     const currentTab: Ref<CurrentTab> = ref('article')
 
+    // B 站分 P 系列元数据（非分 P 视频时为空）
+    const seriesBvid: Ref<string> = ref('')
+    const seriesIndex: Ref<number> = ref(0)
+
     const generateOptions: GenerateOptions = reactive({
         outline: true,
         article: true,
@@ -344,6 +348,10 @@ export const useTaskStore = defineStore('task', () => {
             error: data.error || undefined,
         })
 
+        // 系列元数据（首次推送时落定，后续不再变）
+        seriesBvid.value = data.series_bvid || ''
+        seriesIndex.value = data.series_index || 0
+
         // 更新资源数据
         const resources = data.resources
         sendWorkspace({
@@ -421,6 +429,8 @@ export const useTaskStore = defineStore('task', () => {
         }
         generationStarted = false
         currentTab.value = 'article'
+        seriesBvid.value = ''
+        seriesIndex.value = 0
     }
 
     // ==================== 提示词管理（不变）====================
@@ -532,21 +542,27 @@ export const useTaskStore = defineStore('task', () => {
 
     // ==================== 公共操作 ====================
 
-    const submitUrl = async (): Promise<string | null> => {
+    const submitUrl = async (
+        options?: { seriesBvid?: string; seriesIndex?: number; overrideUrl?: string }
+    ): Promise<string | null> => {
         const toastStore = useToastStore()
-        if (!url.value.trim()) {
+        const submitUrlValue = options?.overrideUrl ?? url.value
+        if (!submitUrlValue.trim()) {
             toastStore.showToast('请输入视频链接', 'warning')
             return null
         }
 
-        lastUrl = url.value
+        lastUrl = submitUrlValue
         savePromptsToStorage()
         stopStatusStream()
         stopAllStreaming()
         resetState()
 
         try {
-            const data = await createWorkspace(url.value)
+            const data = await createWorkspace(submitUrlValue, {
+                seriesBvid: options?.seriesBvid,
+                seriesIndex: options?.seriesIndex,
+            })
             sendWorkspace({ type: 'SUBMIT', workspaceId: data.workspace_id })
             startStatusStream(data.workspace_id)
             return data.workspace_id
@@ -613,6 +629,10 @@ export const useTaskStore = defineStore('task', () => {
             // 手动设置 workspaceId（LOAD_WORKSPACE 不设置 id）
             wsCtx.workspaceId = id
 
+            // 系列元数据
+            seriesBvid.value = data.series_bvid || ''
+            seriesIndex.value = data.series_index || 0
+
             // 加载已有内容
             const contentMap: Record<ContentType, string> = {
                 outline: getResourceContent(data.resources, 'outline'),
@@ -673,6 +693,8 @@ export const useTaskStore = defineStore('task', () => {
         videoUrl,
         audioUrl,
         transcript,
+        seriesBvid,
+        seriesIndex,
         // 生成内容
         outline,
         article,

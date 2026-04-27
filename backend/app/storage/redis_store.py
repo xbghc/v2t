@@ -29,6 +29,9 @@ class RedisMetadataStore:
     def _resources_key(self, workspace_id: str) -> str:
         return f"workspace:{workspace_id}:resources"
 
+    def _series_lookup_key(self, bvid: str, index: int) -> str:
+        return f"workspace:lookup:{bvid}:{index}"
+
     def _workspace_to_hash(self, workspace: Workspace) -> dict[str, str]:
         """将 Workspace 转换为 Redis Hash 字段"""
         return {
@@ -39,6 +42,8 @@ class RedisMetadataStore:
             "error": workspace.error,
             "created_at": str(workspace.created_at),
             "last_accessed_at": str(workspace.last_accessed_at),
+            "series_bvid": workspace.series_bvid,
+            "series_index": str(workspace.series_index),
         }
 
     def _resource_to_json(self, resource: WorkspaceResource) -> str:
@@ -68,6 +73,10 @@ class RedisMetadataStore:
         self, workspace_id: str, data: dict[str, str], resources: list[WorkspaceResource]
     ) -> Workspace:
         """从 Redis Hash 数据构建 Workspace"""
+        try:
+            series_index = int(data.get("series_index") or 0)
+        except ValueError:
+            series_index = 0
         return Workspace(
             workspace_id=workspace_id,
             url=data.get("url", ""),
@@ -78,6 +87,8 @@ class RedisMetadataStore:
             resources=resources,
             created_at=float(data.get("created_at", time.time())),
             last_accessed_at=float(data.get("last_accessed_at", time.time())),
+            series_bvid=data.get("series_bvid", ""),
+            series_index=series_index,
         )
 
     async def get_workspace(self, workspace_id: str) -> Workspace | None:
@@ -128,7 +139,19 @@ class RedisMetadataStore:
         # 设置 TTL
         pipe.expire(key, WORKSPACE_TTL)
         pipe.expire(res_key, WORKSPACE_TTL)
+        # 系列元数据：写二级索引（与主键 TTL 对齐）
+        if workspace.series_bvid and workspace.series_index > 0:
+            lookup_key = self._series_lookup_key(
+                workspace.series_bvid, workspace.series_index
+            )
+            pipe.set(lookup_key, workspace.workspace_id, ex=WORKSPACE_TTL)
         await pipe.execute()
+
+    async def lookup_by_series(self, bvid: str, index: int) -> str | None:
+        """通过 series_bvid + series_index 查找已存在的 workspace_id"""
+        if not bvid or index <= 0:
+            return None
+        return await self._redis.get(self._series_lookup_key(bvid, index))
 
     async def delete_workspace(self, workspace_id: str) -> None:
         """删除工作区"""

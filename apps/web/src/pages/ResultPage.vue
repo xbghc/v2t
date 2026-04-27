@@ -15,6 +15,7 @@ import AudioSection from '@/components/AudioSection.vue'
 import SubtitleSection from '@/components/SubtitleSection.vue'
 import PodcastPlayer from '@/components/PodcastPlayer.vue'
 import MarkdownContent from '@/components/MarkdownContent.vue'
+import WorkspacePagesSwitcher from '@/components/WorkspacePagesSwitcher.vue'
 import IconRefresh from '~icons/material-symbols/refresh'
 import IconContentCopy from '~icons/material-symbols/content-copy-outline'
 import IconPodcasts from '~icons/material-symbols/podcasts'
@@ -41,6 +42,8 @@ const {
     videoUrl,
     audioUrl,
     transcript,
+    seriesBvid,
+    seriesIndex,
     // 生成内容
     outline,
     article,
@@ -164,15 +167,24 @@ const loadingState = computed<LoadingTextState>(() => ({
                             </p>
                         </div>
 
-                        <!-- 重试按钮 -->
-                        <button
-                            v-if="isFailed"
-                            class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-                            @click="handleRetry"
-                        >
-                            <IconRefresh />
-                            <span>重新尝试</span>
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <!-- 切换分 P（仅 B 站合集场景） -->
+                            <WorkspacePagesSwitcher
+                                v-if="seriesBvid && seriesIndex > 0"
+                                :bvid="seriesBvid"
+                                :current-index="seriesIndex"
+                            />
+
+                            <!-- 重试按钮 -->
+                            <button
+                                v-if="isFailed"
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="handleRetry"
+                            >
+                                <IconRefresh />
+                                <span>重新尝试</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- 进度指示器 -->

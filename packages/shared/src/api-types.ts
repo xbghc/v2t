@@ -35,11 +35,41 @@ export interface WorkspaceResponse {
     resources: WorkspaceResource[]
     created_at: number
     last_accessed_at: number
+    // B 站分 P 系列元数据（非分 P 视频时为空字符串 + 0）
+    series_bvid: string
+    series_index: number
 }
 
 // POST /api/workspaces 请求
 export interface CreateWorkspaceRequest {
     url: string
+    series_bvid?: string
+    series_index?: number
+}
+
+// GET /api/workspaces/lookup 响应
+export interface WorkspaceLookupResponse {
+    workspace_id: string | null
+}
+
+// === B 站分 P 探测 ===
+
+// 单个分 P
+export interface BilibiliPage {
+    page: number      // 1-based 序号
+    cid: number
+    title: string
+    duration: number  // 秒
+    url: string
+}
+
+// GET /api/bilibili/pages 响应
+export interface BilibiliVideoMetaResponse {
+    bvid: string
+    title: string
+    owner: string
+    cover_url: string
+    pages: BilibiliPage[]
 }
 
 // GET /api/prompts 响应

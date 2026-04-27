@@ -1,5 +1,6 @@
 """路由模块"""
 
+from .bilibili import router as bilibili_router
 from .desktop import router as desktop_router
 from .prompts import router as prompts_router
 from .stream import router as stream_router
@@ -10,4 +11,5 @@ __all__ = [
     "workspace_router",
     "stream_router",
     "prompts_router",
+    "bilibili_router",
 ]

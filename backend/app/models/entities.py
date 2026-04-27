@@ -31,6 +31,9 @@ class Workspace:
     resources: list[WorkspaceResource] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_accessed_at: float = field(default_factory=time.time)
+    # B 站分 P 系列元数据（非分 P 视频留空）
+    series_bvid: str = ""
+    series_index: int = 0  # 1-based 分 P 序号；0 表示非系列
 
     def get_resource(self, name: str) -> WorkspaceResource | None:
         """获取指定名称的最新资源"""

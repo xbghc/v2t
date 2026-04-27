@@ -50,4 +50,6 @@ async def build_workspace_response(workspace: Workspace) -> WorkspaceResponse:
         resources=resources,
         created_at=workspace.created_at,
         last_accessed_at=workspace.last_accessed_at,
+        series_bvid=workspace.series_bvid,
+        series_index=workspace.series_index,
     )

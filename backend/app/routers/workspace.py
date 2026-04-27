@@ -13,12 +13,14 @@ from app.models.enums import ResourceType, WorkspaceStatus
 from app.models.schemas import (
     CreateFromTranscriptRequest,
     CreateWorkspaceRequest,
+    WorkspaceLookupResponse,
     WorkspaceResponse,
 )
 from app.storage import (
     get_file_storage,
     get_redis,
     get_workspace,
+    lookup_workspace_by_series,
     register_workspace,
     save_workspace,
 )
@@ -35,7 +37,12 @@ async def create_workspace(request: CreateWorkspaceRequest) -> WorkspaceResponse
     """创建工作区并启动视频处理"""
     # 创建工作区
     workspace_id = str(uuid.uuid4())[:12]
-    workspace = Workspace(workspace_id=workspace_id, url=request.url)
+    workspace = Workspace(
+        workspace_id=workspace_id,
+        url=request.url,
+        series_bvid=request.series_bvid or "",
+        series_index=request.series_index or 0,
+    )
     await register_workspace(workspace)
 
     # 通过 arq 提交后台任务
@@ -45,6 +52,23 @@ async def create_workspace(request: CreateWorkspaceRequest) -> WorkspaceResponse
     logger.info("工作区 %s 已入队，等待 worker pickup: %s", workspace_id, request.url)
 
     return await build_workspace_response(workspace)
+
+
+@router.get("/lookup", response_model=WorkspaceLookupResponse)
+async def lookup_workspace(
+    series_bvid: str, series_index: int
+) -> WorkspaceLookupResponse:
+    """通过 BV 号 + 分 P 序号查找已存在的 workspace。"""
+    workspace_id = await lookup_workspace_by_series(series_bvid, series_index)
+    if not workspace_id:
+        return WorkspaceLookupResponse(workspace_id=None)
+
+    # 校验 workspace 仍然存在（避免索引滞后于主键 TTL）
+    workspace = await get_workspace(workspace_id)
+    if not workspace:
+        return WorkspaceLookupResponse(workspace_id=None)
+
+    return WorkspaceLookupResponse(workspace_id=workspace_id)
 
 
 @router.post("/from-transcript", response_model=WorkspaceResponse)

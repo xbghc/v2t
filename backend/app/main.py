@@ -18,6 +18,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from app.routers import (
+    bilibili_router,
     desktop_router,
     prompts_router,
     stream_router,
@@ -34,6 +35,7 @@ app.include_router(workspace_router)
 app.include_router(stream_router)
 app.include_router(prompts_router)
 app.include_router(desktop_router)
+app.include_router(bilibili_router)
 
 
 async def check_redis_connection() -> tuple[bool, str]:

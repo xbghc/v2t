@@ -88,6 +88,12 @@ async def save_workspace(workspace: Workspace) -> None:
     await store.save_workspace(workspace)
 
 
+async def lookup_workspace_by_series(bvid: str, index: int) -> str | None:
+    """通过 series_bvid + series_index 查找已存在的 workspace_id"""
+    store = get_metadata_store()
+    return await store.lookup_by_series(bvid, index)
+
+
 # 兼容别名
 register_workspace = save_workspace
 
@@ -100,6 +106,7 @@ __all__ = [
     "get_metadata_store",
     "get_redis",
     "get_workspace",
+    "lookup_workspace_by_series",
     "register_workspace",
     "reset_stores",
     "save_workspace",

@@ -9,6 +9,9 @@ class CreateWorkspaceRequest(BaseModel):
     """创建工作区请求"""
 
     url: str
+    # B 站分 P 系列元数据（前端探测到分 P 后选集时带上）
+    series_bvid: str | None = None
+    series_index: int | None = None
 
 
 class CreateFromTranscriptRequest(BaseModel):
@@ -42,6 +45,15 @@ class WorkspaceResponse(BaseModel):
     resources: list[WorkspaceResourceResponse]
     created_at: float
     last_accessed_at: float
+    # B 站分 P 系列元数据（非分 P 视频留空字符串 + 0）
+    series_bvid: str = ""
+    series_index: int = 0
+
+
+class WorkspaceLookupResponse(BaseModel):
+    """系列分 P → workspace_id 查找响应"""
+
+    workspace_id: str | None = None
 
 
 # ===== 流式生成相关 =====

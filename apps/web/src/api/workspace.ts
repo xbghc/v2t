@@ -3,6 +3,8 @@ import type {
     PromptsResponse,
     WorkspaceResponse,
     StreamPrompts,
+    BilibiliVideoMetaResponse,
+    WorkspaceLookupResponse,
 } from '@/types'
 
 // API 基础路径，使用 Vite 的 base 配置
@@ -22,11 +24,19 @@ export async function getDefaultPrompts(): Promise<PromptsResponse> {
 /**
  * 创建工作区
  */
-export async function createWorkspace(url: string): Promise<WorkspaceResponse> {
+export async function createWorkspace(
+    url: string,
+    options?: { seriesBvid?: string; seriesIndex?: number }
+): Promise<WorkspaceResponse> {
+    const body: Record<string, unknown> = { url }
+    if (options?.seriesBvid && options.seriesIndex && options.seriesIndex > 0) {
+        body.series_bvid = options.seriesBvid
+        body.series_index = options.seriesIndex
+    }
     const response = await fetch(`${API_BASE}/workspaces`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
+        body: JSON.stringify(body)
     })
     const data = await response.json() as WorkspaceResponse | { detail: string }
 
@@ -35,6 +45,43 @@ export async function createWorkspace(url: string): Promise<WorkspaceResponse> {
     }
 
     return data as WorkspaceResponse
+}
+
+/**
+ * 探测 B 站视频的分 P 列表
+ * 失败时返回 null（用户输入的 URL 不是 B 站 / 不含 BV / 调用失败都视为"不可探测"）
+ */
+export async function fetchBilibiliPages(
+    url: string
+): Promise<BilibiliVideoMetaResponse | null> {
+    try {
+        const response = await fetch(
+            `${API_BASE}/bilibili/pages?url=${encodeURIComponent(url)}`
+        )
+        if (!response.ok) return null
+        return await response.json() as BilibiliVideoMetaResponse
+    } catch {
+        return null
+    }
+}
+
+/**
+ * 查询某 BV + 分 P 是否已有对应的 workspace
+ */
+export async function lookupWorkspaceBySeries(
+    seriesBvid: string,
+    seriesIndex: number
+): Promise<string | null> {
+    try {
+        const response = await fetch(
+            `${API_BASE}/workspaces/lookup?series_bvid=${encodeURIComponent(seriesBvid)}&series_index=${seriesIndex}`
+        )
+        if (!response.ok) return null
+        const data = await response.json() as WorkspaceLookupResponse
+        return data.workspace_id
+    } catch {
+        return null
+    }
 }
 
 /**
