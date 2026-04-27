@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend worker frontend build build-frontend test test-v lint lint-backend lint-frontend lint-fix lint-fix-backend lint-fix-frontend clean docker-build docker-up docker-down docker-logs help
+.PHONY: install install-backend install-frontend backend worker frontend build build-frontend test test-v lint lint-backend lint-frontend lint-fix lint-fix-backend lint-fix-frontend clean docker-build docker-up docker-down docker-logs docker-deploy help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -79,10 +79,10 @@ clean: ## 清理构建产物和缓存
 
 # ==================== Docker ====================
 
-docker-build: ## 构建 Docker 镜像
+docker-build: ## 构建全部 Docker 镜像（web/worker/nginx，前端 dist 在 nginx 镜像 multi-stage 内构建）
 	docker compose build
 
-docker-up: ## 启动所有服务
+docker-up: ## 启动所有服务（不重建镜像）
 	docker compose up -d
 
 docker-down: ## 停止所有服务
@@ -91,6 +91,8 @@ docker-down: ## 停止所有服务
 docker-logs: ## 查看服务日志
 	docker compose logs -f
 
+docker-deploy: docker-build docker-up ## 一键部署：构建全部镜像 + 拉起服务（改前端/后端后用这条）
+
 # ==================== 帮助 ====================
 
 help: ## 显示帮助信息
@@ -98,4 +100,4 @@ help: ## 显示帮助信息
 	@echo ""
 	@echo "用法: make [目标]"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
