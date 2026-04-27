@@ -63,7 +63,10 @@ const isItemFocused = (key: SideNavKey): boolean => {
         class="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-dark-card shadow-lg border border-gray-200 dark:border-dark-border"
         @click="toggleMobileMenu"
     >
-        <component :is="isMobileMenuOpen ? IconClose : IconMenu" class="text-gray-700 dark:text-gray-300" />
+        <component
+            :is="isMobileMenuOpen ? IconClose : IconMenu"
+            class="text-gray-700 dark:text-gray-300"
+        />
     </button>
 
     <!-- 移动端遮罩层 -->
@@ -151,7 +154,10 @@ const isItemFocused = (key: SideNavKey): boolean => {
                     @click="handleGenerateClick(item.key, $emit)"
                 >
                     <div class="flex items-center gap-3 flex-1 min-w-0">
-                        <component :is="item.icon" class="text-xl" />
+                        <component
+                            :is="item.icon"
+                            class="text-xl"
+                        />
                         <span class="text-sm font-medium truncate">
                             {{ item.label }}
                         </span>

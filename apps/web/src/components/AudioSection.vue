@@ -146,7 +146,10 @@ onUnmounted(() => {
                         class="flex items-center justify-center w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-colors"
                         @click="togglePlay"
                     >
-                        <component :is="isPlaying ? IconPause : IconPlayArrow" class="text-3xl" />
+                        <component
+                            :is="isPlaying ? IconPause : IconPlayArrow"
+                            class="text-3xl"
+                        />
                     </button>
 
                     <!-- 快进 10s -->

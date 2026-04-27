@@ -210,7 +210,10 @@ const skip = (seconds: number) => {
                             title="全屏"
                             @click="toggleFullscreen"
                         >
-                            <component :is="isFullscreen ? IconFullscreenExit : IconFullscreen" class="text-gray-600 dark:text-gray-400" />
+                            <component
+                                :is="isFullscreen ? IconFullscreenExit : IconFullscreen"
+                                class="text-gray-600 dark:text-gray-400"
+                            />
                         </button>
 
                         <!-- 下载 -->

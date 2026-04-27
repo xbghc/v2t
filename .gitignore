@@ -48,3 +48,6 @@ node_modules/
 Makefile.local
 
 .envrc
+
+# Playwright MCP 调试时产生的临时快照/log
+.playwright-mcp/

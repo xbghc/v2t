@@ -47,7 +47,10 @@ const getIcon = (type: ToastType): Component => {
                     class="pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg min-w-[200px] max-w-[400px]"
                     :class="getTypeStyles(toast.type)"
                 >
-                    <component :is="getIcon(toast.type)" class="text-xl flex-shrink-0" />
+                    <component
+                        :is="getIcon(toast.type)"
+                        class="text-xl flex-shrink-0"
+                    />
                     <span class="text-sm flex-1">{{ toast.message }}</span>
                     <button
                         class="flex-shrink-0 opacity-70 hover:opacity-100 transition-opacity"
