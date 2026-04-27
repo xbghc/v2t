@@ -20,7 +20,6 @@ import IconContentCopy from '~icons/material-symbols/content-copy-outline'
 import IconPodcasts from '~icons/material-symbols/podcasts'
 import IconArticle from '~icons/material-symbols/article-outline'
 import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
-import IconEditDocument from '~icons/material-symbols/edit-document-outline'
 import IconVideocam from '~icons/material-symbols/videocam-outline'
 import IconSubtitles from '~icons/material-symbols/subtitles-outline'
 
@@ -28,7 +27,7 @@ const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
 const { handleRetry, handleGenerateContent, copyContent, scrollToSection } = useResultActions()
-const { showPodcast, showArticle, showOutline, showZhihu } = useContentVisibility()
+const { showPodcast, showArticle, showOutline } = useContentVisibility()
 const { navItems, disabledItems } = useNavItems()
 
 // 从 store 获取响应式状态
@@ -48,21 +47,17 @@ const {
     podcastAudioUrl,
     hasPodcastAudio,
     podcastError,
-    zhihuArticle,
     podcastStreaming,
     podcastSynthesizing,
     outlineStreaming,
     articleStreaming,
-    zhihuStreaming,
     displayOutline,
     displayArticle,
     displayPodcast,
-    displayZhihu,
     // 失败状态
     outlineFailed,
     articleFailed,
     podcastFailed,
-    zhihuFailed,
     // 派生状态
     isGenerating,
 } = storeToRefs(taskStore)
@@ -129,8 +124,7 @@ const loadingState = computed<LoadingTextState>(() => ({
     podcastSynthesizing: podcastSynthesizing.value,
     podcastStreaming: podcastStreaming.value,
     articleStreaming: articleStreaming.value,
-    outlineStreaming: outlineStreaming.value,
-    zhihuStreaming: zhihuStreaming.value
+    outlineStreaming: outlineStreaming.value
 }))
 </script>
 
@@ -295,36 +289,6 @@ const loadingState = computed<LoadingTextState>(() => ({
                             :display-content="displayOutline"
                             :is-failed="outlineFailed"
                             label="大纲"
-                            @retry="handleGenerateContent"
-                        />
-                    </ContentSection>
-
-                    <!-- 知乎区块 -->
-                    <ContentSection
-                        v-if="showZhihu"
-                        id="zhihu"
-                        title="知乎文章"
-                        :icon="IconEditDocument"
-                        :is-visible="isSectionVisible('zhihu')"
-                        :is-loading="zhihuStreaming && !displayZhihu"
-                        :loading-text="getLoadingText('zhihu', loadingState)"
-                    >
-                        <template #actions>
-                            <button
-                                v-if="zhihuArticle || displayZhihu"
-                                class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-border rounded-lg transition-colors"
-                                @click="copyContent(zhihuArticle || displayZhihu)"
-                            >
-                                <IconContentCopy class="text-lg" />
-                                <span>复制</span>
-                            </button>
-                        </template>
-
-                        <MarkdownContent
-                            content-key="zhihu"
-                            :display-content="displayZhihu"
-                            :is-failed="zhihuFailed"
-                            label="知乎文章"
                             @retry="handleGenerateContent"
                         />
                     </ContentSection>

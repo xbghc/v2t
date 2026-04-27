@@ -26,10 +26,11 @@ class WorkspaceResourceResponse(BaseModel):
     """资源响应"""
 
     resource_id: str
-    name: str  # video, audio, transcript, outline, article, podcast, zhihu
+    name: str  # video, audio, transcript, outline, article, podcast
     resource_type: str  # video | audio | text
     download_url: str | None = None
     content: str | None = None  # text 类型直接返回内容
+    ready: bool = False
     created_at: float
 
 
@@ -39,7 +40,7 @@ class WorkspaceResponse(BaseModel):
     workspace_id: str
     url: str
     title: str
-    status: str  # pending, downloading, transcribing, ready, failed
+    status: str  # pending, processing, ready, failed
     progress: str
     error: str
     resources: list[WorkspaceResourceResponse]
@@ -48,6 +49,15 @@ class WorkspaceResponse(BaseModel):
     # B 站分 P 系列元数据（非分 P 视频留空字符串 + 0）
     series_bvid: str = ""
     series_index: int = 0
+
+
+class TranscriptSegmentMessage(BaseModel):
+    """SSE 推送的单段转录增量"""
+
+    start: float
+    end: float
+    text: str
+    chunk_index: int = -1
 
 
 class WorkspaceLookupResponse(BaseModel):
@@ -78,5 +88,3 @@ class PromptsResponse(BaseModel):
     article_user: str
     podcast_system: str
     podcast_user: str
-    zhihu_system: str
-    zhihu_user: str

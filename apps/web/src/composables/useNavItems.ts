@@ -4,7 +4,6 @@ import { useTaskStore } from '@/stores/task'
 import type { SideNavItem } from '@/types'
 import IconPodcasts from '~icons/material-symbols/podcasts'
 import IconArticle from '~icons/material-symbols/article-outline'
-import IconEditDocument from '~icons/material-symbols/edit-document-outline'
 import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
 import IconVideocam from '~icons/material-symbols/videocam-outline'
 import IconSubtitles from '~icons/material-symbols/subtitles-outline'
@@ -27,7 +26,6 @@ export function useNavItems(): UseNavItemsReturn {
         podcastScript,
         article,
         outline,
-        zhihuArticle,
         // 资源
         videoUrl,
         transcript,
@@ -37,7 +35,6 @@ export function useNavItems(): UseNavItemsReturn {
         podcastSynthesizing,
         articleStreaming,
         outlineStreaming,
-        zhihuStreaming,
         // 生成选项
         generateOptions,
         // 工作区状态
@@ -66,17 +63,6 @@ export function useNavItems(): UseNavItemsReturn {
                 icon: IconArticle,
                 hasContent: !!article.value,
                 isLoading: articleStreaming.value
-            })
-        }
-
-        // 知乎（只有已有内容或正在生成时才显示）
-        if (zhihuArticle.value || zhihuStreaming.value) {
-            items.push({
-                key: 'zhihu',
-                label: '知乎',
-                icon: IconEditDocument,
-                hasContent: !!zhihuArticle.value,
-                isLoading: zhihuStreaming.value
             })
         }
 
@@ -141,17 +127,6 @@ export function useNavItems(): UseNavItemsReturn {
                 key: 'article',
                 label: '文章',
                 icon: IconArticle,
-                hasContent: false,
-                isLoading: false
-            })
-        }
-
-        // 知乎
-        if (!zhihuArticle.value && !zhihuStreaming.value) {
-            items.push({
-                key: 'zhihu',
-                label: '知乎',
-                icon: IconEditDocument,
                 hasContent: false,
                 isLoading: false
             })

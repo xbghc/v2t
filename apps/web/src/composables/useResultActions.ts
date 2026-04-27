@@ -6,8 +6,7 @@ import type { SideNavKey, GeneratableContentKey, WorkspaceStatus } from '@/types
 const CONTENT_LABELS: Record<GeneratableContentKey, string> = {
     podcast: '播客',
     article: '文章',
-    outline: '大纲',
-    zhihu: '知乎文章'
+    outline: '大纲'
 }
 
 export interface LoadingTextState {
@@ -16,7 +15,6 @@ export interface LoadingTextState {
     podcastStreaming: boolean
     articleStreaming: boolean
     outlineStreaming: boolean
-    zhihuStreaming: boolean
 }
 
 /**
@@ -32,7 +30,6 @@ export function getLoadingText(key: SideNavKey, state: LoadingTextState): string
     if (key === 'podcast' && state.podcastStreaming) return '正在生成播客脚本...'
     if (key === 'article' && state.articleStreaming) return '正在生成文章...'
     if (key === 'outline' && state.outlineStreaming) return '正在生成大纲...'
-    if (key === 'zhihu' && state.zhihuStreaming) return '正在生成知乎文章...'
     return '加载中...'
 }
 
@@ -40,7 +37,7 @@ export function getLoadingText(key: SideNavKey, state: LoadingTextState): string
  * 判断 key 是否为可生成内容类型
  */
 function isGeneratableKey(key: SideNavKey): key is GeneratableContentKey {
-    return key === 'podcast' || key === 'article' || key === 'outline' || key === 'zhihu'
+    return key === 'podcast' || key === 'article' || key === 'outline'
 }
 
 /**

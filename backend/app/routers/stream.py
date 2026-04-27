@@ -16,7 +16,6 @@ from app.services.llm import (
     generate_article,
     generate_outline,
     generate_podcast_script_stream,
-    generate_zhihu_article,
 )
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
 from app.storage import get_file_storage, get_workspace, save_workspace
@@ -72,6 +71,7 @@ async def save_text_resource(
         resource_type=ResourceType.TEXT,
         storage_key=storage_key,
         prompt=prompt,
+        ready=True,
     )
     workspace.add_resource(resource)
     # 持久化到存储
@@ -205,6 +205,7 @@ async def stream_podcast(
                     name="podcast",
                     resource_type=ResourceType.AUDIO,
                     storage_key=audio_key,
+                    ready=True,
                 )
                 workspace.add_resource(audio_resource)
                 # 持久化到存储
@@ -215,40 +216,6 @@ async def stream_podcast(
                 yield sse_data({"done": True, "has_audio": False, "audio_error": str(e)})
         except LLMError as e:
             logger.warning("工作区 %s 播客脚本生成失败: %s", workspace_id, e)
-            yield sse_data({"error": str(e)})
-
-    return sse_response(generate)
-
-
-@router.post("/zhihu-article")
-async def stream_zhihu_article(
-    workspace_id: str, request: Request, body: StreamRequest
-) -> StreamingResponse:
-    """流式生成知乎文章"""
-    workspace, transcript = await get_workspace_with_transcript(workspace_id)
-    resource_id = str(uuid.uuid4())[:8]
-
-    async def generate() -> AsyncIterator[str]:
-        yield sse_data({"resource_id": resource_id})
-
-        chunks = []
-        try:
-            async for chunk in generate_zhihu_article(
-                transcript,
-                system_prompt=body.system_prompt or None,
-                user_prompt=body.user_prompt or None,
-            ):
-                if await request.is_disconnected():
-                    return
-                chunks.append(chunk)
-                yield sse_data({"content": chunk})
-
-            content = "".join(chunks)
-            prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            await save_text_resource(workspace, "zhihu", content, prompt)
-            yield sse_data({"done": True})
-        except LLMError as e:
-            logger.warning("工作区 %s 知乎文章生成失败: %s", workspace_id, e)
             yield sse_data({"error": str(e)})
 
     return sse_response(generate)

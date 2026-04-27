@@ -5,6 +5,8 @@ import type {
     StreamPrompts,
     BilibiliVideoMetaResponse,
     WorkspaceLookupResponse,
+    StatusStreamEvent,
+    TranscriptSegmentMessage,
 } from '@/types'
 
 // API 基础路径，使用 Vite 的 base 配置
@@ -98,12 +100,19 @@ export async function getWorkspace(workspaceId: string): Promise<WorkspaceRespon
 
 /**
  * SSE 流式监听工作区状态变化
+ *
+ * SSE envelope 区分两种事件：
+ *   - type=workspace        全量 WorkspaceResponse
+ *   - type=transcript.append 单段转录增量
+ *
+ * @param onTranscriptSegment 可选；若不传，转录增量事件被静默丢弃
  * @returns 清理函数
  */
 export function streamWorkspaceStatus(
     workspaceId: string,
     onStatusChange: (data: WorkspaceResponse) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    onTranscriptSegment?: (segment: TranscriptSegmentMessage) => void,
 ): () => void {
     const ctrl = new AbortController()
 
@@ -123,11 +132,14 @@ export function streamWorkspaceStatus(
         },
         onmessage(ev) {
             if (!ev.data) return
-            const data = JSON.parse(ev.data) as WorkspaceResponse
-            onStatusChange(data)
-            // 终态自动关闭连接
-            if (data.status === 'failed' || data.status === 'ready') {
-                ctrl.abort()
+            const envelope = JSON.parse(ev.data) as StatusStreamEvent
+            if (envelope.type === 'workspace') {
+                onStatusChange(envelope.data)
+                if (envelope.data.status === 'failed' || envelope.data.status === 'ready') {
+                    ctrl.abort()
+                }
+            } else if (envelope.type === 'transcript.append') {
+                onTranscriptSegment?.(envelope.data)
             }
         },
         onerror(err) {
@@ -333,67 +345,6 @@ export function streamPodcast(
                 onScriptDone()
             } else if (data.content) {
                 onScriptChunk(data.content)
-            }
-        },
-        onerror(err) {
-            onError(err instanceof Error ? err.message : '连接错误')
-            throw err
-        },
-        onclose() {
-            throw new Error('Stream closed')
-        },
-    })
-
-    return () => ctrl.abort()
-}
-
-/**
- * 流式生成知乎文章
- * @returns 清理函数
- */
-export function streamZhihuArticle(
-    workspaceId: string,
-    prompts: StreamPrompts,
-    onResourceCreated: (resourceId: string) => void,
-    onChunk: (content: string) => void,
-    onDone: () => void,
-    onError: (error: string) => void
-): () => void {
-    const ctrl = new AbortController()
-
-    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/zhihu-article`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            system_prompt: prompts.systemPrompt,
-            user_prompt: prompts.userPrompt
-        }),
-        signal: ctrl.signal,
-        openWhenHidden: true,
-        async onopen(response) {
-            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-                return
-            }
-            const contentType = response.headers.get('content-type')
-            if (contentType?.includes('application/json')) {
-                const data = await response.json() as { detail?: string }
-                throw new Error(data.detail || `HTTP ${response.status}`)
-            }
-            throw new Error(`HTTP ${response.status}`)
-        },
-        onmessage(ev) {
-            if (!ev.data) return
-            const data = JSON.parse(ev.data) as StreamEventData
-            if (data.error) {
-                onError(data.error)
-                ctrl.abort()
-            } else if (data.resource_id) {
-                onResourceCreated(data.resource_id)
-            } else if (data.done) {
-                onDone()
-                ctrl.abort()
-            } else if (data.content) {
-                onChunk(data.content)
             }
         },
         onerror(err) {

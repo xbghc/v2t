@@ -4,10 +4,10 @@
  */
 
 // 工作区状态（与后端 WorkspaceStatus 枚举对应）
+// 流式管道下 downloading / transcribing 已合并为 processing
 export type WorkspaceStatus =
     | 'pending'
-    | 'downloading'
-    | 'transcribing'
+    | 'processing'
     | 'ready'
     | 'failed'
 
@@ -17,12 +17,26 @@ export type ResourceType = 'video' | 'audio' | 'text'
 // 工作区资源
 export interface WorkspaceResource {
     resource_id: string
-    name: string  // video, audio, transcript, outline, article, podcast, zhihu
+    name: string  // video, audio, transcript, outline, article, podcast
     resource_type: ResourceType
     download_url: string | null
     content: string | null
+    ready: boolean  // 资源是否已完成产出
     created_at: number
 }
+
+// SSE 推送的单段转录（envelope: type=transcript.append）
+export interface TranscriptSegmentMessage {
+    start: number
+    end: number
+    text: string
+    chunk_index: number
+}
+
+// SSE envelope 联合类型
+export type StatusStreamEvent =
+    | { type: 'workspace'; data: WorkspaceResponse }
+    | { type: 'transcript.append'; data: TranscriptSegmentMessage }
 
 // GET /api/workspaces/{id} 响应
 export interface WorkspaceResponse {
@@ -80,8 +94,6 @@ export interface PromptsResponse {
     article_user: string
     podcast_system: string
     podcast_user: string
-    zhihu_system: string
-    zhihu_user: string
 }
 
 // POST /api/workspaces/{id}/stream/{type} 请求参数

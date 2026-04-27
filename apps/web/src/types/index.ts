@@ -6,7 +6,7 @@ export * from '@v2t/shared'
 /**
  * 内容标签标识符
  */
-export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast' | 'zhihu'
+export type CurrentTab = 'article' | 'outline' | 'transcript' | 'podcast'
 
 /**
  * 输入模式
@@ -16,7 +16,7 @@ export type InputMode = 'url' | 'subtitle'
 /**
  * 内容类型（状态机使用）
  */
-export type ContentType = 'outline' | 'article' | 'podcast' | 'zhihu'
+export type ContentType = 'outline' | 'article' | 'podcast'
 
 // ============ 生成选项 ============
 
@@ -41,8 +41,6 @@ export interface CustomPrompts {
     articleUser: string
     podcastSystem: string
     podcastUser: string
-    zhihuSystem: string
-    zhihuUser: string
 }
 
 // ============ 组件 Props 类型 ============
@@ -63,12 +61,12 @@ export interface TabDefinition {
 /**
  * 侧边导航项类型
  */
-export type SideNavKey = 'podcast' | 'article' | 'outline' | 'zhihu' | 'video' | 'subtitle'
+export type SideNavKey = 'podcast' | 'article' | 'outline' | 'video' | 'subtitle'
 
 /**
  * 可生成内容类型（SideNavKey 的子集）
  */
-export type GeneratableContentKey = 'podcast' | 'article' | 'outline' | 'zhihu'
+export type GeneratableContentKey = 'podcast' | 'article' | 'outline'
 
 /**
  * 侧边导航项

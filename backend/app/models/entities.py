@@ -11,10 +11,11 @@ class WorkspaceResource:
     """工作区资源"""
 
     resource_id: str
-    name: str  # video, audio, transcript, outline, article, podcast, zhihu
+    name: str  # video, audio, transcript, outline, article, podcast
     resource_type: ResourceType
     storage_key: str | None = None  # 存储路径
     prompt: str | None = None  # 生成时的 prompt（TEXT 类型资源的元数据）
+    ready: bool = False  # 资源是否产出完成；前端按此判断是否可下载/展示
     created_at: float = field(default_factory=time.time)
 
 

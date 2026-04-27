@@ -6,7 +6,6 @@ export interface ContentVisibility {
     showPodcast: ComputedRef<boolean>
     showArticle: ComputedRef<boolean>
     showOutline: ComputedRef<boolean>
-    showZhihu: ComputedRef<boolean>
 }
 
 /**
@@ -23,7 +22,6 @@ export function useContentVisibility(): ContentVisibility {
         podcastScript,
         article,
         outline,
-        zhihuArticle,
         // 音频
         hasPodcastAudio,
         // 流式状态
@@ -31,7 +29,6 @@ export function useContentVisibility(): ContentVisibility {
         podcastSynthesizing,
         articleStreaming,
         outlineStreaming,
-        zhihuStreaming,
         // 生成选项
         generateOptions,
         // 工作区状态
@@ -66,15 +63,9 @@ export function useContentVisibility(): ContentVisibility {
         return false
     })
 
-    const showZhihu = computed(() => {
-        // 知乎只有在已有内容或正在生成时才显示
-        return !!zhihuArticle.value || zhihuStreaming.value
-    })
-
     return {
         showPodcast,
         showArticle,
-        showOutline,
-        showZhihu
+        showOutline
     }
 }
