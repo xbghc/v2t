@@ -26,6 +26,8 @@ ENV_MAPPING = {
     "redis_url": "REDIS_URL",
     # 存储
     "data_dir": "DATA_DIR",
+    # 代理（主要给 yt-dlp 走 YouTube 等境外站点用）
+    "proxy_url": "PROXY_URL",
 }
 
 
@@ -60,6 +62,20 @@ class Settings:
     # 用户可配置
     max_video_duration: int = 7200  # 秒，默认 2 小时
     temp_dir: str = "/tmp/v2t"  # 临时文件目录
+
+    # HTTP(S) 代理（主要给 yt-dlp 走 YouTube 等境外站点用）
+    proxy_url: str = ""
+
+    @property
+    def effective_proxy(self) -> str:
+        """实际生效的代理：配置文件 / PROXY_URL > HTTPS_PROXY/ALL_PROXY 等环境变量"""
+        if self.proxy_url:
+            return self.proxy_url
+        for env_name in ("HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"):
+            value = os.environ.get(env_name)
+            if value:
+                return value
+        return ""
 
     @property
     def data_path(self) -> Path:

@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.models.entities import Workspace, WorkspaceResource
 from app.models.enums import ResourceType, WorkspaceStatus
 from app.services.transcribe import TranscribeError, extract_audio_async, transcribe_audio
-from app.services.video_downloader import DownloadError, download_video
+from app.services.downloader import DownloadError, download_video
 from app.storage import get_file_storage, get_redis, get_workspace, save_workspace
 from app.utils.response import build_workspace_response
 
