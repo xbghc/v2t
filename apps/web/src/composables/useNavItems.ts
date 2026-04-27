@@ -7,7 +7,6 @@ import IconArticle from '~icons/material-symbols/article-outline'
 import IconEditDocument from '~icons/material-symbols/edit-document-outline'
 import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
 import IconVideocam from '~icons/material-symbols/videocam-outline'
-import IconMusicNote from '~icons/material-symbols/music-note'
 import IconSubtitles from '~icons/material-symbols/subtitles-outline'
 
 export interface UseNavItemsReturn {
@@ -31,7 +30,6 @@ export function useNavItems(): UseNavItemsReturn {
         zhihuArticle,
         // 资源
         videoUrl,
-        audioUrl,
         transcript,
         hasPodcastAudio,
         // 流式状态
@@ -93,31 +91,24 @@ export function useNavItems(): UseNavItemsReturn {
             })
         }
 
-        // 视频（始终显示）
+        const isProcessing = workspaceStatus.value === 'processing'
+
+        // 视频：processing 中且 URL 还没就绪 → loading
         items.push({
             key: 'video',
             label: '视频',
             icon: IconVideocam,
             hasContent: !!videoUrl.value,
-            isLoading: workspaceStatus.value === 'downloading'
+            isLoading: isProcessing && !videoUrl.value
         })
 
-        // 音频（始终显示）
-        items.push({
-            key: 'audio',
-            label: '音频',
-            icon: IconMusicNote,
-            hasContent: !!audioUrl.value,
-            isLoading: workspaceStatus.value === 'downloading'
-        })
-
-        // 字幕（始终显示）
+        // 字幕：processing 中（哪怕已有部分流式内容，仍标 loading）
         items.push({
             key: 'subtitle',
             label: '字幕',
             icon: IconSubtitles,
             hasContent: !!transcript.value,
-            isLoading: workspaceStatus.value === 'transcribing'
+            isLoading: isProcessing
         })
 
         return items

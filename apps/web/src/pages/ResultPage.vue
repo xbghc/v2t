@@ -11,7 +11,6 @@ import type { SideNavKey } from '@/types'
 import SideNavigation from '@/components/SideNavigation.vue'
 import ContentSection from '@/components/ContentSection.vue'
 import VideoSection from '@/components/VideoSection.vue'
-import AudioSection from '@/components/AudioSection.vue'
 import SubtitleSection from '@/components/SubtitleSection.vue'
 import PodcastPlayer from '@/components/PodcastPlayer.vue'
 import MarkdownContent from '@/components/MarkdownContent.vue'
@@ -23,7 +22,6 @@ import IconArticle from '~icons/material-symbols/article-outline'
 import IconFormatListBulleted from '~icons/material-symbols/format-list-bulleted'
 import IconEditDocument from '~icons/material-symbols/edit-document-outline'
 import IconVideocam from '~icons/material-symbols/videocam-outline'
-import IconMusicNote from '~icons/material-symbols/music-note'
 import IconSubtitles from '~icons/material-symbols/subtitles-outline'
 
 const route = useRoute()
@@ -40,7 +38,6 @@ const {
     progressText,
     title,
     videoUrl,
-    audioUrl,
     transcript,
     seriesBvid,
     seriesIndex,
@@ -98,8 +95,11 @@ const isFailed: ComputedRef<boolean> = computed(() => {
 const statusTitle: ComputedRef<string> = computed(() => {
     if (isFailed.value) return '转换失败'
     if (workspaceStatus.value === 'pending') return '等待处理'
-    if (workspaceStatus.value === 'downloading') return '正在下载'
-    if (workspaceStatus.value === 'transcribing') return '正在转录'
+    if (workspaceStatus.value === 'processing') {
+        // 通过资源就绪状态细分阶段
+        if (!videoUrl.value) return '正在下载'
+        return '正在转录'
+    }
     if (isGenerating.value) return '正在生成'
     return '转换完成'
 })
@@ -108,9 +108,6 @@ const statusTitle: ComputedRef<string> = computed(() => {
 const BASE_URL = import.meta.env.BASE_URL
 const videoDownloadUrl: ComputedRef<string> = computed(() =>
     videoUrl.value ? `${BASE_URL}${videoUrl.value.replace(/^\//, '')}` : ''
-)
-const audioDownloadUrl: ComputedRef<string> = computed(() =>
-    audioUrl.value ? `${BASE_URL}${audioUrl.value.replace(/^\//, '')}` : ''
 )
 const podcastDownloadUrl: ComputedRef<string> = computed(() =>
     podcastAudioUrl.value ? `${BASE_URL}${podcastAudioUrl.value.replace(/^\//, '')}` : ''
@@ -338,7 +335,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         title="视频"
                         :icon="IconVideocam"
                         :is-visible="isSectionVisible('video')"
-                        :is-loading="workspaceStatus === 'downloading' && !videoUrl"
+                        :is-loading="workspaceStatus === 'processing' && !videoUrl"
                         :loading-text="getLoadingText('video', loadingState)"
                     >
                         <VideoSection
@@ -349,36 +346,19 @@ const loadingState = computed<LoadingTextState>(() => ({
                         />
                     </ContentSection>
 
-                    <!-- 音频区块 -->
-                    <ContentSection
-                        id="audio"
-                        title="音频"
-                        :icon="IconMusicNote"
-                        :is-visible="isSectionVisible('audio')"
-                        :is-loading="workspaceStatus === 'downloading' && !audioUrl"
-                        :loading-text="getLoadingText('audio', loadingState)"
-                    >
-                        <AudioSection
-                            :src="audioDownloadUrl"
-                            :title="title"
-                            :available="!!audioUrl"
-                            :is-processing="isProcessing"
-                        />
-                    </ContentSection>
-
                     <!-- 字幕区块 -->
                     <ContentSection
                         id="subtitle"
                         title="字幕"
                         :icon="IconSubtitles"
                         :is-visible="isSectionVisible('subtitle')"
-                        :is-loading="workspaceStatus === 'transcribing' && !transcript"
+                        :is-loading="workspaceStatus === 'processing' && !transcript"
                         :loading-text="getLoadingText('subtitle', loadingState)"
                     >
                         <SubtitleSection
                             :content="transcript"
                             :title="title"
-                            :is-loading="workspaceStatus === 'transcribing'"
+                            :is-loading="workspaceStatus === 'processing' && !!videoUrl"
                         />
                     </ContentSection>
                 </div>

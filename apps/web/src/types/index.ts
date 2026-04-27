@@ -53,11 +53,6 @@ export interface CustomPrompts {
 export type HeaderVariant = 'default' | 'result'
 
 /**
- * MediaDownload 媒体类型
- */
-export type MediaType = 'video' | 'audio' | 'podcast'
-
-/**
  * Tab 定义
  */
 export interface TabDefinition {
@@ -68,7 +63,7 @@ export interface TabDefinition {
 /**
  * 侧边导航项类型
  */
-export type SideNavKey = 'podcast' | 'article' | 'outline' | 'zhihu' | 'video' | 'audio' | 'subtitle'
+export type SideNavKey = 'podcast' | 'article' | 'outline' | 'zhihu' | 'video' | 'subtitle'
 
 /**
  * 可生成内容类型（SideNavKey 的子集）

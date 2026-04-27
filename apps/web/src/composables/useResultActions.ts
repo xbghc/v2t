@@ -23,8 +23,11 @@ export interface LoadingTextState {
  * 获取区块的加载状态文本
  */
 export function getLoadingText(key: SideNavKey, state: LoadingTextState): string {
-    if (state.workspaceStatus === 'downloading') return '正在下载视频...'
-    if (state.workspaceStatus === 'transcribing') return '正在转录音频...'
+    // 流式管道下细分阶段已合并为 processing，按 key 区分提示
+    if (state.workspaceStatus === 'processing') {
+        if (key === 'video') return '正在下载视频...'
+        if (key === 'subtitle') return '正在转录音频...'
+    }
     if (key === 'podcast' && state.podcastSynthesizing) return '正在合成播客音频...'
     if (key === 'podcast' && state.podcastStreaming) return '正在生成播客脚本...'
     if (key === 'article' && state.articleStreaming) return '正在生成文章...'

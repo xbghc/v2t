@@ -156,7 +156,6 @@ export const useTaskStore = defineStore('task', () => {
     const progressTitle = computed(() => wsCtx.progressTitle)
     const errorMessage = computed(() => wsCtx.errorMessage)
     const videoUrl = computed(() => wsCtx.videoUrl)
-    const audioUrl = computed(() => wsCtx.audioUrl)
     const transcript = computed(() => wsCtx.transcript)
 
     // 内容流式状态
@@ -358,7 +357,6 @@ export const useTaskStore = defineStore('task', () => {
             type: 'UPDATE_RESOURCES',
             title: data.title,
             videoUrl: getResourceUrl(resources, 'video'),
-            audioUrl: getResourceUrl(resources, 'audio'),
             transcript: getResourceContent(resources, 'transcript'),
             progressText: data.progress || undefined,
         })
@@ -400,7 +398,10 @@ export const useTaskStore = defineStore('task', () => {
         statusStreamCleanup = streamWorkspaceStatus(
             id,
             handleStatusStreamUpdate,
-            (err) => console.error('状态流错误:', err)
+            (err) => console.error('状态流错误:', err),
+            (segment) => {
+                sendWorkspace({ type: 'APPEND_TRANSCRIPT', segment })
+            },
         )
     }
 
@@ -622,7 +623,6 @@ export const useTaskStore = defineStore('task', () => {
                 type: 'UPDATE_RESOURCES',
                 title: data.title,
                 videoUrl: getResourceUrl(data.resources, 'video'),
-                audioUrl: getResourceUrl(data.resources, 'audio'),
                 transcript: getResourceContent(data.resources, 'transcript'),
                 progressText: data.progress || undefined,
             })
@@ -691,7 +691,6 @@ export const useTaskStore = defineStore('task', () => {
         progressTitle,
         title,
         videoUrl,
-        audioUrl,
         transcript,
         seriesBvid,
         seriesIndex,
