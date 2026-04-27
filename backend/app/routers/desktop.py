@@ -1,25 +1,27 @@
-"""桌面端透传路由：把客户端调用代理到上游 API，避免泄露第三方密钥。
+"""桌面端服务路由。
 
 ⚠️ 安全注意：阶段一不加鉴权，所有人都能匿名调用消耗后端配额。
 生产前必须接入 Email OTP / OAuth 等用户身份验证，否则会沦为公开的
-Whisper / DashScope 调用代理。
+DashScope 调用代理。
 """
 
 import logging
+import tempfile
+from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.services.transcribe import TranscribeError, transcribe_audio
 from app.services.xiazaitool import XiazaitoolError, parse_video_url
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop"])
 
-WHISPER_TRANSCRIBE_PATH = "/audio/transcriptions"
 DASHSCOPE_BASE = "https://dashscope.aliyuncs.com"
 
 # 上游链接超时较短，整体超时给到 5 分钟覆盖大文件转录
@@ -89,15 +91,37 @@ async def _proxy_post(
     )
 
 
-@router.post("/whisper/audio/transcriptions")
-async def whisper_transcriptions(request: Request) -> Response:
-    """透传 multipart 音频文件到 Whisper 兼容 API。"""
-    settings = get_settings()
-    if not settings.whisper_base_url or not settings.whisper_api_key:
-        raise HTTPException(status_code=503, detail="Whisper API 未配置")
+class TranscribeResponse(BaseModel):
+    text: str
 
-    target = settings.whisper_base_url.rstrip("/") + WHISPER_TRANSCRIBE_PATH
-    return await _proxy_post(request, target, settings.whisper_api_key)
+
+@router.post("/transcribe", response_model=TranscribeResponse)
+async def transcribe(
+    file: UploadFile = File(...),
+    language: str | None = Form(None),
+) -> TranscribeResponse:
+    """统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。
+
+    桌面端不感知具体提供商，只需 multipart 上传音频文件。
+    """
+    settings = get_settings()
+    suffix = Path(file.filename or "audio").suffix or ".mp3"
+
+    with tempfile.NamedTemporaryFile(
+        suffix=suffix, dir=settings.temp_path, delete=False
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+        while chunk := await file.read(1024 * 1024):
+            tmp.write(chunk)
+
+    try:
+        text = await transcribe_audio(tmp_path, language=language)
+        return TranscribeResponse(text=text)
+    except TranscribeError as e:
+        logger.warning("desktop /transcribe 失败: %s", e)
+        raise HTTPException(status_code=502, detail=f"转录失败: {e}")
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @router.post("/dashscope/{path:path}")
