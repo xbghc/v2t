@@ -16,11 +16,12 @@ import logging
 from pathlib import Path
 
 from app.config import get_settings
-from app.utils.url_hash import compute_url_hash
+from app.utils.url_hash import compute_url_hash, normalize_url
 
 from .base import (
     DownloadError,
     DownloadMeta,
+    ProgressCallback,
     VideoDownloadProvider,
     VideoResult,
 )
@@ -62,12 +63,21 @@ def _write_meta(meta_path: Path, meta: dict) -> None:
 
 
 async def download_video(
-    url: str, output_dir: Path | None = None
+    url: str,
+    output_dir: Path | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> VideoResult:
-    """下载视频，按 url_hash 命名文件并复用已有结果"""
+    """下载视频，按 url_hash 命名文件并复用已有结果
+
+    progress_callback 可选，仅在真正发起下载时由 Provider 触发；
+    复用已有视频时不调用（直接返回缓存结果）。
+    """
     settings = get_settings()
     base_dir = output_dir or settings.temp_path
 
+    # 规范化 URL：剔除 tracking 参数（spm_id_from / vd_source / utm_* 等）。
+    # 不仅用于 hash，也用于实际请求 —— 上游解析 API（xiazaitool）对带 tracker 的 URL 会 500。
+    url = normalize_url(url)
     url_hash = compute_url_hash(url)
     resource_dir = base_dir / url_hash
     video_path = resource_dir / "video.mp4"
@@ -91,7 +101,9 @@ async def download_video(
     provider = select_provider(url)
     logger.info("使用 %s 下载: %s", provider.name, url)
 
-    download_meta = await provider.download(url, video_path)
+    download_meta = await provider.download(
+        url, video_path, progress_callback=progress_callback
+    )
 
     _write_meta(meta_path, {
         "url": url,
@@ -112,6 +124,7 @@ async def download_video(
 __all__ = [
     "DownloadError",
     "DownloadMeta",
+    "ProgressCallback",
     "VideoDownloadProvider",
     "VideoResult",
     "download_video",

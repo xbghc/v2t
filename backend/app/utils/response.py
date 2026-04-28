@@ -29,6 +29,7 @@ async def build_resource_response(
         resource_type=resource.resource_type.value,
         download_url=download_url,
         content=content,
+        ready=resource.ready,
         created_at=resource.created_at,
     )
 
@@ -47,6 +48,7 @@ async def build_workspace_response(workspace: Workspace) -> WorkspaceResponse:
         status=workspace.status.value,
         progress=workspace.progress,
         error=workspace.error,
+        error_kind=workspace.error_kind,
         resources=resources,
         created_at=workspace.created_at,
         last_accessed_at=workspace.last_accessed_at,

@@ -40,6 +40,7 @@ class RedisMetadataStore:
             "status": workspace.status.value,
             "progress": workspace.progress,
             "error": workspace.error,
+            "error_kind": workspace.error_kind,
             "created_at": str(workspace.created_at),
             "last_accessed_at": str(workspace.last_accessed_at),
             "series_bvid": workspace.series_bvid,
@@ -54,6 +55,7 @@ class RedisMetadataStore:
             "resource_type": resource.resource_type.value,
             "storage_key": resource.storage_key,
             "prompt": resource.prompt,
+            "ready": resource.ready,
             "created_at": resource.created_at,
         })
 
@@ -66,6 +68,7 @@ class RedisMetadataStore:
             resource_type=ResourceType(d["resource_type"]),
             storage_key=d.get("storage_key"),
             prompt=d.get("prompt"),
+            ready=d.get("ready", False),
             created_at=d.get("created_at", time.time()),
         )
 
@@ -84,6 +87,7 @@ class RedisMetadataStore:
             status=WorkspaceStatus(data.get("status", "pending")),
             progress=data.get("progress", ""),
             error=data.get("error", ""),
+            error_kind=data.get("error_kind", ""),
             resources=resources,
             created_at=float(data.get("created_at", time.time())),
             last_accessed_at=float(data.get("last_accessed_at", time.time())),
@@ -145,6 +149,25 @@ class RedisMetadataStore:
                 workspace.series_bvid, workspace.series_index
             )
             pipe.set(lookup_key, workspace.workspace_id, ex=WORKSPACE_TTL)
+        await pipe.execute()
+
+    async def add_resource(
+        self, workspace_id: str, resource: WorkspaceResource
+    ) -> None:
+        """
+        原子追加单个资源到工作区。
+
+        直接 RPUSH 到资源 list，避免 save_workspace 的全量
+        delete + rewrite 把并发流刚保存的其它资源覆盖。
+        """
+        key = self._workspace_key(workspace_id)
+        res_key = self._resources_key(workspace_id)
+
+        pipe = self._redis.pipeline()
+        pipe.rpush(res_key, self._resource_to_json(resource))
+        pipe.hset(key, "last_accessed_at", str(time.time()))
+        pipe.expire(key, WORKSPACE_TTL)
+        pipe.expire(res_key, WORKSPACE_TTL)
         await pipe.execute()
 
     async def lookup_by_series(self, bvid: str, index: int) -> str | None:

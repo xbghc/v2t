@@ -60,7 +60,7 @@ class Settings:
     data_dir: str = "/data/v2t"
 
     # 用户可配置
-    max_video_duration: int = 7200  # 秒，默认 2 小时
+    max_video_duration: int = 14400  # 秒，默认 4 小时（流式管道下处理 1h 约 2-3min；可通过 .env 覆盖）
     temp_dir: str = "/tmp/v2t"  # 临时文件目录
 
     # HTTP(S) 代理（主要给 yt-dlp 走 YouTube 等境外站点用）

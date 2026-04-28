@@ -10,7 +10,7 @@ from rich.progress import BarColumn, DownloadColumn, Progress, TransferSpeedColu
 
 from app.services.xiazaitool import XiazaitoolError, parse_video_url
 
-from .base import DownloadError, DownloadMeta
+from .base import DownloadError, DownloadMeta, ProgressCallback
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,10 @@ def _parse_aria2c_progress(line: str) -> tuple[int, int] | None:
 
 
 async def _download_with_aria2c(
-    page_url: str, video_url: str, save_path: Path
+    page_url: str,
+    video_url: str,
+    save_path: Path,
+    progress_callback: ProgressCallback | None = None,
 ) -> None:
     download_dir = save_path.parent
     cmd = [
@@ -109,6 +112,8 @@ async def _download_with_aria2c(
                 if progress.tasks[task].total is None:
                     progress.update(task, total=total)
                 progress.update(task, completed=downloaded)
+                if progress_callback is not None:
+                    await progress_callback(downloaded, total)
 
     await process.wait()
     if process.returncode != 0:
@@ -142,12 +147,19 @@ class XiazaitoolProvider:
         # xiazaitool 走通用 fallback；其他 provider 不接的都给它
         return True
 
-    async def download(self, url: str, save_path: Path) -> DownloadMeta:
+    async def download(
+        self,
+        url: str,
+        save_path: Path,
+        progress_callback: ProgressCallback | None = None,
+    ) -> DownloadMeta:
         try:
             info = await parse_video_url(url)
         except XiazaitoolError as e:
             raise DownloadError(str(e)) from e
         if not info.video_url:
             raise DownloadError("无法获取视频下载链接")
-        await _download_with_aria2c(url, info.video_url, save_path)
+        await _download_with_aria2c(
+            url, info.video_url, save_path, progress_callback=progress_callback
+        )
         return DownloadMeta(title=info.title, cover_url=info.cover_url or "")

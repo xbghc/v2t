@@ -4,9 +4,14 @@
 具体走 yt-dlp / xiazaitool / 未来的 lux 等由 __init__.py 路由决定。
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+# 进度回调：参数 (downloaded_bytes, total_bytes)。Provider 在拿到字节级进度时调一次；
+# 上层（task）负责节流再推 SSE。total<=0 表示总大小未知，回调侧应忽略。
+ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 class DownloadError(Exception):
@@ -46,6 +51,14 @@ class VideoDownloadProvider(Protocol):
     def supports(self, url: str) -> bool:
         """是否能处理该 URL（按域名/特征判断，纯字符串操作，不做 IO）"""
 
-    async def download(self, url: str, save_path: Path) -> DownloadMeta:
-        """下载到 save_path（mp4），返回元数据；失败必须抛 DownloadError"""
+    async def download(
+        self,
+        url: str,
+        save_path: Path,
+        progress_callback: ProgressCallback | None = None,
+    ) -> DownloadMeta:
+        """下载到 save_path（mp4），返回元数据；失败必须抛 DownloadError。
+
+        progress_callback 可选；Provider 拿到字节进度时调用，调用频率不受约束。
+        """
         ...

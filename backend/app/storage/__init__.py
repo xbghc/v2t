@@ -4,7 +4,7 @@ import logging
 
 from redis.asyncio import Redis
 
-from app.models.entities import Workspace
+from app.models.entities import Workspace, WorkspaceResource
 
 from .local_file import LocalFileStorage, cleanup_old_files
 from .redis_store import RedisMetadataStore
@@ -88,6 +88,14 @@ async def save_workspace(workspace: Workspace) -> None:
     await store.save_workspace(workspace)
 
 
+async def add_workspace_resource(
+    workspace_id: str, resource: WorkspaceResource
+) -> None:
+    """原子追加单个资源，避免并发流式生成互相覆盖。"""
+    store = get_metadata_store()
+    await store.add_resource(workspace_id, resource)
+
+
 async def lookup_workspace_by_series(bvid: str, index: int) -> str | None:
     """通过 series_bvid + series_index 查找已存在的 workspace_id"""
     store = get_metadata_store()
@@ -101,6 +109,7 @@ register_workspace = save_workspace
 __all__ = [
     "LocalFileStorage",
     "RedisMetadataStore",
+    "add_workspace_resource",
     "cleanup_old_files",
     "get_file_storage",
     "get_metadata_store",
