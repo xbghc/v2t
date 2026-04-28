@@ -20,6 +20,7 @@ from loguru import logger
 from app.routers import (
     bilibili_router,
     desktop_router,
+    diagnostics_router,
     prompts_router,
     stream_router,
     workspace_router,
@@ -36,6 +37,9 @@ app.include_router(stream_router)
 app.include_router(prompts_router)
 app.include_router(desktop_router)
 app.include_router(bilibili_router)
+# 诊断路由：仅供内部使用，nginx-docker.conf 会把 /api/diag/* 对外 404，
+# host 内通过 docker-compose 暴露的 127.0.0.1:8101 直连访问
+app.include_router(diagnostics_router)
 
 
 async def check_redis_connection() -> tuple[bool, str]:

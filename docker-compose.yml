@@ -11,6 +11,10 @@ services:
       target: backend
     depends_on:
       - redis
+    # 仅绑 127.0.0.1：诊断接口（/api/diag/*）从 host 本机或 SSH 隧道访问，
+    # 不走 nginx 8100，避免暴露到公网
+    ports:
+      - "127.0.0.1:8101:8101"
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379
