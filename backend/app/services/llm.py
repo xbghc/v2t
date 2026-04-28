@@ -1,10 +1,15 @@
 """AI 内容生成服务 - 使用 Anthropic 兼容 API"""
 
+import logging
 from collections.abc import AsyncGenerator
 
+import anthropic
+import httpx
 from anthropic import AsyncAnthropic
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMError(Exception):
@@ -137,18 +142,25 @@ async def chat(
     max_tokens: int = 4096,
     temperature: float = 0.6,
     response_format: dict | None = None,
+    max_continues: int = 3,
 ) -> AsyncGenerator[str, None]:
     """
-    流式调用 AI 聊天接口，逐块 yield 内容
+    流式调用 AI 聊天接口，逐块 yield 内容。
+
+    遇到 stop_reason == "max_tokens" 截断时按 anthropic 推荐的 assistant
+    prefill 模式自动续写：把已生成内容追加成 assistant message，让模型从
+    断点继续，无缝拼接、不会有"好的我继续"这种衔接词。
 
     Args:
         messages: 消息列表（支持 system/user/assistant role）
-        max_tokens: 最大 token 数
+        max_tokens: 单次请求最大 token 数
         temperature: 温度参数
         response_format: 响应格式，如 {"type": "json_object"}（通过 prefill 实现）
+        max_continues: 最多续写次数，防极端 prompt 死循环。
+            上限内容总长 ≈ (max_continues + 1) * max_tokens
 
     Yields:
-        str: 响应内容片段
+        str: 响应内容片段（贯穿所有续写轮次，下游不感知是否续写过）
     """
     settings = get_settings()
     client = get_client()
@@ -159,18 +171,92 @@ async def chat(
         convo = [*convo, {"role": "assistant", "content": "{"}]
         yield "{"
 
-    kwargs: dict = {
-        "model": settings.anthropic_model,
-        "messages": convo,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if system:
-        kwargs["system"] = system
+    accumulated = ""  # 已生成的 assistant 文本，续写时 prefill
+    continues = 0
 
-    async with client.messages.stream(**kwargs) as stream:
-        async for text in stream.text_stream:
-            yield text
+    # 不用 stream.text_stream：在 minimaxi 等返回 thinking 块的兼容端点上，
+    # text_stream 偶发返回 0 chunk（即使响应里有有效 TextEvent）。
+    # 直接遍历事件、捕 TextEvent.text 更稳。
+    #
+    # 把上游网络/SDK 异常统一包成 LLMError，让上层 stream/article 等的
+    # except LLMError 能 catch。否则 RemoteProtocolError（minimaxi 长生成
+    # 中途关闭连接）会冒泡，SSE 半途中断、前端拿不到 error 事件。
+    while True:
+        cur_msgs = (
+            [*convo, {"role": "assistant", "content": accumulated}]
+            if accumulated else convo
+        )
+        kwargs: dict = {
+            "model": settings.anthropic_model,
+            "messages": cur_msgs,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+        if system:
+            kwargs["system"] = system
+
+        round_text: list[str] = []
+        stop_reason: str | None = None
+
+        upstream_aborted = False  # 标记本轮是被上游断流（区别于自然/截断结束）
+        try:
+            async with client.messages.stream(**kwargs) as stream:
+                async for event in stream:
+                    t = type(event).__name__
+                    if t == "TextEvent":
+                        text = getattr(event, "text", None)
+                        if text:
+                            round_text.append(text)
+                            yield text
+                    elif t == "RawMessageDeltaEvent":
+                        delta = getattr(event, "delta", None)
+                        if delta is not None:
+                            sr = getattr(delta, "stop_reason", None)
+                            if sr:
+                                stop_reason = sr
+        except httpx.RemoteProtocolError as e:
+            # 上游主动断流。已经 yield 的内容用 continuation prefill 重连；
+            # 即使本轮无文本（thinking 阶段被断）也允许在 max_continues 内重试 ——
+            # minimaxi 在 thinking 中段断流是常见现象。
+            logger.warning("LLM 流式响应被上游中断: %s", e)
+            if continues >= max_continues:
+                raise LLMError("LLM 服务流式响应中断，请稍后重试") from e
+            upstream_aborted = True
+        except (httpx.ReadError, httpx.ReadTimeout, httpx.ConnectError) as e:
+            logger.warning("LLM 网络错误: %s", e)
+            raise LLMError("LLM 服务连接异常，请检查网络或稍后重试") from e
+        except anthropic.RateLimitError as e:
+            logger.warning("LLM 限流: %s", e)
+            raise LLMError("LLM 服务请求过于频繁，请稍后重试") from e
+        except anthropic.APIError as e:
+            logger.warning("LLM API 错误: %s", e)
+            raise LLMError(f"LLM API 错误：{e.message}") from e
+        except LLMError:
+            raise
+
+        # 续写决策：max_tokens 截断 或 上游断流 → 续写
+        should_continue = (
+            stop_reason == "max_tokens" or upstream_aborted
+        )
+        if not should_continue or continues >= max_continues:
+            return
+
+        # max_tokens 截断 + 无文本：thinking 吃光 token，续写也无意义
+        # （上游断流场景即使无文本也允许重试一次，所以不在这里 return）
+        if not round_text and stop_reason == "max_tokens":
+            logger.warning(
+                "续写第 %d 轮无文本输出（thinking 吃光 token），停止",
+                continues + 1,
+            )
+            return
+
+        accumulated += "".join(round_text)
+        continues += 1
+        reason = "上游断流" if upstream_aborted else "max_tokens 截断"
+        logger.info(
+            "%s，自动续写第 %d/%d 次（已生成 %d 字符）",
+            reason, continues, max_continues, len(accumulated),
+        )
 
 
 async def chat_complete(
