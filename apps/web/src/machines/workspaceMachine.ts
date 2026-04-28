@@ -11,7 +11,7 @@
  *   - APPEND_TRANSCRIPT 事件（流式逐段 transcript）
  */
 
-import type { TranscriptSegmentMessage } from '@/types'
+import type { TranscriptSegmentMessage, WorkspaceErrorKind } from '@/types'
 
 // --- 状态 ---
 export type WorkspaceState =
@@ -24,8 +24,8 @@ export type WorkspaceState =
 // --- 事件 ---
 export type WorkspaceEvent =
     | { type: 'SUBMIT'; workspaceId: string }
-    | { type: 'STATUS_UPDATE'; status: 'pending' | 'processing' | 'ready' | 'failed'; error?: string }
-    | { type: 'FAIL'; error: string }
+    | { type: 'STATUS_UPDATE'; status: 'pending' | 'processing' | 'ready' | 'failed'; error?: string; errorKind?: WorkspaceErrorKind }
+    | { type: 'FAIL'; error: string; errorKind?: WorkspaceErrorKind }
     | { type: 'RESET' }
     | { type: 'LOAD_WORKSPACE'; status: 'pending' | 'processing' | 'ready' | 'failed' }
     | { type: 'UPDATE_RESOURCES'; title?: string; videoUrl?: string | null; transcript?: string; progressText?: string }
@@ -38,6 +38,7 @@ export interface WorkspaceContext {
     progressText: string
     progressTitle: string
     errorMessage: string
+    errorKind: WorkspaceErrorKind
     videoUrl: string | null
     transcript: string
 }
@@ -48,7 +49,8 @@ export function createInitialWorkspaceContext(): WorkspaceContext {
         title: '',
         progressText: '准备中...',
         progressTitle: '',
-        errorMessage: '无法处理该视频链接，请检查链接是否正确且可公开访问，或尝试其他视频。',
+        errorMessage: '',
+        errorKind: '',
         videoUrl: null,
         transcript: '',
     }
@@ -110,6 +112,7 @@ function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceC
             // STATUS_UPDATE 只在出错时直接覆盖
             progressText: event.error ? '处理失败' : ctx.progressText,
             errorMessage: event.error ?? ctx.errorMessage,
+            errorKind: event.errorKind ?? ctx.errorKind,
         }
     case 'LOAD_WORKSPACE':
         return {
@@ -137,7 +140,12 @@ function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceC
         }
     }
     case 'FAIL':
-        return { ...ctx, errorMessage: event.error, progressText: '处理失败' }
+        return {
+            ...ctx,
+            errorMessage: event.error,
+            errorKind: event.errorKind ?? 'unknown',
+            progressText: '处理失败',
+        }
     case 'RESET':
         return createInitialWorkspaceContext()
     }

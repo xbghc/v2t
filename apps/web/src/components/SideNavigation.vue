@@ -60,7 +60,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
 <template>
     <!-- 移动端汉堡菜单按钮 -->
     <button
-        class="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-dark-card shadow-lg border border-gray-200 dark:border-dark-border"
+        class="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-dark-card shadow-lg border border-gray-200 dark:border-dark-border cursor-pointer"
         @click="toggleMobileMenu"
     >
         <component
@@ -127,7 +127,7 @@ const isItemFocused = (key: SideNavKey): boolean => {
 
                     <!-- 跳转按钮 -->
                     <button
-                        class="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-dark-border-light transition-all flex-shrink-0"
+                        class="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-dark-border-light transition-all flex-shrink-0 cursor-pointer"
                         title="跳转到此区块"
                         @click.stop="handleScrollClick(item.key, $emit)"
                     >

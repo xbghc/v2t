@@ -13,9 +13,8 @@ const emit = defineEmits<{
     (e: 'select', page: BilibiliPage, bvid: string): void
 }>()
 
-const meta = ref<BilibiliVideoMetaResponse | null>(null)
+const meta = defineModel<BilibiliVideoMetaResponse | null>('meta', { default: null })
 const expanded = ref(false)
-const loading = ref(false)
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let lastProbedUrl = ''
@@ -49,20 +48,15 @@ watch(
 )
 
 async function probe(url: string): Promise<void> {
-    loading.value = true
-    try {
-        const data = await fetchBilibiliPages(url)
-        if (data && data.pages.length >= 2) {
-            meta.value = data
-            lastProbedUrl = data.bvid
-        } else {
-            meta.value = null
-            lastProbedUrl = ''
-        }
-        expanded.value = false
-    } finally {
-        loading.value = false
+    const data = await fetchBilibiliPages(url)
+    if (data && data.pages.length >= 2) {
+        meta.value = data
+        lastProbedUrl = data.bvid
+    } else {
+        meta.value = null
+        lastProbedUrl = ''
     }
+    expanded.value = false
 }
 
 function formatDuration(seconds: number): string {
@@ -85,12 +79,11 @@ function handleSelect(page: BilibiliPage): void {
 
 <template>
     <div
-        v-if="meta || loading"
+        v-if="meta"
         class="w-full max-w-input mt-3"
     >
         <!-- 折叠横条 -->
         <button
-            v-if="meta"
             type="button"
             class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-left hover:border-primary dark:hover:border-primary transition-colors cursor-pointer"
             @click="expanded = !expanded"
@@ -105,15 +98,6 @@ function handleSelect(page: BilibiliPage): void {
                 :class="{ 'rotate-90': expanded }"
             />
         </button>
-
-        <!-- 探测中提示 -->
-        <div
-            v-else-if="loading"
-            class="flex items-center gap-2 px-3 py-2.5 text-xs text-gray-400 dark:text-dark-text-muted"
-        >
-            <div class="animate-spin h-3 w-3 rounded-full border-2 border-gray-300 border-t-primary" />
-            <span>检测视频信息...</span>
-        </div>
 
         <!-- 分 P 列表 -->
         <div

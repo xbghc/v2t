@@ -15,6 +15,7 @@ export interface LoadingTextState {
     podcastStreaming: boolean
     articleStreaming: boolean
     outlineStreaming: boolean
+    progressText: string
 }
 
 /**
@@ -23,8 +24,9 @@ export interface LoadingTextState {
 export function getLoadingText(key: SideNavKey, state: LoadingTextState): string {
     // 流式管道下细分阶段已合并为 processing，按 key 区分提示
     if (state.workspaceStatus === 'processing') {
-        if (key === 'video') return '正在下载视频...'
-        if (key === 'subtitle') return '正在转录音频...'
+        // 视频/字幕阶段优先用后端推送的具体进度（"正在下载 95% (...)" / "正在转录 5% (...)" 等）
+        if (key === 'video') return state.progressText || '正在下载视频...'
+        if (key === 'subtitle') return state.progressText || '正在转录音频...'
     }
     if (key === 'podcast' && state.podcastSynthesizing) return '正在合成播客音频...'
     if (key === 'podcast' && state.podcastStreaming) return '正在生成播客脚本...'

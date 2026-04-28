@@ -3,9 +3,9 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
-import { lookupWorkspaceBySeries } from '@/api/workspace'
+import { fetchBilibiliPages, lookupWorkspaceBySeries } from '@/api/workspace'
 import BilibiliPagesPicker from '@/components/BilibiliPagesPicker.vue'
-import type { BilibiliPage } from '@/types'
+import type { BilibiliPage, BilibiliVideoMetaResponse } from '@/types'
 import IconLink from '~icons/material-symbols/link'
 import IconChevronRight from '~icons/material-symbols/chevron-right'
 
@@ -14,10 +14,48 @@ const taskStore = useTaskStore()
 const { url, generateOptions, isDownloadOnly, prompts, promptsLoaded } = storeToRefs(taskStore)
 
 const showAdvanced = ref(false)
+const bilibiliMeta = ref<BilibiliVideoMetaResponse | null>(null)
+
+// 解析 B 站 URL 的 ?p=N，缺省为 1
+function parseBilibiliPageIndex(rawUrl: string): number {
+    try {
+        const p = new URL(rawUrl).searchParams.get('p')
+        const n = p ? parseInt(p, 10) : 1
+        return Number.isFinite(n) && n > 0 ? n : 1
+    } catch {
+        return 1
+    }
+}
+
+// 若 URL 是 B 站合集，返回分 P 元数据；否则 undefined
+async function detectSeriesOptions(
+    rawUrl: string,
+): Promise<{ seriesBvid?: string; seriesIndex?: number } | undefined> {
+    const bvMatch = rawUrl.match(/BV[0-9A-Za-z]{10}/)
+    if (!bvMatch) return undefined
+    // BilibiliPagesPicker 已经探测过同一 BV → 复用，避免重复请求
+    const meta = bilibiliMeta.value?.bvid === bvMatch[0]
+        ? bilibiliMeta.value
+        : await fetchBilibiliPages(rawUrl)
+    if (!meta || meta.pages.length < 2) return undefined
+    return {
+        seriesBvid: meta.bvid,
+        seriesIndex: parseBilibiliPageIndex(rawUrl),
+    }
+}
 
 // 提交 URL 并导航（普通流程，单视频或当前页 URL）
 const handleSubmitUrl = async () => {
-    const workspaceId = await taskStore.submitUrl()
+    const seriesOpts = await detectSeriesOptions(url.value.trim())
+    // 已存在的 workspace 直接跳转
+    if (seriesOpts?.seriesBvid && seriesOpts.seriesIndex) {
+        const existingId = await lookupWorkspaceBySeries(seriesOpts.seriesBvid, seriesOpts.seriesIndex)
+        if (existingId) {
+            router.push({ name: 'workspace', params: { id: existingId } })
+            return
+        }
+    }
+    const workspaceId = await taskStore.submitUrl(seriesOpts)
     if (workspaceId) {
         router.push({ name: 'workspace', params: { id: workspaceId } })
     } else if (taskStore.workspaceStatus === 'failed') {
@@ -88,6 +126,7 @@ onMounted(() => {
 
                 <!-- 分 P 探测（仅 B 站合集时显示） -->
                 <BilibiliPagesPicker
+                    v-model:meta="bilibiliMeta"
                     :url="url"
                     @select="handleSelectPage"
                 />

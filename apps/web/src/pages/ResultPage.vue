@@ -35,6 +35,8 @@ const {
     workspaceId,
     workspaceStatus,
     progressText,
+    errorMessage,
+    errorKind,
     title,
     videoUrl,
     transcript,
@@ -87,6 +89,15 @@ const isFailed: ComputedRef<boolean> = computed(() => {
     return workspaceStatus.value === 'failed'
 })
 
+// 用户输入相关错误（重试无意义，应该回首页改链接）
+const isInputError: ComputedRef<boolean> = computed(() => {
+    return errorKind.value === 'video_too_long'
+})
+
+const goHome = (): void => {
+    router.push({ name: 'home' })
+}
+
 const statusTitle: ComputedRef<string> = computed(() => {
     if (isFailed.value) return '转换失败'
     if (workspaceStatus.value === 'pending') return '等待处理'
@@ -124,7 +135,8 @@ const loadingState = computed<LoadingTextState>(() => ({
     podcastSynthesizing: podcastSynthesizing.value,
     podcastStreaming: podcastStreaming.value,
     articleStreaming: articleStreaming.value,
-    outlineStreaming: outlineStreaming.value
+    outlineStreaming: outlineStreaming.value,
+    progressText: progressText.value
 }))
 </script>
 
@@ -166,9 +178,16 @@ const loadingState = computed<LoadingTextState>(() => ({
                                 :current-index="seriesIndex"
                             />
 
-                            <!-- 重试按钮 -->
+                            <!-- 失败操作按钮：输入相关错误回首页改链接，其他错误可重试 -->
                             <button
-                                v-if="isFailed"
+                                v-if="isFailed && isInputError"
+                                class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
+                                @click="goHome"
+                            >
+                                <span>换个链接</span>
+                            </button>
+                            <button
+                                v-else-if="isFailed"
                                 class="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
                                 @click="handleRetry"
                             >
@@ -178,15 +197,14 @@ const loadingState = computed<LoadingTextState>(() => ({
                         </div>
                     </div>
 
-                    <!-- 进度指示器 -->
+                    <!-- 失败原因（友好消息，红框展示） -->
                     <div
-                        v-if="isProcessing"
-                        class="mt-4 p-4 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-lg"
+                        v-if="isFailed && errorMessage"
+                        class="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg"
                     >
-                        <div class="flex items-center gap-3">
-                            <div class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
-                            <span class="text-sm text-gray-600 dark:text-gray-300">{{ progressText }}</span>
-                        </div>
+                        <p class="text-sm text-red-700 dark:text-red-300">
+                            {{ errorMessage }}
+                        </p>
                     </div>
                 </div>
 
@@ -301,7 +319,7 @@ const loadingState = computed<LoadingTextState>(() => ({
                         :icon="IconSubtitles"
                         :is-visible="isSectionVisible('subtitle')"
                         :is-loading="workspaceStatus === 'processing' && !transcript"
-                        :loading-text="progressText || '正在转录...'"
+                        :loading-text="getLoadingText('subtitle', loadingState)"
                     >
                         <SubtitleSection
                             :content="transcript"
