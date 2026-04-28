@@ -29,7 +29,7 @@ defineEmits<{
         >
             <AppLogo :size="variant === 'result' ? '6' : '5'" />
             <h2 class="text-lg font-bold leading-tight tracking-tight-sm text-gray-900 dark:text-white">
-                Prism 棱镜
+                Gist
             </h2>
         </RouterLink>
         <button
