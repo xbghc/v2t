@@ -185,11 +185,14 @@ def format_segments(segments: list) -> str:
     return "\n".join(lines)
 
 
-async def _transcribe_audio_whisper(
+async def _transcribe_audio_whisper_raw(
     audio_path: Path,
     language: str | None = None,
-) -> str:
-    """使用 Whisper API 转写音频文件"""
+):
+    """调用 Whisper API 返回原始 verbose_json 响应（含 segments 字段）
+
+    内部使用。stt/whisper.py 直接消费该结果以做时间戳重映射。
+    """
     settings = get_settings()
     client = get_whisper_client()
 
@@ -203,7 +206,7 @@ async def _transcribe_audio_whisper(
             if language:
                 kwargs["language"] = language
 
-            response = await client.audio.transcriptions.create(**kwargs)
+            return await client.audio.transcriptions.create(**kwargs)
     except openai.RateLimitError:
         raise TranscribeError("转录 API 配额已用尽，请稍后重试")
     except openai.APIConnectionError:
@@ -212,6 +215,14 @@ async def _transcribe_audio_whisper(
         raise TranscribeError("转录 API 请求超时")
     except openai.APIError as e:
         raise TranscribeError(f"转录 API 错误: {e.message}")
+
+
+async def _transcribe_audio_whisper(
+    audio_path: Path,
+    language: str | None = None,
+) -> str:
+    """使用 Whisper API 转写音频文件，返回带时间戳的字符串"""
+    response = await _transcribe_audio_whisper_raw(audio_path, language)
 
     if hasattr(response, "segments") and response.segments:
         return format_segments(response.segments)

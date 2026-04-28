@@ -28,7 +28,8 @@ class Workspace:
     title: str = ""
     status: WorkspaceStatus = WorkspaceStatus.PENDING
     progress: str = "等待处理..."
-    error: str = ""
+    error: str = ""  # 用户可读的友好消息（不含技术细节，可直接展示）
+    error_kind: str = ""  # 分类：video_too_long / download_failed / transcribe_failed / unknown
     resources: list[WorkspaceResource] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     last_accessed_at: float = field(default_factory=time.time)

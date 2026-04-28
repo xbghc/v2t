@@ -94,6 +94,7 @@ async def create_workspace_from_transcript(
         name="transcript",
         resource_type=ResourceType.TEXT,
         storage_key=transcript_key,
+        ready=True,
     )
     workspace.add_resource(transcript_resource)
 
@@ -123,27 +124,31 @@ async def stream_workspace_status(
         raise HTTPException(status_code=404, detail="工作区不存在")
 
     async def generate():
-        # 先订阅 Redis Pub/Sub channel（在读取当前状态之前！）
-        # 这样即使 worker 在我们读取状态后立即发布消息，也不会丢失
+        # 先订阅 channel，再读当前状态，避免错过 worker 在中间发布的消息
         redis = get_redis()
         pubsub = redis.pubsub()
         channel = f"workspace:{workspace_id}:status"
         await pubsub.subscribe(channel)
-        logger.info("工作区 %s SSE 已连接，当前状态: %s", workspace_id, workspace.status.value)
+        logger.info(
+            "工作区 %s SSE 已连接，当前状态: %s",
+            workspace_id, workspace.status.value,
+        )
 
         try:
-            # 发送当前状态
+            # 初始 snapshot（envelope 格式，与后续推送一致）
             current = await get_workspace(workspace_id)
             if not current:
                 return
             response = await build_workspace_response(current)
-            yield f"data: {response.model_dump_json()}\n\n"
+            initial = json.dumps({
+                "type": "workspace",
+                "data": response.model_dump(mode="json"),
+            })
+            yield f"data: {initial}\n\n"
 
-            # 如果已完成或失败，直接返回
             if current.status in (WorkspaceStatus.READY, WorkspaceStatus.FAILED):
                 return
 
-            # 持续监听状态变化
             while True:
                 if await request.is_disconnected():
                     break
@@ -153,11 +158,16 @@ async def stream_workspace_status(
                 if message is not None and message["type"] == "message":
                     data_str = message["data"]
                     yield f"data: {data_str}\n\n"
-                    data = json.loads(data_str)
-                    if data.get("status") in ("ready", "failed"):
-                        break
+                    try:
+                        envelope = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+                    # 仅 workspace envelope 中的终态触发收尾
+                    if envelope.get("type") == "workspace":
+                        ws_data = envelope.get("data", {})
+                        if ws_data.get("status") in ("ready", "failed"):
+                            break
                 else:
-                    # 超时，发心跳
                     yield sse_heartbeat()
         finally:
             await pubsub.unsubscribe(channel)

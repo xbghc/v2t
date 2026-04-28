@@ -18,7 +18,7 @@ from app.services.llm import (
     generate_podcast_script_stream,
 )
 from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
-from app.storage import get_file_storage, get_workspace, save_workspace
+from app.storage import add_workspace_resource, get_file_storage, get_workspace
 from app.utils.sse import sse_data, sse_response
 
 logger = logging.getLogger(__name__)
@@ -74,8 +74,9 @@ async def save_text_resource(
         ready=True,
     )
     workspace.add_resource(resource)
-    # 持久化到存储
-    await save_workspace(workspace)
+    # 用原子追加而非全量 save_workspace：多个流式生成并发完成时，
+    # 全量 save 会用各自的 in-memory 副本互相覆盖，导致先完成的资源丢失
+    await add_workspace_resource(workspace.workspace_id, resource)
     return resource
 
 
@@ -208,8 +209,8 @@ async def stream_podcast(
                     ready=True,
                 )
                 workspace.add_resource(audio_resource)
-                # 持久化到存储
-                await save_workspace(workspace)
+                # 原子追加，避免与并发生成的 outline/article 互相覆盖
+                await add_workspace_resource(workspace.workspace_id, audio_resource)
                 yield sse_data({"done": True, "has_audio": True, "audio_resource_id": audio_resource_id})
             except PodcastTTSError as e:
                 logger.warning("工作区 %s 播客音频合成失败: %s", workspace_id, e)

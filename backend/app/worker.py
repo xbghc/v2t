@@ -40,11 +40,64 @@ async def cleanup_old_files_job(ctx: dict) -> None:
         logger.info("清理过期临时目录: %d 个", cleaned)
 
 
+_INFLIGHT_STATUSES = {"processing", "downloading", "transcribing"}
+
+
+async def _mark_inflight_workspaces_failed(redis) -> int:
+    """把 Redis 里所有非终态的 workspace 标 failed（worker 重启场景）
+
+    背景：worker 进程崩溃/重启时，进行中的 workspace 在 Redis 里仍然是
+    processing 状态，但实际已无任务在跑——前端 SSE 一直挂着等不到结束。
+    新 worker 启动时清理这些"幽灵任务"，让前端能收到 failed 终态。
+    """
+    cleaned = 0
+    cursor = 0
+    while True:
+        cursor, keys = await redis.scan(cursor, match="workspace:*", count=100)
+        for key in keys:
+            tail = key[len("workspace:"):]
+            # 跳过子键：workspace:{id}:resources / workspace:lookup:* 等
+            if ":" in tail or tail.startswith("lookup"):
+                continue
+            status = await redis.hget(key, "status")
+            if status in _INFLIGHT_STATUSES:
+                await redis.hset(key, mapping={
+                    "status": "failed",
+                    "error": "worker 重启，任务中断",
+                    "progress": "已中断",
+                })
+                cleaned += 1
+        if cursor == 0:
+            break
+    return cleaned
+
+
 async def startup(ctx: dict) -> None:
     """Worker 启动时初始化"""
+    import asyncio
+
     from loguru import logger
 
     logger.info("arq worker 启动")
+
+    # 1. 预热 silero-vad ONNX runtime（避免首个请求冷启动 ~1-2s）
+    try:
+        from app.services.vad import _load_model
+
+        await asyncio.to_thread(_load_model)
+        logger.info("silero-vad 已预热")
+    except Exception as e:
+        logger.warning("silero-vad 预热失败（不影响启动）: %s", e)
+
+    # 2. 清理上次未完成的 in-flight workspace（worker 崩溃/重启场景）
+    try:
+        from app.storage import get_redis
+
+        cleaned = await _mark_inflight_workspaces_failed(get_redis())
+        if cleaned > 0:
+            logger.warning("清理 in-flight 工作区 %d 个（worker 重启）", cleaned)
+    except Exception as e:
+        logger.warning("in-flight 清理失败（不影响启动）: %s", e)
 
 
 async def shutdown(ctx: dict) -> None:
@@ -67,6 +120,6 @@ class WorkerSettings:
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = 3
-    job_timeout = 1800  # 30 分钟
+    job_timeout = 3600  # 1 小时；与 max_video_duration=4h 匹配（实际 4h 视频约 10-15min 跑完）
 
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

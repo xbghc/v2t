@@ -42,7 +42,8 @@ class WorkspaceResponse(BaseModel):
     title: str
     status: str  # pending, processing, ready, failed
     progress: str
-    error: str
+    error: str  # 用户可读的友好消息
+    error_kind: str = ""  # video_too_long / download_failed / transcribe_failed / unknown / ""(无错误)
     resources: list[WorkspaceResourceResponse]
     created_at: float
     last_accessed_at: float

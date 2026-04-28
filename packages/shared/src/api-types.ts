@@ -38,6 +38,18 @@ export type StatusStreamEvent =
     | { type: 'workspace'; data: WorkspaceResponse }
     | { type: 'transcript.append'; data: TranscriptSegmentMessage }
 
+// 失败原因分类（决定 UI 行为：是否给重试按钮等）
+//   video_too_long    — 视频时长超限（重试无意义，应改链接）
+//   download_failed   — 下载失败（建议重试）
+//   transcribe_failed — 转录失败（建议重试）
+//   unknown           — 未分类
+export type WorkspaceErrorKind =
+    | ''
+    | 'video_too_long'
+    | 'download_failed'
+    | 'transcribe_failed'
+    | 'unknown'
+
 // GET /api/workspaces/{id} 响应
 export interface WorkspaceResponse {
     workspace_id: string
@@ -45,7 +57,8 @@ export interface WorkspaceResponse {
     title: string
     status: WorkspaceStatus
     progress: string
-    error: string
+    error: string  // 用户可读的友好消息（直接展示）
+    error_kind: WorkspaceErrorKind  // 机器可读分类
     resources: WorkspaceResource[]
     created_at: number
     last_accessed_at: number
