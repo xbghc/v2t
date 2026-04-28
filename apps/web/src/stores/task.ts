@@ -149,6 +149,7 @@ export const useTaskStore = defineStore('task', () => {
     const progressText = computed(() => wsCtx.progressText)
     const progressTitle = computed(() => wsCtx.progressTitle)
     const errorMessage = computed(() => wsCtx.errorMessage)
+    const errorKind = computed(() => wsCtx.errorKind)
     const videoUrl = computed(() => wsCtx.videoUrl)
     const transcript = computed(() => wsCtx.transcript)
 
@@ -331,6 +332,7 @@ export const useTaskStore = defineStore('task', () => {
             type: 'STATUS_UPDATE',
             status: data.status,
             error: data.error || undefined,
+            errorKind: data.error_kind || undefined,
         })
 
         // 系列元数据（首次推送时落定，后续不再变）
@@ -367,22 +369,19 @@ export const useTaskStore = defineStore('task', () => {
         }
     }
 
-    const handleStatusStreamUpdate = (data: WorkspaceResponse): void => {
-        updateWorkspaceState(data)
-
-        if (data.status === 'ready') {
-            stopStatusStream()
-            startGenerating(wsCtx.workspaceId!)
-        } else if (data.status === 'failed') {
-            stopStatusStream()
-        }
-    }
-
     const startStatusStream = (id: string): void => {
         stopStatusStream()
         statusStreamCleanup = streamWorkspaceStatus(
             id,
-            handleStatusStreamUpdate,
+            (data) => {
+                updateWorkspaceState(data)
+                if (data.status === 'ready') {
+                    stopStatusStream()
+                    startGenerating(id)
+                } else if (data.status === 'failed') {
+                    stopStatusStream()
+                }
+            },
             (err) => console.error('状态流错误:', err),
             (segment) => {
                 sendWorkspace({ type: 'APPEND_TRANSCRIPT', segment })
@@ -653,6 +652,7 @@ export const useTaskStore = defineStore('task', () => {
         workspaceStatus,
         currentTab,
         errorMessage,
+        errorKind,
         progressText,
         progressTitle,
         title,
