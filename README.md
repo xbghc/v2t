@@ -30,8 +30,8 @@ OPENAI_MODEL=deepseek-reasoner
 
 # 语音转录 (OpenAI Whisper 兼容: Groq、OpenAI、自托管 Qwen3-ASR 等)
 WHISPER_API_KEY=xxx
-WHISPER_BASE_URL=xxx                         # 必填，无默认值
-WHISPER_MODEL=xxx
+WHISPER_BASE_URL=https://api.groq.com/openai/v1   # Groq 端点；自托管换成自己的
+WHISPER_MODEL=whisper-large-v3-turbo              # Groq 推荐 turbo（vs v3：免费配额一样，快 14%、付费便宜 64%）
 
 # 其他服务
 XIAZAITOOL_TOKEN=xxx                         # 视频链接解析

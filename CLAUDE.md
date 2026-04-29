@@ -186,7 +186,7 @@ OPENAI_MODEL         # 模型名称 (默认: deepseek-reasoner)
 # Whisper 兼容 API (语音转录)
 WHISPER_API_KEY      # API 密钥
 WHISPER_BASE_URL     # API 端点 (必填，无默认值)
-WHISPER_MODEL        # 模型名称 (必填)
+WHISPER_MODEL        # 模型名称 (Groq 推荐 whisper-large-v3-turbo)
 
 # Redis
 REDIS_URL            # Redis 连接 (默认: redis://localhost:6379)
