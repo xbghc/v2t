@@ -185,10 +185,7 @@ async def process_workspace(workspace_id: str, url: str) -> None:
         transcript_lines: list[str] = []
         last_pushed_chunk = -1
 
-        audio_duration_hint = int(duration) if duration else None
-        async for seg in transcribe_stream(
-            chunks_iter, language=None, audio_duration=audio_duration_hint
-        ):
+        async for seg in transcribe_stream(chunks_iter, language=None):
             transcript_lines.append(f"[{format_timestamp(seg.start)}] {seg.text}")
             await _publish_transcript_segment(workspace_id, seg)
 

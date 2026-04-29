@@ -1,53 +1,67 @@
-"""Whisper / OpenAI 兼容 API（含 Groq、自托管 Qwen3-ASR）的切片伪流式 Provider"""
+"""Whisper / OpenAI 兼容 API（含 Groq、自托管 Qwen3-ASR）的单 chunk Provider
+
+并发与 fallback 由 router 控制；本 provider 只负责转录单个切片，
+撞 RateLimitError 时把 retry-after 转译为 ProviderRateLimited 抛给 router。
+"""
 
 import logging
-from collections.abc import AsyncIterator
+
+import openai
 
 from app.services.transcribe import (
     _transcribe_audio_whisper_raw,
     check_whisper_api,
 )
 
-from ._pool import concurrent_transcribe_chunks
-from .base import AudioChunk, TranscribeContext, TranscriptSegment
-
-# TranscribeError 直接复用 transcribe.py 的定义（在 _transcribe_audio_whisper_raw 中抛出）
+from .base import (
+    AudioChunk,
+    ProviderRateLimited,
+    TranscribeContext,
+    TranscriptSegment,
+)
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_CONCURRENCY = 4
+DEFAULT_RATE_LIMIT_COOLDOWN = 60.0  # retry-after 缺失时的兜底 cooldown
 
 
 class WhisperProvider:
-    """切片 + 并发 HTTP API 调用（伪流式）"""
+    """OpenAI/Groq/Qwen3-ASR 等 Whisper 兼容端点 — 单 chunk HTTP 调用"""
 
     name = "whisper"
-
-    # 1h 软上限：Groq free 等限额端点 RPM/quota 保护；自托管 Qwen3-ASR 等可在
-    # 配置层覆盖。超过此值的音频会路由到下一个 candidate（DashScope）或拒绝。
-    max_audio_duration: int | None = 3600
-
-    def __init__(self, max_concurrency: int = DEFAULT_MAX_CONCURRENCY) -> None:
-        self.max_concurrency = max_concurrency
 
     async def is_available(self) -> tuple[bool, str]:
         return await check_whisper_api()
 
-    async def transcribe_stream(
+    async def transcribe_chunk(
         self,
-        chunks: AsyncIterator[AudioChunk],
+        chunk: AudioChunk,
         context: TranscribeContext,
-    ) -> AsyncIterator[TranscriptSegment]:
-        async def _transcribe_one(chunk: AudioChunk) -> list[TranscriptSegment]:
+    ) -> list[TranscriptSegment]:
+        try:
             response = await _transcribe_audio_whisper_raw(
                 chunk.path, context.language
             )
-            return _response_to_segments(response, chunk)
+        except openai.RateLimitError as e:
+            raise ProviderRateLimited(
+                retry_after=_extract_retry_after(e),
+                provider_name=self.name,
+            ) from e
+        return _response_to_segments(response, chunk)
 
-        async for seg in concurrent_transcribe_chunks(
-            chunks, _transcribe_one, max_concurrency=self.max_concurrency
-        ):
-            yield seg
+
+def _extract_retry_after(error: openai.RateLimitError) -> float:
+    """从 RateLimitError 拿 Retry-After header；缺失时用兜底"""
+    response = getattr(error, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", None) or {}
+        raw = headers.get("retry-after") or headers.get("Retry-After")
+        if raw:
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                pass
+    return DEFAULT_RATE_LIMIT_COOLDOWN
 
 
 def _response_to_segments(response, chunk: AudioChunk) -> list[TranscriptSegment]:

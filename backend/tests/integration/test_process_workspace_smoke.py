@@ -2,7 +2,7 @@
 
 mock 掉网络相关：
     - download_video → 返回指向预合成 mp4 的 VideoResult
-    - STT provider transcribe_stream → 假 segments
+    - STT provider transcribe_chunk → 假 segments
     - Redis（hash/list/pubsub）+ FileStorage → 内存版
 
 真用：silero-vad、ffmpeg（VAD + 切片）。
@@ -17,7 +17,6 @@ mock 掉网络相关：
 import json
 import shutil
 import subprocess
-from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -84,18 +83,22 @@ class _FakeProvider:
 
     name = "fake"
 
-    async def transcribe_stream(
+    async def is_available(self) -> tuple[bool, str]:
+        return True, "OK"
+
+    async def transcribe_chunk(
         self,
-        chunks: AsyncIterator[AudioChunk],
+        chunk: AudioChunk,
         context: TranscribeContext,
-    ) -> AsyncIterator[TranscriptSegment]:
-        async for c in chunks:
-            yield TranscriptSegment(
-                start=c.start,
-                end=c.end,
-                text=f"fake-text-{c.index}",
-                chunk_index=c.index,
+    ) -> list[TranscriptSegment]:
+        return [
+            TranscriptSegment(
+                start=chunk.start,
+                end=chunk.end,
+                text=f"fake-text-{chunk.index}",
+                chunk_index=chunk.index,
             )
+        ]
 
 
 @pytest.fixture
@@ -140,10 +143,12 @@ def smoke_env(tmp_path: Path, synthetic_mp4: Path, monkeypatch):
     # build_workspace_response 内部读取 TEXT content 时也用 storage
     monkeypatch.setattr("app.utils.response.get_file_storage", lambda: storage)
 
-    # 把 STT 路由到假 provider（select_provider 现在接受 audio_duration 路由参数）
+    # 把 STT router 的 candidate 列表 mock 成只有假 provider
+    from app.services.stt.router import reset_router
+    reset_router()
     monkeypatch.setattr(
-        "app.services.stt.select_provider",
-        lambda audio_duration=None: _FakeProvider(),
+        "app.services.stt.router._build_candidates",
+        lambda: [_FakeProvider()],
     )
 
     # 让 max_video_duration 不卡 70s 测试音频

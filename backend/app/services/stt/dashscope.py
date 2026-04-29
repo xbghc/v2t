@@ -1,13 +1,16 @@
-"""DashScope Paraformer 切片伪流式 Provider
+"""DashScope Paraformer 单 chunk Provider
 
-注：DashScope paraformer-realtime-v2 本身基于 WebSocket，原生支持流式（帧推送 + 增量回调）。
-当前实现走切片 + 整文件 SDK call 的伪流式路径，与 Whisper 行为一致；
-未来若要切到原生流式，替换本文件即可，对外 API 不变。
+注：DashScope paraformer-realtime-v2 本身基于 WebSocket，原生支持流式。
+当前实现走整文件 SDK call 的伪流式路径（与 Whisper 行为一致），
+未来切原生流式只需替换本文件，对外 API 不变。
+
+并发与 fallback 由 router 控制；本 provider 只转录单 chunk，
+撞 HTTP 429 时抛 ProviderRateLimited（默认 60s cooldown，
+DashScope SDK 不暴露 Retry-After header）。
 """
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
 from http import HTTPStatus
 
 import dashscope
@@ -17,12 +20,16 @@ from app.config import get_settings
 from app.services.dashscope_stt import check_dashscope_stt
 from app.services.transcribe import TranscribeError
 
-from ._pool import concurrent_transcribe_chunks
-from .base import AudioChunk, TranscribeContext, TranscriptSegment
+from .base import (
+    AudioChunk,
+    ProviderRateLimited,
+    TranscribeContext,
+    TranscriptSegment,
+)
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAX_CONCURRENCY = 4
+RATE_LIMIT_COOLDOWN = 60.0  # DashScope SDK 不暴露 Retry-After，统一用 60s
 
 
 class _NoopCallback(RecognitionCallback):
@@ -36,33 +43,19 @@ class _NoopCallback(RecognitionCallback):
 
 
 class DashScopeProvider:
-    """切片 + 阿里云 Paraformer 同步整文件识别"""
+    """阿里云 Paraformer 同步整文件识别 — 单 chunk 接口"""
 
     name = "dashscope"
-
-    # paraformer 长录音离线接口可处理多小时音频，阿里云配额按调用付费，无单次时长上限
-    max_audio_duration: int | None = None
-
-    def __init__(self, max_concurrency: int = DEFAULT_MAX_CONCURRENCY) -> None:
-        self.max_concurrency = max_concurrency
 
     async def is_available(self) -> tuple[bool, str]:
         return await check_dashscope_stt()
 
-    async def transcribe_stream(
+    async def transcribe_chunk(
         self,
-        chunks: AsyncIterator[AudioChunk],
+        chunk: AudioChunk,
         context: TranscribeContext,
-    ) -> AsyncIterator[TranscriptSegment]:
-        async def _transcribe_one(chunk: AudioChunk) -> list[TranscriptSegment]:
-            return await asyncio.to_thread(
-                _call_recognition, chunk, context.language
-            )
-
-        async for seg in concurrent_transcribe_chunks(
-            chunks, _transcribe_one, max_concurrency=self.max_concurrency
-        ):
-            yield seg
+    ) -> list[TranscriptSegment]:
+        return await asyncio.to_thread(_call_recognition, chunk, context.language)
 
 
 def _call_recognition(
@@ -86,6 +79,11 @@ def _call_recognition(
     )
     result = recognition.call(str(chunk.path))
 
+    if result.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+        raise ProviderRateLimited(
+            retry_after=RATE_LIMIT_COOLDOWN,
+            provider_name="dashscope",
+        )
     if result.status_code != HTTPStatus.OK:
         raise TranscribeError(
             f"DashScope STT 失败 (HTTP {result.status_code}): {result.message}"

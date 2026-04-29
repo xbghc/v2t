@@ -61,29 +61,48 @@ class TranscribeContext:
     extra: dict = field(default_factory=dict)
 
 
-class STTProvider(Protocol):
-    """STT Provider 接口
+class ProviderRateLimited(Exception):
+    """Provider 撞流控信号 — Router 接到这个就把 provider 挂 cooldown 切下一个
 
-    实现可以是真流式（WebSocket / SSE）或伪流式（切片 + 并发）。
-    上层通过 transcribe_stream 函数路由到具体 Provider，对调用方完全透明。
+    retry_after 来自 HTTP `Retry-After` header（Whisper/Groq）；
+    DashScope 等没有该头的 provider 用一个固定默认值。
+    """
+
+    def __init__(self, retry_after: float, provider_name: str = "") -> None:
+        self.retry_after = retry_after
+        self.provider_name = provider_name
+        super().__init__(
+            f"{provider_name or 'provider'} rate limited (retry_after={retry_after:.1f}s)"
+        )
+
+
+class STTProvider(Protocol):
+    """STT Provider 接口 — 单 chunk 转录，Router 负责并发与 fallback
+
+    撞限流时抛 ProviderRateLimited，Router 接到后挂 cooldown 切下一个；
+    其他错误直接传播让整个流中止。
     """
 
     name: str
 
-    max_audio_duration: int | None
-    """单次任务推荐处理的音频时长上限（秒）；None 为无上限。
-
-    用于 select_provider 做时长路由：超过此值的音频不会被分派到该 Provider，
-    主要是防止 Groq free 等限额端点被长视频打爆 RPM/quota。
-    """
-
     async def is_available(self) -> tuple[bool, str]:
         """是否可用（API key 配置 + 端点可达）"""
 
-    async def transcribe_stream(
+    async def transcribe_chunk(
         self,
-        chunks: AsyncIterator[AudioChunk],
+        chunk: AudioChunk,
         context: TranscribeContext,
-    ) -> AsyncIterator[TranscriptSegment]:
-        """消费切片流，按时间顺序产出转录段"""
+    ) -> list[TranscriptSegment]:
+        """转录单个切片，返回该切片的所有句子段（绝对时间戳）"""
         ...
+
+
+# 兼容旧导入路径：transcribe_stream 是 router 模块的统一入口，
+# 但许多旧测试/调用者直接 from .base import ... — 此处不再导出 stream API
+__all__ = [
+    "AudioChunk",
+    "ProviderRateLimited",
+    "STTProvider",
+    "TranscribeContext",
+    "TranscriptSegment",
+]

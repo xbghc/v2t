@@ -145,9 +145,14 @@ def get_whisper_client() -> AsyncOpenAI:
             raise TranscribeError("WHISPER_BASE_URL 未配置")
         if not settings.whisper_api_key:
             raise TranscribeError("WHISPER_API_KEY 未配置")
+        # max_retries=0：让 RateLimitError 立刻抛给 ProviderRouter，
+        # 由 router 决定是切下一个 provider 还是 cooldown 当前的。
+        # SDK 默认 max_retries=2 会同步 sleep + 重试同一 provider，跟我们的
+        # circuit breaker 语义冲突。
         _whisper_client = AsyncOpenAI(
             base_url=settings.whisper_base_url,
             api_key=settings.whisper_api_key,
+            max_retries=0,
         )
     return _whisper_client
 
