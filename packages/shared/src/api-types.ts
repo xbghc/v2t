@@ -50,6 +50,25 @@ export type WorkspaceErrorKind =
     | 'transcribe_failed'
     | 'unknown'
 
+// 生成任务状态（后端 GenerationTask.status）
+export type GenerationStatus = 'pending' | 'running' | 'done' | 'failed'
+
+// 内容类型（与后端 generation_task 模块对齐）
+export type GenerationContentType = 'outline' | 'article' | 'podcast'
+
+// 生成任务响应：随 WorkspaceResponse 一起回来，前端用它恢复 SSE 续传
+export interface GenerationTaskResponse {
+    task_id: string
+    workspace_id: string
+    content_type: GenerationContentType
+    status: GenerationStatus
+    resource_id: string
+    audio_resource_id: string
+    audio_error: string
+    error: string
+    stream_url: string  // 消费端点，前端直接连 SSE
+}
+
 // GET /api/workspaces/{id} 响应
 export interface WorkspaceResponse {
     workspace_id: string
@@ -60,11 +79,16 @@ export interface WorkspaceResponse {
     error: string  // 用户可读的友好消息（直接展示）
     error_kind: WorkspaceErrorKind  // 机器可读分类
     resources: WorkspaceResource[]
+    generations: GenerationTaskResponse[]  // 各内容类型当前活跃 task
     created_at: number
     last_accessed_at: number
     // B 站分 P 系列元数据（非分 P 视频时为空字符串 + 0）
     series_bvid: string
     series_index: number
+    // 阶段耗时（秒）。已知 key：download / vad_first_cut / stt_first_segment /
+    // stt_total / total / audio_duration（视频本身时长，非阶段耗时）。
+    // 处理过程中按阶段完成增量出现，未完成的 key 不存在。
+    timings: Record<string, number>
 }
 
 // POST /api/workspaces 请求
@@ -113,4 +137,51 @@ export interface PromptsResponse {
 export interface StreamPrompts {
     systemPrompt: string
     userPrompt: string
+}
+
+// === 后台管理（运营统计） ===
+
+// POST /api/metrics/pageview 请求
+export interface PageviewRequest {
+    path: string
+    visitor_id: string
+}
+
+// 单日 PV/UV 数据点
+export interface AdminDailyPoint {
+    date: string  // YYYY-MM-DD
+    pv: number
+    uv: number
+}
+
+// GET /api/admin/stats 响应
+export interface AdminStatsResponse {
+    pv_total: number          // 累计总 PV
+    uv_total: number          // 全期独立访客
+    transcribe_total: number  // 转录总数（ready + failed）
+    ready_count: number
+    failed_count: number
+    success_rate: number      // 0~1
+    error_kind: Record<string, number>  // 失败原因分类计数
+    daily: AdminDailyPoint[]  // 最近 N 天趋势（旧 → 新）
+}
+
+// 一条转录历史快照
+export interface AdminHistoryItem {
+    workspace_id: string
+    url: string
+    title: string
+    status: WorkspaceStatus
+    error_kind: WorkspaceErrorKind
+    created_at: number
+    finished_at: number
+    timings: Record<string, number>  // 各阶段耗时（download / stt_total / total 等）
+}
+
+// GET /api/admin/history 响应
+export interface AdminHistoryResponse {
+    items: AdminHistoryItem[]
+    total: number
+    offset: number
+    limit: number
 }

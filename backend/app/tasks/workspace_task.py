@@ -8,7 +8,9 @@ SSE 消息体使用 envelope 格式：
 import asyncio
 import json
 import logging
+import time
 import uuid
+from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.models.entities import Workspace, WorkspaceResource
@@ -21,10 +23,37 @@ from app.services.streaming_pipeline import (
 )
 from app.services.stt import TranscribeError, TranscriptSegment, transcribe_stream
 from app.services.transcribe import _get_duration, format_timestamp
-from app.storage import get_file_storage, get_redis, get_workspace, save_workspace
+from app.storage import (
+    get_file_storage,
+    get_redis,
+    get_workspace,
+    record_workspace_history,
+    save_workspace,
+)
 from app.utils.response import build_workspace_response
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def time_stage(workspace: Workspace, key: str):
+    """记录阶段耗时到 workspace.timings[key]，退出时 save + publish 让前端实时看到。
+
+    异常路径同样写入（已耗费的时间也是有价值的诊断信号）。
+    """
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        workspace.timings[key] = round(time.monotonic() - start, 3)
+        try:
+            await save_workspace(workspace)
+            await _publish_workspace(workspace)
+        except Exception:
+            logger.exception(
+                "保存 timings 失败 (workspace=%s, key=%s)",
+                workspace.workspace_id, key,
+            )
 
 
 def _channel(workspace_id: str) -> str:
@@ -94,6 +123,21 @@ async def _mark_failed(
     workspace.progress = user_message
     await save_workspace(workspace)
     await _publish_workspace(workspace)
+    await _record_history_safe(workspace)
+
+
+async def _record_history_safe(workspace: Workspace) -> None:
+    """记录终态历史快照，失败只记日志（绝不影响 workspace 主流程状态）。
+
+    成功路径在 try 内调用，若直接抛异常会被外层兜底 except 误判为处理失败，
+    故这里统一吞掉异常。
+    """
+    try:
+        await record_workspace_history(workspace)
+    except Exception:
+        logger.exception(
+            "记录转录历史失败 (workspace=%s)", workspace.workspace_id
+        )
 
 
 async def _emit_resource(
@@ -130,87 +174,119 @@ async def process_workspace(workspace_id: str, url: str) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        # ===== Stage 1: 下载 =====
-        await update_workspace_status(
-            workspace, WorkspaceStatus.PROCESSING, "正在下载视频..."
-        )
-
-        # 节流：相同百分比不重复推。Provider 拿到字节进度时回调，频率不限。
-        last_pct = -1
-
-        async def on_download_progress(downloaded: int, total: int) -> None:
-            nonlocal last_pct
-            if total <= 0:
-                return
-            pct = int(downloaded * 100 / total)
-            if pct == last_pct:
-                return
-            last_pct = pct
-            mb_done = downloaded / (1024 * 1024)
-            mb_total = total / (1024 * 1024)
+        async with time_stage(workspace, "total"):
+            # ===== Stage 1: 下载 =====
             await update_workspace_status(
-                workspace,
-                WorkspaceStatus.PROCESSING,
-                f"正在下载 {pct}% ({mb_done:.1f}MB/{mb_total:.1f}MB)",
+                workspace, WorkspaceStatus.PROCESSING, "正在下载视频..."
             )
 
-        video = await download_video(
-            url, output_dir=output_dir, progress_callback=on_download_progress
-        )
-        workspace.title = video.title
-        url_hash = video.url_hash
+            # 节流：相同百分比不重复推。Provider 拿到字节进度时回调，频率不限。
+            last_pct = -1
 
-        duration = await asyncio.to_thread(_get_duration, video.path)
-        if duration and duration > settings.max_video_duration:
-            raise _VideoTooLongError(
-                video_minutes=int(duration // 60),
-                max_minutes=settings.max_video_duration // 60,
-            )
-
-        video_key = f"{url_hash}/video.mp4"
-        await storage.save_file(video_key, video.path)
-        await _emit_resource(workspace, "video", ResourceType.VIDEO, video_key)
-
-        # ===== Stage 2: 流式转录（VAD + 切片 + STT 并行） =====
-        # 抽取音频是转录链路的内部细节（stream_audio_chunks 内部按需 ffmpeg 抽 audio.mp3），
-        # 不再单独推状态 / emit audio 资源。
-        await update_workspace_status(
-            workspace, WorkspaceStatus.PROCESSING,
-            "正在转录...",
-        )
-
-        seg_state = SegmentationState()
-        chunks_iter = stream_audio_chunks(video, seg_state)
-
-        transcript_lines: list[str] = []
-        last_pushed_chunk = -1
-
-        async for seg in transcribe_stream(chunks_iter, language=None):
-            transcript_lines.append(f"[{format_timestamp(seg.start)}] {seg.text}")
-            await _publish_transcript_segment(workspace_id, seg)
-
-            if seg.chunk_index > last_pushed_chunk:
-                last_pushed_chunk = seg.chunk_index
-                total = seg_state.audio_duration or duration or 0
-                completed = seg.end
-                pct = int(completed / total * 100) if total else 0
+            async def on_download_progress(downloaded: int, total: int) -> None:
+                nonlocal last_pct
+                if total <= 0:
+                    return
+                pct = int(downloaded * 100 / total)
+                if pct == last_pct:
+                    return
+                last_pct = pct
+                mb_done = downloaded / (1024 * 1024)
+                mb_total = total / (1024 * 1024)
                 await update_workspace_status(
-                    workspace, WorkspaceStatus.PROCESSING,
-                    f"正在转录 {pct}% ({int(completed)}s/{int(total)}s)",
+                    workspace,
+                    WorkspaceStatus.PROCESSING,
+                    f"正在下载 {pct}% ({mb_done:.1f}MB/{mb_total:.1f}MB)",
                 )
 
-        # ===== Stage 5: 落盘 transcript =====
-        transcript_text = "\n".join(transcript_lines)
-        transcript_key = f"{url_hash}/transcript.txt"
-        await storage.save_bytes(transcript_key, transcript_text.encode("utf-8"))
-        await _emit_resource(
-            workspace, "transcript", ResourceType.TEXT, transcript_key,
-        )
+            async with time_stage(workspace, "download"):
+                video = await download_video(
+                    url, output_dir=output_dir, progress_callback=on_download_progress
+                )
+            workspace.title = video.title
+            url_hash = video.url_hash
 
-        await update_workspace_status(
-            workspace, WorkspaceStatus.READY, "转录完成，准备生成内容",
-        )
-        logger.info("工作区 %s 转录完成", workspace_id)
+            duration = await asyncio.to_thread(_get_duration, video.path)
+            if duration:
+                workspace.timings["audio_duration"] = round(duration, 3)
+            if duration and duration > settings.max_video_duration:
+                raise _VideoTooLongError(
+                    video_minutes=int(duration // 60),
+                    max_minutes=settings.max_video_duration // 60,
+                )
+
+            video_key = f"{url_hash}/video.mp4"
+            await storage.save_file(video_key, video.path)
+            await _emit_resource(workspace, "video", ResourceType.VIDEO, video_key)
+
+            # ===== Stage 2: 流式转录（VAD + 切片 + STT 并行） =====
+            # 抽取音频是转录链路的内部细节（stream_audio_chunks 内部按需 ffmpeg 抽 audio.mp3），
+            # 不再单独推状态 / emit audio 资源。
+            await update_workspace_status(
+                workspace, WorkspaceStatus.PROCESSING,
+                "正在转录...",
+            )
+
+            seg_state = SegmentationState()
+            chunks_iter = stream_audio_chunks(video, seg_state)
+
+            stt_t0 = time.monotonic()
+            first_chunk_at: float | None = None
+
+            async def _wrap_chunks(source):
+                nonlocal first_chunk_at
+                async for chunk in source:
+                    if first_chunk_at is None:
+                        first_chunk_at = time.monotonic()
+                        workspace.timings["vad_first_cut"] = round(
+                            first_chunk_at - stt_t0, 3
+                        )
+                    yield chunk
+
+            transcript_lines: list[str] = []
+            last_pushed_chunk = -1
+            first_seg_at: float | None = None
+
+            async for seg in transcribe_stream(
+                _wrap_chunks(chunks_iter), language=None
+            ):
+                if first_seg_at is None:
+                    first_seg_at = time.monotonic()
+                    base = first_chunk_at or stt_t0
+                    workspace.timings["stt_first_segment"] = round(
+                        first_seg_at - base, 3
+                    )
+
+                transcript_lines.append(f"[{format_timestamp(seg.start)}] {seg.text}")
+                await _publish_transcript_segment(workspace_id, seg)
+
+                if seg.chunk_index > last_pushed_chunk:
+                    last_pushed_chunk = seg.chunk_index
+                    total = seg_state.audio_duration or duration or 0
+                    completed = seg.end
+                    pct = int(completed / total * 100) if total else 0
+                    await update_workspace_status(
+                        workspace, WorkspaceStatus.PROCESSING,
+                        f"正在转录 {pct}% ({int(completed)}s/{int(total)}s)",
+                    )
+
+            workspace.timings["stt_total"] = round(time.monotonic() - stt_t0, 3)
+
+            # ===== Stage 5: 落盘 transcript =====
+            transcript_text = "\n".join(transcript_lines)
+            transcript_key = f"{url_hash}/transcript.txt"
+            await storage.save_bytes(transcript_key, transcript_text.encode("utf-8"))
+            await _emit_resource(
+                workspace, "transcript", ResourceType.TEXT, transcript_key,
+            )
+
+            await update_workspace_status(
+                workspace, WorkspaceStatus.READY, "转录完成，准备生成内容",
+            )
+            logger.info("工作区 %s 转录完成", workspace_id)
+
+        # time_stage 退出后 timings["total"] 已写入，此时落成功历史快照
+        await _record_history_safe(workspace)
 
     except _VideoTooLongError as e:
         await _mark_failed(

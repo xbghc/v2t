@@ -13,6 +13,9 @@ const taskStore = useTaskStore()
 // 判断是否为结果页
 const isResultPage = computed(() => route.name === 'workspace')
 
+// 判断是否为后台管理页（独立全屏布局，不套 Header/Footer/窄容器）
+const isAdminPage = computed(() => route.name === 'admin')
+
 // 新建任务并导航
 const handleNewTask = () => {
     taskStore.startNew()
@@ -22,7 +25,9 @@ const handleNewTask = () => {
 
 <template>
     <GlobalToast />
-    <div class="relative flex min-h-screen w-full flex-col">
+    <!-- Admin 页面自带完整布局 -->
+    <router-view v-if="isAdminPage" />
+    <div v-else class="relative flex min-h-screen w-full flex-col">
         <div class="layout-container flex h-full grow flex-col">
             <!-- Initial Page Layout -->
             <div
