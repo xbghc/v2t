@@ -11,7 +11,7 @@ const router = useRouter()
 const taskStore = useTaskStore()
 
 // 判断是否为结果页
-const isResultPage = computed(() => route.name === 'task')
+const isResultPage = computed(() => route.name === 'workspace')
 
 // 新建任务并导航
 const handleNewTask = () => {
