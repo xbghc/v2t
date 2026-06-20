@@ -5,10 +5,9 @@ import {
     createWorkspace,
     getWorkspace,
     getDefaultPrompts,
-    streamOutline,
-    streamArticle,
-    streamPodcast,
-    streamWorkspaceStatus
+    startGeneration,
+    consumeGenerationStream,
+    streamWorkspaceStatus,
 } from '@/api/workspace'
 import { useToastStore } from '@/stores/toast'
 import {
@@ -22,6 +21,7 @@ import type {
     WorkspaceStatus,
     WorkspaceResponse,
     WorkspaceResource,
+    GenerationTaskResponse,
     ContentType,
     CurrentTab,
     CustomPrompts,
@@ -32,12 +32,6 @@ import type {
 
 // 所有内容类型
 const CONTENT_TYPES: ContentType[] = ['outline', 'article', 'podcast']
-
-// 流式 API 函数映射（outline/article 共用签名）
-const SIMPLE_STREAM_FN = {
-    outline: streamOutline,
-    article: streamArticle,
-} as const
 
 // 提示词字段映射
 const PROMPT_KEYS: Record<ContentType, { system: keyof CustomPrompts; user: keyof CustomPrompts }> = {
@@ -152,6 +146,7 @@ export const useTaskStore = defineStore('task', () => {
     const errorKind = computed(() => wsCtx.errorKind)
     const videoUrl = computed(() => wsCtx.videoUrl)
     const transcript = computed(() => wsCtx.transcript)
+    const timings = computed(() => wsCtx.timings)
 
     // 内容流式状态
     const outlineStreaming = computed(() => contentStates.outline === 'streaming')
@@ -245,54 +240,51 @@ export const useTaskStore = defineStore('task', () => {
 
     // ==================== 核心流式逻辑 ====================
 
-    function startSingleContentStream(wsId: string, type: ContentType): void {
-        // 如果已在流式中，不重复启动
+    function resumeGeneration(task: GenerationTaskResponse): void {
+        // 防重入：本类型已经在流式中（如 streamWorkspaceStatus 和 loadWorkspaceById 同时触发）
+        const type = task.content_type as ContentType
         if (contentStates[type] === 'streaming' || contentStates[type] === 'synthesizing') return
 
         sendContent(type, { type: 'START' })
-        const promptPair = getPromptsForType(type)
+        streamCleanups[type] = consumeGenerationStream(task.stream_url, {
+            onChunk: (text) => sendContent(type, { type: 'CHUNK', content: text }),
+            onSynthesizing: () => {
+                if (type === 'podcast') {
+                    sendContent('podcast', { type: 'SYNTHESIZE_START' })
+                }
+            },
+            onDone: (payload) => {
+                sendContent(type, {
+                    type: 'COMPLETE',
+                    audioUrl: payload.hasAudio && payload.audioResourceId
+                        ? `/api/workspaces/${task.workspace_id}/resources/${payload.audioResourceId}`
+                        : undefined,
+                    audioError: payload.audioError,
+                })
+                checkAllStreamingDone()
+            },
+            onError: (err) => {
+                console.error(`${type}生成失败:`, err)
+                sendContent(type, { type: 'FAIL', error: err })
+                checkAllStreamingDone()
+            },
+        })
+    }
 
-        if (type === 'podcast') {
-            streamCleanups.podcast = streamPodcast(
-                wsId,
-                promptPair,
-                () => {},
-                (chunk) => sendContent('podcast', { type: 'CHUNK', content: chunk }),
-                () => {},
-                () => sendContent('podcast', { type: 'SYNTHESIZE_START' }),
-                (hasAudio, audioResourceId, audioErr) => {
-                    sendContent('podcast', {
-                        type: 'COMPLETE',
-                        audioUrl: hasAudio && audioResourceId
-                            ? `/api/workspaces/${wsId}/resources/${audioResourceId}`
-                            : undefined,
-                        audioError: audioErr,
-                    })
-                    checkAllStreamingDone()
-                },
-                (err) => {
-                    console.error('播客生成失败:', err)
-                    sendContent('podcast', { type: 'FAIL', error: err })
-                    checkAllStreamingDone()
-                }
-            )
-        } else {
-            const streamFn = SIMPLE_STREAM_FN[type]
-            streamCleanups[type] = streamFn(
-                wsId,
-                promptPair,
-                () => {},
-                (chunk) => sendContent(type, { type: 'CHUNK', content: chunk }),
-                () => {
-                    sendContent(type, { type: 'COMPLETE' })
-                    checkAllStreamingDone()
-                },
-                (err) => {
-                    console.error(`${type}生成失败:`, err)
-                    sendContent(type, { type: 'FAIL', error: err })
-                    checkAllStreamingDone()
-                }
-            )
+    async function startSingleContentStream(wsId: string, type: ContentType): Promise<void> {
+        if (contentStates[type] === 'streaming' || contentStates[type] === 'synthesizing') return
+
+        const promptPair = getPromptsForType(type)
+        try {
+            const task = await startGeneration(wsId, type, promptPair)
+            // task 可能是新建的，也可能是已有的（后端启动端点幂等）
+            // 都走同一个消费路径——续传场景下后端会 replay 已有 chunk
+            resumeGeneration(task)
+        } catch (e) {
+            const msg = (e as Error).message || '启动生成失败'
+            sendContent(type, { type: 'START' })
+            sendContent(type, { type: 'FAIL', error: msg })
+            checkAllStreamingDone()
         }
     }
 
@@ -302,7 +294,7 @@ export const useTaskStore = defineStore('task', () => {
         let started = false
         for (const type of CONTENT_TYPES) {
             if (shouldAutoGenerate(type)) {
-                startSingleContentStream(wsId, type)
+                void startSingleContentStream(wsId, type)
                 started = true
             }
         }
@@ -347,6 +339,7 @@ export const useTaskStore = defineStore('task', () => {
             videoUrl: getResourceUrl(resources, 'video'),
             transcript: getResourceContent(resources, 'transcript'),
             progressText: data.progress || undefined,
+            timings: data.timings,
         })
 
         // 加载已有的生成内容到内容机器
@@ -366,6 +359,13 @@ export const useTaskStore = defineStore('task', () => {
         const podcastAudioResource = getResourceUrl(resources, 'podcast')
         if (podcastAudioResource) {
             contentCtxs.podcast.audioUrl = podcastAudioResource
+        }
+
+        // 从 generations 同步 TTS 失败信息（脚本成功但 TTS 失败时后端在 task 上单独记）
+        for (const gen of data.generations) {
+            if (gen.content_type === 'podcast' && gen.audio_error) {
+                contentCtxs.podcast.audioError = gen.audio_error
+            }
         }
     }
 
@@ -573,7 +573,7 @@ export const useTaskStore = defineStore('task', () => {
         if (type === 'article') generateOptions.article = true
         if (type === 'podcast') generateOptions.podcast = true
 
-        startSingleContentStream(wsId, type)
+        void startSingleContentStream(wsId, type)
     }
 
     const loadWorkspaceById = async (id: string): Promise<boolean> => {
@@ -591,6 +591,7 @@ export const useTaskStore = defineStore('task', () => {
                 videoUrl: getResourceUrl(data.resources, 'video'),
                 transcript: getResourceContent(data.resources, 'transcript'),
                 progressText: data.progress || undefined,
+                timings: data.timings,
             })
             // 手动设置 workspaceId（LOAD_WORKSPACE 不设置 id）
             wsCtx.workspaceId = id
@@ -619,17 +620,48 @@ export const useTaskStore = defineStore('task', () => {
                 wsCtx.errorMessage = data.error
             }
 
-            // 根据 status + resources 决定行为
-            const hasContent = CONTENT_TYPES.some(t => !!contentMap[t])
+            // 从 generations 同步 TTS 失败信息
+            for (const gen of data.generations) {
+                if (gen.content_type === 'podcast' && gen.audio_error) {
+                    contentCtxs.podcast.audioError = gen.audio_error
+                }
+            }
 
-            if (data.status === 'ready' && hasContent) {
-                // resources 已有内容 → 直接显示，不重新生成
-                handleTaskComplete()
-            } else if (data.status === 'ready') {
-                // 无内容 → 正常启动生成
-                startGenerating(id)
+            // 1. 恢复进行中的 generation（pending/running 走 SSE 续读）
+            const activeGenerations = data.generations.filter(
+                g => g.status === 'pending' || g.status === 'running'
+            )
+            if (activeGenerations.length > 0) {
+                generationStarted = true
+                for (const gen of activeGenerations) {
+                    resumeGeneration(gen)
+                }
+            }
+
+            // 2. 失败的 generation：UI 显示 failed 状态（用户决定是否重试）
+            for (const gen of data.generations) {
+                const type = gen.content_type as ContentType
+                if (gen.status === 'failed' && !contentCtxs[type].finalContent) {
+                    sendContent(type, { type: 'START' })
+                    sendContent(type, { type: 'FAIL', error: gen.error || '生成失败' })
+                }
+            }
+
+            // 3. 决定是否还需要启动新生成或监听状态
+            const hasContent = CONTENT_TYPES.some(t => !!contentMap[t])
+            const hasResumed = activeGenerations.length > 0
+
+            if (data.status === 'ready') {
+                if (hasResumed) {
+                    // 已在续流，等结果
+                } else if (hasContent) {
+                    handleTaskComplete()
+                } else {
+                    // 无 active task 也无内容 → 按 generateOptions 启动
+                    startGenerating(id)
+                }
             } else if (data.status !== 'failed') {
-                // 还在处理中 → 监听 SSE
+                // transcript 阶段 → 监听状态 SSE
                 startStatusStream(id)
             }
 
@@ -658,6 +690,7 @@ export const useTaskStore = defineStore('task', () => {
         title,
         videoUrl,
         transcript,
+        timings,
         seriesBvid,
         seriesIndex,
         // 生成内容

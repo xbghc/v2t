@@ -1,222 +1,130 @@
-"""流式生成路由"""
+"""生成任务的启动与消费端点
 
+设计：把"启动生成"和"订阅 SSE"拆成两个独立端点。
+  - POST /api/workspaces/{ws_id}/stream/{type}      启动（幂等），返回 task_id
+  - GET  /api/workspaces/{ws_id}/generations/{task_id}/stream  消费 SSE
+
+worker 在后台跑 LLM、写 Redis Stream，不依赖任何 HTTP 连接。SSE 端点用
+XREAD BLOCK 同时完成"回放历史 chunk"和"跟读新 chunk"——按 Last-Event-ID
+头部续读，前端断开重连自然续传。
+"""
+
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from arq.connections import ArqRedis
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from app.config import get_settings
-from app.models.entities import Workspace, WorkspaceResource
-from app.models.enums import ResourceType
-from app.models.schemas import StreamRequest
-from app.services.llm import (
-    LLMError,
-    generate_article,
-    generate_outline,
-    generate_podcast_script_stream,
+from app.models.entities import GenerationTask
+from app.models.schemas import GenerationTaskResponse, StreamRequest
+from app.storage import (
+    get_active_gen_task,
+    get_gen_task,
+    get_redis,
+    get_workspace,
+    save_gen_task,
 )
-from app.services.podcast_tts import PodcastTTSError, generate_podcast_audio
-from app.storage import add_workspace_resource, get_file_storage, get_workspace
-from app.utils.sse import sse_data, sse_response
+from app.storage.gen_stream import read_stream
+from app.utils.response import build_gen_task_response
+from app.utils.sse import sse_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/workspaces/{workspace_id}/stream", tags=["stream"])
+router = APIRouter(prefix="/api/workspaces/{workspace_id}", tags=["stream"])
+
+_VALID_CONTENT_TYPES = {"outline", "article", "podcast"}
 
 
-async def get_workspace_with_transcript(workspace_id: str) -> tuple[Workspace, str]:
-    """获取带转录内容的工作区，不存在或无转录则抛异常"""
+@router.post("/stream/{content_type}", response_model=GenerationTaskResponse)
+async def start_generation(
+    workspace_id: str, content_type: str, body: StreamRequest
+) -> GenerationTaskResponse:
+    """启动一次内容生成（幂等）。
+
+    pending/running 状态的活跃 task 直接复用——避免用户重复点按钮或刷新
+    时重复 enqueue。done/failed 视为"上一轮已结束"，创建新 task 覆盖索引。
+    """
+    if content_type not in _VALID_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"未知内容类型: {content_type}")
+
     workspace = await get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在或已过期")
 
-    # 获取转录内容
     transcript_resource = workspace.get_resource("transcript")
     if not transcript_resource or not transcript_resource.storage_key:
         raise HTTPException(status_code=400, detail="转录内容不存在")
 
-    try:
-        storage = get_file_storage()
-        content_bytes = await storage.get_bytes(transcript_resource.storage_key)
-        transcript = content_bytes.decode("utf-8")
-        if not transcript:
-            raise HTTPException(status_code=400, detail="转录内容为空")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"读取转录内容失败: {e}")
+    existing = await get_active_gen_task(workspace_id, content_type)
+    if existing and existing.status in ("pending", "running"):
+        logger.info(
+            "复用已有生成任务 %s (workspace=%s, type=%s, status=%s)",
+            existing.task_id, workspace_id, content_type, existing.status,
+        )
+        return build_gen_task_response(existing)
 
-    return workspace, transcript
-
-
-async def save_text_resource(
-    workspace: Workspace,
-    name: str,
-    content: str,
-    prompt: str = "",
-) -> WorkspaceResource:
-    """保存文本资源（纯文本），prompt 存储在元数据中"""
-    storage = get_file_storage()
-    resource_id = str(uuid.uuid4())[:8]
-    storage_key = f"{workspace.workspace_id}/{name}_{resource_id}.txt"
-
-    # 保存纯文本到本地存储
-    await storage.save_bytes(storage_key, content.encode("utf-8"))
-
-    resource = WorkspaceResource(
-        resource_id=resource_id,
-        name=name,
-        resource_type=ResourceType.TEXT,
-        storage_key=storage_key,
-        prompt=prompt,
-        ready=True,
+    # 新建 task（done/failed 的情况下覆盖原索引）
+    task = GenerationTask(
+        task_id=str(uuid.uuid4())[:12],
+        workspace_id=workspace_id,
+        content_type=content_type,
+        system_prompt=body.system_prompt,
+        user_prompt=body.user_prompt,
     )
-    workspace.add_resource(resource)
-    # 用原子追加而非全量 save_workspace：多个流式生成并发完成时，
-    # 全量 save 会用各自的 in-memory 副本互相覆盖，导致先完成的资源丢失
-    await add_workspace_resource(workspace.workspace_id, resource)
-    return resource
+    await save_gen_task(task)
+
+    redis = get_redis()
+    arq_redis = ArqRedis(redis.connection_pool)
+    await arq_redis.enqueue_job("run_generate_content", task.task_id)
+    logger.info(
+        "新生成任务 %s 已入队 (workspace=%s, type=%s)",
+        task.task_id, workspace_id, content_type,
+    )
+
+    return build_gen_task_response(task)
 
 
-@router.post("/outline")
-async def stream_outline(
-    workspace_id: str, request: Request, body: StreamRequest
+@router.get("/generations/{task_id}/stream")
+async def consume_generation(
+    workspace_id: str, task_id: str, request: Request
 ) -> StreamingResponse:
-    """流式生成大纲"""
-    workspace, transcript = await get_workspace_with_transcript(workspace_id)
-    resource_id = str(uuid.uuid4())[:8]
+    """SSE 消费端点：按 Last-Event-ID 续读 Redis Stream。
+
+    XREAD 不区分 entry 是"历史"还是"新"——同一个循环既能 replay 之前的
+    chunk，也能阻塞等新 chunk。前端浏览器 EventSource 重连时自动带
+    Last-Event-ID，server 从该 id 之后续推。
+
+    显式 done/error sentinel 用于判定结束，不依赖"连接关闭"——重连场景
+    下无法区分"刚结束"和"早就结束很久了"。
+    """
+    task = await get_gen_task(task_id)
+    if not task or task.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="生成任务不存在")
+
+    last_event_id = request.headers.get("last-event-id", "0")
+    redis = get_redis()
 
     async def generate() -> AsyncIterator[str]:
-        yield sse_data({"resource_id": resource_id})
-
-        chunks = []
-        try:
-            async for chunk in generate_outline(
-                transcript,
-                system_prompt=body.system_prompt or None,
-                user_prompt=body.user_prompt or None,
-            ):
-                if await request.is_disconnected():
-                    return
-                chunks.append(chunk)
-                yield sse_data({"content": chunk})
-
-            # 保存资源
-            content = "".join(chunks)
-            prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            await save_text_resource(workspace, "outline", content, prompt)
-            yield sse_data({"done": True})
-        except LLMError as e:
-            logger.warning("工作区 %s 大纲生成失败: %s", workspace_id, e)
-            yield sse_data({"error": str(e)})
-
-    return sse_response(generate)
-
-
-@router.post("/article")
-async def stream_article(
-    workspace_id: str, request: Request, body: StreamRequest
-) -> StreamingResponse:
-    """流式生成文章"""
-    workspace, transcript = await get_workspace_with_transcript(workspace_id)
-    resource_id = str(uuid.uuid4())[:8]
-
-    async def generate() -> AsyncIterator[str]:
-        yield sse_data({"resource_id": resource_id})
-
-        chunks = []
-        try:
-            async for chunk in generate_article(
-                transcript,
-                system_prompt=body.system_prompt or None,
-                user_prompt=body.user_prompt or None,
-            ):
-                if await request.is_disconnected():
-                    return
-                chunks.append(chunk)
-                yield sse_data({"content": chunk})
-
-            content = "".join(chunks)
-            prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            await save_text_resource(workspace, "article", content, prompt)
-            yield sse_data({"done": True})
-        except LLMError as e:
-            logger.warning("工作区 %s 文章生成失败: %s", workspace_id, e)
-            yield sse_data({"error": str(e)})
-
-    return sse_response(generate)
-
-
-@router.post("/podcast")
-async def stream_podcast(
-    workspace_id: str,
-    request: Request,
-    body: StreamRequest,
-    skip_audio: bool = Query(False),
-) -> StreamingResponse:
-    """流式生成播客脚本，完成后自动合成音频。skip_audio=true 时只产出脚本，不进 TTS。"""
-    workspace, transcript = await get_workspace_with_transcript(workspace_id)
-    settings = get_settings()
-    storage = get_file_storage()
-    resource_id = str(uuid.uuid4())[:8]
-
-    async def generate() -> AsyncIterator[str]:
-        yield sse_data({"resource_id": resource_id})
-
-        chunks = []
-        try:
-            # 流式生成脚本
-            async for chunk in generate_podcast_script_stream(
-                transcript,
-                system_prompt=body.system_prompt or None,
-                user_prompt=body.user_prompt or None,
-            ):
-                if await request.is_disconnected():
-                    return
-                chunks.append(chunk)
-                yield sse_data({"content": chunk})
-
-            script_content = "".join(chunks)
-            prompt = f"system: {body.system_prompt}\nuser: {body.user_prompt}"
-            await save_text_resource(workspace, "podcast_script", script_content, prompt)
-            yield sse_data({"script_done": True})
-
-            if skip_audio:
-                yield sse_data({"done": True, "has_audio": False})
+        cursor = last_event_id
+        # 终态任务：stream 里一定已有 sentinel，循环一轮 replay 完即退出
+        while True:
+            if await request.is_disconnected():
                 return
 
-            # 合成音频
-            yield sse_data({"synthesizing": True})
-            try:
-                audio_resource_id = str(uuid.uuid4())[:8]
-                # 先生成到本地临时文件
-                audio_path = settings.temp_path / f"{workspace_id}_podcast_{audio_resource_id}.mp3"
-                await generate_podcast_audio(
-                    script_content, audio_path, temp_dir=settings.temp_path
-                )
-                # 保存音频文件
-                audio_key = f"{workspace_id}/podcast_{audio_resource_id}.mp3"
-                await storage.save_file(audio_key, audio_path)
+            entries = await read_stream(
+                redis, task_id, cursor, block_ms=30000, count=200,
+            )
+            if not entries:
+                # 无新消息——心跳由 sse_response 的 _with_heartbeat 自动插入
+                continue
 
-                # 添加播客音频资源
-                audio_resource = WorkspaceResource(
-                    resource_id=audio_resource_id,
-                    name="podcast",
-                    resource_type=ResourceType.AUDIO,
-                    storage_key=audio_key,
-                    ready=True,
-                )
-                workspace.add_resource(audio_resource)
-                # 原子追加，避免与并发生成的 outline/article 互相覆盖
-                await add_workspace_resource(workspace.workspace_id, audio_resource)
-                yield sse_data({"done": True, "has_audio": True, "audio_resource_id": audio_resource_id})
-            except PodcastTTSError as e:
-                logger.warning("工作区 %s 播客音频合成失败: %s", workspace_id, e)
-                yield sse_data({"done": True, "has_audio": False, "audio_error": str(e)})
-        except LLMError as e:
-            logger.warning("工作区 %s 播客脚本生成失败: %s", workspace_id, e)
-            yield sse_data({"error": str(e)})
+            for entry_id, fields in entries:
+                cursor = entry_id
+                yield f"id: {entry_id}\ndata: {json.dumps(fields)}\n\n"
+                if fields.get("type") in ("done", "error"):
+                    return
 
     return sse_response(generate)

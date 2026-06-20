@@ -1,9 +1,31 @@
 """共享响应构建器"""
 
-from app.models.entities import Workspace, WorkspaceResource
+from app.models.entities import GenerationTask, Workspace, WorkspaceResource
 from app.models.enums import ResourceType
-from app.models.schemas import WorkspaceResourceResponse, WorkspaceResponse
-from app.storage import get_file_storage
+from app.models.schemas import (
+    GenerationTaskResponse,
+    WorkspaceResourceResponse,
+    WorkspaceResponse,
+)
+from app.storage import get_file_storage, list_gen_tasks_for_workspace
+
+
+def build_gen_task_response(task: GenerationTask) -> GenerationTaskResponse:
+    """生成任务 → 响应，stream_url 直接由后端拼好。"""
+    stream_url = (
+        f"/api/workspaces/{task.workspace_id}/generations/{task.task_id}/stream"
+    )
+    return GenerationTaskResponse(
+        task_id=task.task_id,
+        workspace_id=task.workspace_id,
+        content_type=task.content_type,
+        status=task.status,
+        resource_id=task.resource_id,
+        audio_resource_id=task.audio_resource_id,
+        audio_error=task.audio_error,
+        error=task.error,
+        stream_url=stream_url,
+    )
 
 
 async def build_resource_response(
@@ -40,6 +62,9 @@ async def build_workspace_response(workspace: Workspace) -> WorkspaceResponse:
         await build_resource_response(workspace.workspace_id, res)
         for res in workspace.resources
     ]
+    # 附带各内容类型当前活跃 task —— 前端单次 GET 即可恢复（包括正在跑、已完成、已失败）
+    gen_tasks = await list_gen_tasks_for_workspace(workspace.workspace_id)
+    generations = [build_gen_task_response(t) for t in gen_tasks]
 
     return WorkspaceResponse(
         workspace_id=workspace.workspace_id,
@@ -50,8 +75,10 @@ async def build_workspace_response(workspace: Workspace) -> WorkspaceResponse:
         error=workspace.error,
         error_kind=workspace.error_kind,
         resources=resources,
+        generations=generations,
         created_at=workspace.created_at,
         last_accessed_at=workspace.last_accessed_at,
         series_bvid=workspace.series_bvid,
         series_index=workspace.series_index,
+        timings=dict(workspace.timings),
     )

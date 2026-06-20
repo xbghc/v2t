@@ -142,6 +142,12 @@ def smoke_env(tmp_path: Path, synthetic_mp4: Path, monkeypatch):
     )
     # build_workspace_response 内部读取 TEXT content 时也用 storage
     monkeypatch.setattr("app.utils.response.get_file_storage", lambda: storage)
+    # workspace 不涉及生成任务，list_gen_tasks_for_workspace 返回空避免触达真 Redis
+    async def _no_gen_tasks(_wid: str):
+        return []
+    monkeypatch.setattr(
+        "app.utils.response.list_gen_tasks_for_workspace", _no_gen_tasks
+    )
 
     # 把 STT router 的 candidate 列表 mock 成只有假 provider
     from app.services.stt.router import reset_router
@@ -217,3 +223,21 @@ async def test_process_workspace_end_to_end(smoke_env):
     ]
     assert len(seg_msgs) >= 1
     assert all("fake-text-" in s["text"] for s in seg_msgs)
+
+    # timings 埋点：6 个 key 都该被填充
+    expected_keys = {
+        "download", "vad_first_cut", "stt_first_segment",
+        "stt_total", "total", "audio_duration",
+    }
+    missing = expected_keys - set(final.timings)
+    assert not missing, f"timings 缺失 key: {missing}, 实际={final.timings}"
+    for k, v in final.timings.items():
+        assert isinstance(v, (int, float)) and v >= 0, f"{k} 非法值: {v!r}"
+    # 因果关系：vad_first_cut ≤ stt_total ≤ total
+    assert final.timings["vad_first_cut"] <= final.timings["stt_total"] + 0.5
+    assert final.timings["stt_total"] <= final.timings["total"] + 0.5
+
+    # 末尾的 workspace envelope 应当带上 timings 字段
+    last_workspace = workspace_msgs[-1]
+    assert "timings" in last_workspace
+    assert "total" in last_workspace["timings"]

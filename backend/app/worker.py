@@ -12,6 +12,7 @@ from arq import cron
 from arq.connections import RedisSettings
 
 from app.config import get_settings
+from app.tasks.generation_task import run_generate_content
 from app.tasks.workspace_task import process_workspace
 
 
@@ -41,6 +42,35 @@ async def cleanup_old_files_job(ctx: dict) -> None:
 
 
 _INFLIGHT_STATUSES = {"processing", "downloading", "transcribing"}
+
+
+async def _mark_inflight_gen_tasks_failed(redis) -> int:
+    """把 Redis 里所有 status=running 的生成任务标 failed + 写 error sentinel。
+
+    worker 崩溃时 task 卡在 running，SSE 端点会一直 XREAD BLOCK 等不到终结
+    sentinel。这里在新 worker 启动时收尾——保证前端能拿到 error 事件。
+    """
+    from app.storage.gen_stream import xadd_error_and_finalize
+
+    cleaned = 0
+    cursor = 0
+    while True:
+        cursor, keys = await redis.scan(cursor, match="gen_task:*", count=100)
+        for key in keys:
+            status = await redis.hget(key, "status")
+            if status == "running":
+                task_id = await redis.hget(key, "task_id")
+                if not task_id:
+                    continue
+                await redis.hset(key, mapping={
+                    "status": "failed",
+                    "error": "worker 重启，任务中断",
+                })
+                await xadd_error_and_finalize(redis, task_id, "worker 重启，任务中断")
+                cleaned += 1
+        if cursor == 0:
+            break
+    return cleaned
 
 
 async def _mark_inflight_workspaces_failed(redis) -> int:
@@ -99,6 +129,16 @@ async def startup(ctx: dict) -> None:
     except Exception as e:
         logger.warning("in-flight 清理失败（不影响启动）: %s", e)
 
+    # 3. 清理上次未完成的 in-flight 生成任务（worker 崩溃/重启场景）
+    try:
+        from app.storage import get_redis
+
+        cleaned = await _mark_inflight_gen_tasks_failed(get_redis())
+        if cleaned > 0:
+            logger.warning("清理 in-flight 生成任务 %d 个（worker 重启）", cleaned)
+    except Exception as e:
+        logger.warning("in-flight 生成任务清理失败（不影响启动）: %s", e)
+
 
 async def shutdown(ctx: dict) -> None:
     """Worker 关闭时清理"""
@@ -113,7 +153,7 @@ async def shutdown(ctx: dict) -> None:
 class WorkerSettings:
     """arq worker 配置"""
 
-    functions = [run_process_workspace]
+    functions = [run_process_workspace, run_generate_content]
     cron_jobs = [
         cron(cleanup_old_files_job, hour=3, minute=0),  # 每天凌晨 3 点清理
     ]

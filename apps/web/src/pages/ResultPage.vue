@@ -15,6 +15,7 @@ import SubtitleSection from '@/components/SubtitleSection.vue'
 import PodcastPlayer from '@/components/PodcastPlayer.vue'
 import MarkdownContent from '@/components/MarkdownContent.vue'
 import WorkspacePagesSwitcher from '@/components/WorkspacePagesSwitcher.vue'
+import TimingsSection from '@/components/TimingsSection.vue'
 import IconRefresh from '~icons/material-symbols/refresh'
 import IconContentCopy from '~icons/material-symbols/content-copy-outline'
 import IconPodcasts from '~icons/material-symbols/podcasts'
@@ -40,6 +41,7 @@ const {
     title,
     videoUrl,
     transcript,
+    timings,
     seriesBvid,
     seriesIndex,
     // 生成内容
@@ -343,6 +345,9 @@ const loadingState = computed<LoadingTextState>(() => ({
                             :is-processing="isProcessing"
                         />
                     </ContentSection>
+
+                    <!-- 处理耗时（生产观测，按阶段完成增量出现） -->
+                    <TimingsSection :timings="timings" />
                 </div>
             </div>
         </div>

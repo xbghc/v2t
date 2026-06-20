@@ -28,7 +28,7 @@ export type WorkspaceEvent =
     | { type: 'FAIL'; error: string; errorKind?: WorkspaceErrorKind }
     | { type: 'RESET' }
     | { type: 'LOAD_WORKSPACE'; status: 'pending' | 'processing' | 'ready' | 'failed' }
-    | { type: 'UPDATE_RESOURCES'; title?: string; videoUrl?: string | null; transcript?: string; progressText?: string }
+    | { type: 'UPDATE_RESOURCES'; title?: string; videoUrl?: string | null; transcript?: string; progressText?: string; timings?: Record<string, number> }
     | { type: 'APPEND_TRANSCRIPT'; segment: TranscriptSegmentMessage }
 
 // --- Context ---
@@ -41,6 +41,7 @@ export interface WorkspaceContext {
     errorKind: WorkspaceErrorKind
     videoUrl: string | null
     transcript: string
+    timings: Record<string, number>
 }
 
 export function createInitialWorkspaceContext(): WorkspaceContext {
@@ -53,6 +54,7 @@ export function createInitialWorkspaceContext(): WorkspaceContext {
         errorKind: '',
         videoUrl: null,
         transcript: '',
+        timings: {},
     }
 }
 
@@ -131,6 +133,7 @@ function updateContext(ctx: WorkspaceContext, event: WorkspaceEvent): WorkspaceC
                 ? event.transcript
                 : ctx.transcript,
             progressText: event.progressText ?? ctx.progressText,
+            timings: event.timings ?? ctx.timings,
         }
     case 'APPEND_TRANSCRIPT': {
         const formatted = `[${formatTimestamp(event.segment.start)}] ${event.segment.text}`

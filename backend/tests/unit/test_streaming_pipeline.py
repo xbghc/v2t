@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
+from app.services.downloader import VideoResult
 from app.services.streaming_pipeline import (
     SegmentationState,
     stream_audio_chunks,
 )
-from app.services.downloader import VideoResult
 
 
 @pytest.fixture

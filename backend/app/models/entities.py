@@ -20,6 +20,29 @@ class WorkspaceResource:
 
 
 @dataclass
+class GenerationTask:
+    """内容生成任务（outline / article / podcast）
+
+    一次生成对应一条 Redis Stream（key = `gen:{task_id}`），worker 把 LLM chunk
+    XADD 进去；SSE 端点按 Last-Event-ID 续读。task_id 全局唯一，stream 自带
+    完整生命周期（chunk → done/error sentinel → EXPIRE）。
+    """
+
+    task_id: str
+    workspace_id: str
+    content_type: str  # outline / article / podcast
+    status: str = "pending"  # pending / running / done / failed
+    resource_id: str = ""  # 完成后落盘的 WorkspaceResource id（文本内容）
+    audio_resource_id: str = ""  # podcast 特有：TTS 产出的音频 resource id
+    audio_error: str = ""  # podcast 特有：脚本成功但 TTS 失败时的提示
+    error: str = ""
+    system_prompt: str = ""
+    user_prompt: str = ""
+    created_at: float = field(default_factory=time.time)
+    updated_at: float = field(default_factory=time.time)
+
+
+@dataclass
 class Workspace:
     """工作区"""
 
@@ -36,6 +59,8 @@ class Workspace:
     # B 站分 P 系列元数据（非分 P 视频留空）
     series_bvid: str = ""
     series_index: int = 0  # 1-based 分 P 序号；0 表示非系列
+    # 阶段耗时（秒）。stage_name → duration；audio_duration 为视频本身时长
+    timings: dict[str, float] = field(default_factory=dict)
 
     def get_resource(self, name: str) -> WorkspaceResource | None:
         """获取指定名称的最新资源"""

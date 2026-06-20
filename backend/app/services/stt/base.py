@@ -1,6 +1,5 @@
 """STT 流式转录的基础类型与 Provider 协议"""
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol

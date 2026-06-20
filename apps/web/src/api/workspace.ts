@@ -1,5 +1,7 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import type {
+    GenerationContentType,
+    GenerationTaskResponse,
     PromptsResponse,
     WorkspaceResponse,
     StreamPrompts,
@@ -155,206 +157,143 @@ export function streamWorkspaceStatus(
 }
 
 /**
- * 流式生成事件数据
+ * 启动一次内容生成（幂等：已有活跃 task 直接复用，不重新调 LLM）
  */
-interface StreamEventData {
+export async function startGeneration(
+    workspaceId: string,
+    contentType: GenerationContentType,
+    prompts: StreamPrompts
+): Promise<GenerationTaskResponse> {
+    const response = await fetch(
+        `${API_BASE}/workspaces/${workspaceId}/stream/${contentType}`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                system_prompt: prompts.systemPrompt,
+                user_prompt: prompts.userPrompt,
+            }),
+        }
+    )
+    const data = await response.json() as GenerationTaskResponse | { detail: string }
+    if (!response.ok) {
+        throw new Error((data as { detail: string }).detail || '启动生成失败')
+    }
+    return data as GenerationTaskResponse
+}
+
+/**
+ * 消费一个生成任务的 SSE 流
+ *
+ * fetchEventSource 默认在网络断开时会自动重连，并自动携带 Last-Event-ID，
+ * server 端按该 id 续推——即"底层断网无感续传"由协议层处理。
+ *
+ * 终结 sentinel：业务侧的 done / error 事件触发 cleanup（abort 控制器），
+ * fetchEventSource 收到后不会重连。永远不依赖"连接关闭"判断结束。
+ *
+ * @returns 清理函数（手动断开连接）
+ */
+export interface GenerationStreamCallbacks {
+    onChunk: (text: string) => void
+    onScriptDone?: () => void
+    onSynthesizing?: () => void
+    onDone: (payload: {
+        resourceId?: string
+        hasAudio?: boolean
+        audioResourceId?: string
+        audioError?: string
+    }) => void
+    onError: (message: string) => void
+}
+
+interface GenerationStreamEvent {
+    type: 'chunk' | 'script_done' | 'synthesizing' | 'done' | 'error'
+    text?: string
     resource_id?: string
-    content?: string
-    done?: boolean
-    error?: string
-    // 播客特有
-    script_done?: boolean
-    synthesizing?: boolean
-    has_audio?: boolean
-    audio_error?: string
+    has_audio?: string  // "1" / "0"
     audio_resource_id?: string
+    audio_error?: string
+    message?: string
 }
 
-/**
- * 流式生成大纲
- * @returns 清理函数
- */
-export function streamOutline(
-    workspaceId: string,
-    prompts: StreamPrompts,
-    onResourceCreated: (resourceId: string) => void,
-    onChunk: (content: string) => void,
-    onDone: () => void,
-    onError: (error: string) => void
+export function consumeGenerationStream(
+    streamUrl: string,
+    callbacks: GenerationStreamCallbacks
 ): () => void {
     const ctrl = new AbortController()
+    let closedByBusiness = false
 
-    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/outline`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            system_prompt: prompts.systemPrompt,
-            user_prompt: prompts.userPrompt
-        }),
+    fetchEventSource(streamUrl, {
         signal: ctrl.signal,
         openWhenHidden: true,
         async onopen(response) {
             if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
                 return
             }
-            const contentType = response.headers.get('content-type')
-            if (contentType?.includes('application/json')) {
-                const data = await response.json() as { detail?: string }
-                throw new Error(data.detail || `HTTP ${response.status}`)
+            // 4xx → 永久错误，停止重连（任务不存在、workspace 过期等）
+            if (response.status >= 400 && response.status < 500) {
+                let detail = `HTTP ${response.status}`
+                try {
+                    const data = await response.json() as { detail?: string }
+                    if (data.detail) detail = data.detail
+                } catch {
+                    // 忽略 JSON 解析失败
+                }
+                callbacks.onError(detail)
+                closedByBusiness = true
+                ctrl.abort()
+                throw new Error(detail)
             }
+            // 5xx：抛非 FatalError，触发 fetchEventSource 自动重试
             throw new Error(`HTTP ${response.status}`)
         },
         onmessage(ev) {
             if (!ev.data) return
-            const data = JSON.parse(ev.data) as StreamEventData
-            if (data.error) {
-                onError(data.error)
+            const data = JSON.parse(ev.data) as GenerationStreamEvent
+            switch (data.type) {
+            case 'chunk':
+                if (data.text) callbacks.onChunk(data.text)
+                break
+            case 'script_done':
+                callbacks.onScriptDone?.()
+                break
+            case 'synthesizing':
+                callbacks.onSynthesizing?.()
+                break
+            case 'done':
+                callbacks.onDone({
+                    resourceId: data.resource_id,
+                    hasAudio: data.has_audio === '1',
+                    audioResourceId: data.audio_resource_id,
+                    audioError: data.audio_error,
+                })
+                closedByBusiness = true
                 ctrl.abort()
-            } else if (data.resource_id) {
-                onResourceCreated(data.resource_id)
-            } else if (data.done) {
-                onDone()
+                break
+            case 'error':
+                callbacks.onError(data.message || '生成失败')
+                closedByBusiness = true
                 ctrl.abort()
-            } else if (data.content) {
-                onChunk(data.content)
+                break
             }
         },
         onerror(err) {
-            onError(err instanceof Error ? err.message : '连接错误')
-            throw err
+            // 默默重连——这是断点续传的核心。返回 undefined 走默认延迟。
+            // 业务关闭的不进这里（abort 直接结束）。
+            console.warn('生成流连接错误，重连中:', err)
         },
         onclose() {
-            throw new Error('Stream closed')
+            // 业务关闭（done/error sentinel 已收到）：抛异常停止重连
+            // 非业务关闭（nginx 切连接 / server 进程重启等）：默认行为是重连，
+            // 不 throw 让 fetchEventSource 自动续上，带 Last-Event-ID 续读 stream
+            if (closedByBusiness) {
+                throw new Error('Stream closed by business')
+            }
         },
     })
 
-    return () => ctrl.abort()
-}
-
-/**
- * 流式生成文章
- * @returns 清理函数
- */
-export function streamArticle(
-    workspaceId: string,
-    prompts: StreamPrompts,
-    onResourceCreated: (resourceId: string) => void,
-    onChunk: (content: string) => void,
-    onDone: () => void,
-    onError: (error: string) => void
-): () => void {
-    const ctrl = new AbortController()
-
-    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/article`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            system_prompt: prompts.systemPrompt,
-            user_prompt: prompts.userPrompt
-        }),
-        signal: ctrl.signal,
-        openWhenHidden: true,
-        async onopen(response) {
-            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-                return
-            }
-            const contentType = response.headers.get('content-type')
-            if (contentType?.includes('application/json')) {
-                const data = await response.json() as { detail?: string }
-                throw new Error(data.detail || `HTTP ${response.status}`)
-            }
-            throw new Error(`HTTP ${response.status}`)
-        },
-        onmessage(ev) {
-            if (!ev.data) return
-            const data = JSON.parse(ev.data) as StreamEventData
-            if (data.error) {
-                onError(data.error)
-                ctrl.abort()
-            } else if (data.resource_id) {
-                onResourceCreated(data.resource_id)
-            } else if (data.done) {
-                onDone()
-                ctrl.abort()
-            } else if (data.content) {
-                onChunk(data.content)
-            }
-        },
-        onerror(err) {
-            onError(err instanceof Error ? err.message : '连接错误')
-            throw err
-        },
-        onclose() {
-            throw new Error('Stream closed')
-        },
-    })
-
-    return () => ctrl.abort()
-}
-
-/**
- * 流式生成播客（脚本 + 音频合成）
- * @returns 清理函数
- */
-export function streamPodcast(
-    workspaceId: string,
-    prompts: StreamPrompts,
-    onResourceCreated: (resourceId: string) => void,
-    onScriptChunk: (content: string) => void,
-    onScriptDone: () => void,
-    onSynthesizing: () => void,
-    onDone: (hasAudio: boolean, audioResourceId?: string, audioError?: string) => void,
-    onError: (error: string) => void
-): () => void {
-    const ctrl = new AbortController()
-
-    fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/stream/podcast`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            system_prompt: prompts.systemPrompt,
-            user_prompt: prompts.userPrompt
-        }),
-        signal: ctrl.signal,
-        openWhenHidden: true,
-        async onopen(response) {
-            if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-                return
-            }
-            const contentType = response.headers.get('content-type')
-            if (contentType?.includes('application/json')) {
-                const data = await response.json() as { detail?: string }
-                throw new Error(data.detail || `HTTP ${response.status}`)
-            }
-            throw new Error(`HTTP ${response.status}`)
-        },
-        onmessage(ev) {
-            if (!ev.data) return
-            const data = JSON.parse(ev.data) as StreamEventData
-            if (data.error) {
-                onError(data.error)
-                ctrl.abort()
-            } else if (data.resource_id) {
-                onResourceCreated(data.resource_id)
-            } else if (data.done) {
-                onDone(data.has_audio || false, data.audio_resource_id, data.audio_error)
-                ctrl.abort()
-            } else if (data.synthesizing) {
-                onSynthesizing()
-            } else if (data.script_done) {
-                onScriptDone()
-            } else if (data.content) {
-                onScriptChunk(data.content)
-            }
-        },
-        onerror(err) {
-            onError(err instanceof Error ? err.message : '连接错误')
-            throw err
-        },
-        onclose() {
-            throw new Error('Stream closed')
-        },
-    })
-
-    return () => ctrl.abort()
+    return () => {
+        closedByBusiness = true
+        ctrl.abort()
+    }
 }
