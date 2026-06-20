@@ -226,7 +226,7 @@ const successRatePct = computed(() =>
                                     v-for="d in stats.daily"
                                     :key="d.date"
                                     class="flex-1 flex flex-col items-center justify-end h-full"
-                                    :title="`${d.date}　PV ${d.pv} / UV ${d.uv}`"
+                                    :title="`${d.date} PV ${d.pv} / UV ${d.uv}`"
                                 >
                                     <div class="flex items-end justify-center gap-0.5 w-full flex-1">
                                         <div

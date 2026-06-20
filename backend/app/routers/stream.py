@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.entities import GenerationTask
+from app.models.enums import GenerationContentType
 from app.models.schemas import GenerationTaskResponse, StreamRequest
 from app.storage import (
     get_active_gen_task,
@@ -35,7 +36,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}", tags=["stream"])
 
-_VALID_CONTENT_TYPES = {"outline", "article", "podcast"}
+# 内容类型白名单从 Enum 派生——GenerationContentType 是唯一权威来源
+_VALID_CONTENT_TYPES = {e.value for e in GenerationContentType}
 
 
 @router.post("/stream/{content_type}", response_model=GenerationTaskResponse)

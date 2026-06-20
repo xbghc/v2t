@@ -1,0 +1,1902 @@
+{
+  "components": {
+    "schemas": {
+      "AdminStatsResponse": {
+        "description": "后台仪表盘汇总统计",
+        "properties": {
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPoint"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "error_kind": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Error Kind",
+            "type": "object"
+          },
+          "failed_count": {
+            "default": 0,
+            "title": "Failed Count",
+            "type": "integer"
+          },
+          "pv_total": {
+            "default": 0,
+            "title": "Pv Total",
+            "type": "integer"
+          },
+          "ready_count": {
+            "default": 0,
+            "title": "Ready Count",
+            "type": "integer"
+          },
+          "success_rate": {
+            "default": 0.0,
+            "title": "Success Rate",
+            "type": "number"
+          },
+          "transcribe_total": {
+            "default": 0,
+            "title": "Transcribe Total",
+            "type": "integer"
+          },
+          "uv_total": {
+            "default": 0,
+            "title": "Uv Total",
+            "type": "integer"
+          }
+        },
+        "title": "AdminStatsResponse",
+        "type": "object"
+      },
+      "BilibiliPageResponse": {
+        "properties": {
+          "cid": {
+            "title": "Cid",
+            "type": "integer"
+          },
+          "duration": {
+            "title": "Duration",
+            "type": "integer"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "page",
+          "cid",
+          "title",
+          "duration",
+          "url"
+        ],
+        "title": "BilibiliPageResponse",
+        "type": "object"
+      },
+      "BilibiliVideoMetaResponse": {
+        "properties": {
+          "bvid": {
+            "title": "Bvid",
+            "type": "string"
+          },
+          "cover_url": {
+            "title": "Cover Url",
+            "type": "string"
+          },
+          "owner": {
+            "title": "Owner",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/BilibiliPageResponse"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bvid",
+          "title",
+          "owner",
+          "cover_url",
+          "pages"
+        ],
+        "title": "BilibiliVideoMetaResponse",
+        "type": "object"
+      },
+      "Body_stt_api_diag_stt_post": {
+        "properties": {
+          "audio": {
+            "format": "binary",
+            "title": "Audio",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "Body_stt_api_diag_stt_post",
+        "type": "object"
+      },
+      "Body_transcribe_api_desktop_transcribe_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_transcribe_api_desktop_transcribe_post",
+        "type": "object"
+      },
+      "CreateFromTranscriptRequest": {
+        "description": "从已有转录文本直接创建工作区",
+        "properties": {
+          "source_url": {
+            "default": "",
+            "title": "Source Url",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "transcript": {
+            "title": "Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript"
+        ],
+        "title": "CreateFromTranscriptRequest",
+        "type": "object"
+      },
+      "CreateWorkspaceRequest": {
+        "description": "创建工作区请求",
+        "properties": {
+          "series_bvid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Bvid"
+          },
+          "series_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Index"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "CreateWorkspaceRequest",
+        "type": "object"
+      },
+      "DailyPoint": {
+        "description": "单日 PV/UV 数据点",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "pv": {
+            "default": 0,
+            "title": "Pv",
+            "type": "integer"
+          },
+          "uv": {
+            "default": 0,
+            "title": "Uv",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "DailyPoint",
+        "type": "object"
+      },
+      "GenerationContentType": {
+        "description": "可生成的内容类型。\n\n这是\"有哪些内容类型\"的唯一权威来源：路由层从这里派生白名单做校验，\nOpenAPI 据此生成精确 union，前端 codegen 同步——不再前后端各硬编码一份。",
+        "enum": [
+          "outline",
+          "article",
+          "podcast"
+        ],
+        "title": "GenerationContentType",
+        "type": "string"
+      },
+      "GenerationStatus": {
+        "description": "内容生成任务状态",
+        "enum": [
+          "pending",
+          "running",
+          "done",
+          "failed"
+        ],
+        "title": "GenerationStatus",
+        "type": "string"
+      },
+      "GenerationTaskResponse": {
+        "description": "生成任务响应（GET workspace 时附带 + 启动端点返回）",
+        "properties": {
+          "audio_error": {
+            "default": "",
+            "title": "Audio Error",
+            "type": "string"
+          },
+          "audio_resource_id": {
+            "default": "",
+            "title": "Audio Resource Id",
+            "type": "string"
+          },
+          "content_type": {
+            "$ref": "#/components/schemas/GenerationContentType"
+          },
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "resource_id": {
+            "default": "",
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GenerationStatus"
+          },
+          "stream_url": {
+            "title": "Stream Url",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "workspace_id",
+          "content_type",
+          "status",
+          "stream_url"
+        ],
+        "title": "GenerationTaskResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthItem": {
+        "properties": {
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ok",
+          "message",
+          "latency_ms"
+        ],
+        "title": "HealthItem",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/HealthItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "HistoryItem": {
+        "description": "一条转录历史快照",
+        "properties": {
+          "created_at": {
+            "default": 0.0,
+            "title": "Created At",
+            "type": "number"
+          },
+          "error_kind": {
+            "default": "",
+            "title": "Error Kind",
+            "type": "string"
+          },
+          "finished_at": {
+            "default": 0.0,
+            "title": "Finished At",
+            "type": "number"
+          },
+          "status": {
+            "default": "",
+            "title": "Status",
+            "type": "string"
+          },
+          "timings": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timings",
+            "type": "object"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "HistoryItem",
+        "type": "object"
+      },
+      "HistoryListResponse": {
+        "description": "转录历史分页列表",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "default": 0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "HistoryListResponse",
+        "type": "object"
+      },
+      "LLMRequest": {
+        "properties": {
+          "max_tokens": {
+            "default": 512,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "LLMRequest",
+        "type": "object"
+      },
+      "LLMResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "response": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response"
+          }
+        },
+        "required": [
+          "ok",
+          "latency_ms"
+        ],
+        "title": "LLMResponse",
+        "type": "object"
+      },
+      "PageviewRequest": {
+        "description": "前端路由切换上报的页面访问埋点",
+        "properties": {
+          "path": {
+            "default": "",
+            "title": "Path",
+            "type": "string"
+          },
+          "visitor_id": {
+            "default": "",
+            "title": "Visitor Id",
+            "type": "string"
+          }
+        },
+        "title": "PageviewRequest",
+        "type": "object"
+      },
+      "ParseRequest": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "ParseRequest",
+        "type": "object"
+      },
+      "ParseResponse": {
+        "properties": {
+          "cover_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Url"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "video_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Video Url"
+          }
+        },
+        "required": [
+          "ok",
+          "provider",
+          "latency_ms"
+        ],
+        "title": "ParseResponse",
+        "type": "object"
+      },
+      "ParseVideoRequest": {
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "ParseVideoRequest",
+        "type": "object"
+      },
+      "ParseVideoResponse": {
+        "properties": {
+          "direct_url": {
+            "title": "Direct Url",
+            "type": "string"
+          },
+          "duration": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "direct_url",
+          "title"
+        ],
+        "title": "ParseVideoResponse",
+        "type": "object"
+      },
+      "PromptsResponse": {
+        "description": "默认提示词响应",
+        "properties": {
+          "article_system": {
+            "title": "Article System",
+            "type": "string"
+          },
+          "article_user": {
+            "title": "Article User",
+            "type": "string"
+          },
+          "outline_system": {
+            "title": "Outline System",
+            "type": "string"
+          },
+          "outline_user": {
+            "title": "Outline User",
+            "type": "string"
+          },
+          "podcast_system": {
+            "title": "Podcast System",
+            "type": "string"
+          },
+          "podcast_user": {
+            "title": "Podcast User",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outline_system",
+          "outline_user",
+          "article_system",
+          "article_user",
+          "podcast_system",
+          "podcast_user"
+        ],
+        "title": "PromptsResponse",
+        "type": "object"
+      },
+      "ResourceType": {
+        "description": "资源类型",
+        "enum": [
+          "video",
+          "audio",
+          "text"
+        ],
+        "title": "ResourceType",
+        "type": "string"
+      },
+      "STTResponse": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "ok",
+          "latency_ms"
+        ],
+        "title": "STTResponse",
+        "type": "object"
+      },
+      "StreamRequest": {
+        "description": "流式生成请求",
+        "properties": {
+          "system_prompt": {
+            "default": "",
+            "title": "System Prompt",
+            "type": "string"
+          },
+          "user_prompt": {
+            "default": "",
+            "title": "User Prompt",
+            "type": "string"
+          }
+        },
+        "title": "StreamRequest",
+        "type": "object"
+      },
+      "TranscribeResponse": {
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscribeResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkspaceErrorKind": {
+        "description": "工作区失败原因分类（前端据此决定是否给重试按钮等）。\n\n空字符串 = 无错误（成功或处理中）。其余取值与 _mark_failed 的调用一一对应。",
+        "enum": [
+          "",
+          "video_too_long",
+          "download_failed",
+          "transcribe_failed",
+          "unknown"
+        ],
+        "title": "WorkspaceErrorKind",
+        "type": "string"
+      },
+      "WorkspaceLookupResponse": {
+        "description": "系列分 P → workspace_id 查找响应",
+        "properties": {
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "workspace_id"
+        ],
+        "title": "WorkspaceLookupResponse",
+        "type": "object"
+      },
+      "WorkspaceResourceResponse": {
+        "description": "资源响应",
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "download_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Download Url"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "$ref": "#/components/schemas/ResourceType"
+          }
+        },
+        "required": [
+          "resource_id",
+          "name",
+          "resource_type",
+          "download_url",
+          "content",
+          "created_at"
+        ],
+        "title": "WorkspaceResourceResponse",
+        "type": "object"
+      },
+      "WorkspaceResponse": {
+        "description": "工作区响应",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "error_kind": {
+            "$ref": "#/components/schemas/WorkspaceErrorKind",
+            "default": ""
+          },
+          "generations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GenerationTaskResponse"
+            },
+            "title": "Generations",
+            "type": "array"
+          },
+          "last_accessed_at": {
+            "title": "Last Accessed At",
+            "type": "number"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "string"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceResourceResponse"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "series_bvid": {
+            "default": "",
+            "title": "Series Bvid",
+            "type": "string"
+          },
+          "series_index": {
+            "default": 0,
+            "title": "Series Index",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkspaceStatus"
+          },
+          "timings": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timings",
+            "type": "object"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "url",
+          "title",
+          "status",
+          "progress",
+          "error",
+          "resources",
+          "created_at",
+          "last_accessed_at",
+          "timings"
+        ],
+        "title": "WorkspaceResponse",
+        "type": "object"
+      },
+      "WorkspaceStatus": {
+        "description": "工作区状态\n\n流式管道下，下载/抽音频/转录融合为单一 PROCESSING 阶段；\n具体进度通过 progress 字符串和 resource.ready 标志传达。",
+        "enum": [
+          "pending",
+          "processing",
+          "ready",
+          "failed"
+        ],
+        "title": "WorkspaceStatus",
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "description": "输入视频链接，获取视频、音频、大纲和详细文字",
+    "title": "v2t - 视频转文字",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/admin/history": {
+      "get": {
+        "description": "转录历史分页（finished_at 倒序），每条含各阶段耗时 timings。",
+        "operationId": "history_api_admin_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "description": "仪表盘汇总统计：累计 PV/UV、最近 N 天趋势、转录总数/成功率/失败分类。",
+        "operationId": "stats_api_admin_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 14,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stats",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/bilibili/pages": {
+      "get": {
+        "description": "获取 B 站视频的分 P 列表。\n\n入参可以是完整页面 URL（含或不含查询串）或 BV 号字符串。\n返回：视频系列标题、UP 主、封面、每个分 P 的 page/cid/标题/时长/URL。",
+        "operationId": "get_pages_api_bilibili_pages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "title": "Url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BilibiliVideoMetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pages",
+        "tags": [
+          "bilibili"
+        ]
+      }
+    },
+    "/api/desktop/dashscope/{path}": {
+      "post": {
+        "description": "透传任意 path 到 DashScope（阿里云百炼）。",
+        "operationId": "dashscope_proxy_api_desktop_dashscope__path__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashscope Proxy",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
+    "/api/desktop/parse-video": {
+      "post": {
+        "description": "解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。",
+        "operationId": "parse_video_api_desktop_parse_video_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseVideoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseVideoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Video",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
+    "/api/desktop/transcribe": {
+      "post": {
+        "description": "统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。\n\n桌面端不感知具体提供商，只需 multipart 上传音频文件。",
+        "operationId": "transcribe_api_desktop_transcribe_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_api_desktop_transcribe_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transcribe",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
+    "/api/diag/": {
+      "get": {
+        "operationId": "page_api_diag__get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Page",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/health": {
+      "get": {
+        "description": "并发探测所有外部依赖",
+        "operationId": "health_api_diag_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/llm": {
+      "post": {
+        "operationId": "llm_api_diag_llm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Llm",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/parse": {
+      "post": {
+        "description": "路由到对应 provider 解析视频，不实际下载",
+        "operationId": "parse_api_diag_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/diag/stt": {
+      "post": {
+        "operationId": "stt_api_diag_stt_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_stt_api_diag_stt_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/STTResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stt",
+        "tags": [
+          "diagnostics"
+        ]
+      }
+    },
+    "/api/metrics/pageview": {
+      "post": {
+        "description": "记录一次页面访问。埋点失败绝不能影响前端，吞掉异常只记日志。",
+        "operationId": "pageview_api_metrics_pageview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pageview",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/prompts": {
+      "get": {
+        "description": "获取默认提示词",
+        "operationId": "get_prompts_api_prompts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Prompts",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/workspaces": {
+      "post": {
+        "description": "创建工作区并启动视频处理",
+        "operationId": "create_workspace_api_workspaces_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkspaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workspace",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/from-transcript": {
+      "post": {
+        "description": "从已有转录文本直接创建工作区，跳过下载/转录流程，状态直接置 ready。",
+        "operationId": "create_workspace_from_transcript_api_workspaces_from_transcript_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFromTranscriptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Workspace From Transcript",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/lookup": {
+      "get": {
+        "description": "通过 BV 号 + 分 P 序号查找已存在的 workspace。",
+        "operationId": "lookup_workspace_api_workspaces_lookup_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "series_bvid",
+            "required": true,
+            "schema": {
+              "title": "Series Bvid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "series_index",
+            "required": true,
+            "schema": {
+              "title": "Series Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceLookupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Lookup Workspace",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}": {
+      "get": {
+        "description": "获取工作区信息",
+        "operationId": "get_workspace_info_api_workspaces__workspace_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workspace Info",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/generations/{task_id}/stream": {
+      "get": {
+        "description": "SSE 消费端点：按 Last-Event-ID 续读 Redis Stream。\n\nXREAD 不区分 entry 是\"历史\"还是\"新\"——同一个循环既能 replay 之前的\nchunk，也能阻塞等新 chunk。前端浏览器 EventSource 重连时自动带\nLast-Event-ID，server 从该 id 之后续推。\n\n显式 done/error sentinel 用于判定结束，不依赖\"连接关闭\"——重连场景\n下无法区分\"刚结束\"和\"早就结束很久了\"。",
+        "operationId": "consume_generation_api_workspaces__workspace_id__generations__task_id__stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Consume Generation",
+        "tags": [
+          "stream"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/resources/{resource_id}": {
+      "get": {
+        "description": "下载资源文件",
+        "operationId": "download_resource_api_workspaces__workspace_id__resources__resource_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource_id",
+            "required": true,
+            "schema": {
+              "title": "Resource Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Resource",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/status-stream": {
+      "get": {
+        "description": "SSE 推送工作区状态变化（通过 Redis Pub/Sub）",
+        "operationId": "stream_workspace_status_api_workspaces__workspace_id__status_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Workspace Status",
+        "tags": [
+          "workspace"
+        ]
+      }
+    },
+    "/api/workspaces/{workspace_id}/stream/{content_type}": {
+      "post": {
+        "description": "启动一次内容生成（幂等）。\n\npending/running 状态的活跃 task 直接复用——避免用户重复点按钮或刷新\n时重复 enqueue。done/failed 视为\"上一轮已结束\"，创建新 task 覆盖索引。",
+        "operationId": "start_generation_api_workspaces__workspace_id__stream__content_type__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "content_type",
+            "required": true,
+            "schema": {
+              "title": "Content Type",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationTaskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Generation",
+        "tags": [
+          "stream"
+        ]
+      }
+    }
+  }
+}

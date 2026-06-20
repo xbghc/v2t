@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend worker frontend build build-frontend test test-v lint lint-backend lint-frontend lint-fix lint-fix-backend lint-fix-frontend clean docker-build docker-up docker-down docker-logs docker-deploy help
+.PHONY: install install-backend install-frontend backend worker frontend build build-frontend generate test test-v lint lint-backend lint-frontend lint-fix lint-fix-backend lint-fix-frontend clean docker-build docker-up docker-down docker-logs docker-deploy help
 
 # 默认目标
 .DEFAULT_GOAL := help
@@ -41,6 +41,12 @@ else
 	@echo "构建到 $(DEPLOY_DIR)..."
 	pnpm --filter @v2t/web build -- --outDir $(DEPLOY_DIR) --emptyOutDir
 endif
+
+# ==================== 类型生成 ====================
+
+generate: ## 重新生成共享类型（后端导出 OpenAPI → 前端 codegen）。改后端模型后必跑
+	cd backend && uv run python -m app.export_openapi
+	pnpm --filter @v2t/shared generate
 
 # ==================== 测试 ====================
 

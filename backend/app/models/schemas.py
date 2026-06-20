@@ -2,6 +2,14 @@
 
 from pydantic import BaseModel, Field
 
+from .enums import (
+    GenerationContentType,
+    GenerationStatus,
+    ResourceType,
+    WorkspaceErrorKind,
+    WorkspaceStatus,
+)
+
 # ===== Workspace 相关 =====
 
 
@@ -27,9 +35,10 @@ class WorkspaceResourceResponse(BaseModel):
 
     resource_id: str
     name: str  # video, audio, transcript, outline, article, podcast
-    resource_type: str  # video | audio | text
-    download_url: str | None = None
-    content: str | None = None  # text 类型直接返回内容
+    resource_type: ResourceType
+    # 响应里总是 present（build_resource_response 必传），故标 required；值可为 null
+    download_url: str | None
+    content: str | None  # text 类型直接返回内容
     ready: bool = False
     created_at: float
 
@@ -39,8 +48,8 @@ class GenerationTaskResponse(BaseModel):
 
     task_id: str
     workspace_id: str
-    content_type: str  # outline / article / podcast
-    status: str  # pending / running / done / failed
+    content_type: GenerationContentType
+    status: GenerationStatus
     resource_id: str = ""
     audio_resource_id: str = ""
     audio_error: str = ""
@@ -54,10 +63,10 @@ class WorkspaceResponse(BaseModel):
     workspace_id: str
     url: str
     title: str
-    status: str  # pending, processing, ready, failed
+    status: WorkspaceStatus
     progress: str
     error: str  # 用户可读的友好消息
-    error_kind: str = ""  # video_too_long / download_failed / transcribe_failed / unknown / ""(无错误)
+    error_kind: WorkspaceErrorKind = WorkspaceErrorKind.NONE
     resources: list[WorkspaceResourceResponse]
     generations: list[GenerationTaskResponse] = []  # 各内容类型当前活跃 task（前端恢复用）
     created_at: float
@@ -66,7 +75,8 @@ class WorkspaceResponse(BaseModel):
     series_bvid: str = ""
     series_index: int = 0
     # 阶段耗时（秒）。stage_name → duration；audio_duration 为视频本身时长
-    timings: dict[str, float] = Field(default_factory=dict)
+    # 响应里总是 present（build_workspace_response 必传 dict），故标 required
+    timings: dict[str, float]
 
 
 class TranscriptSegmentMessage(BaseModel):
@@ -81,7 +91,8 @@ class TranscriptSegmentMessage(BaseModel):
 class WorkspaceLookupResponse(BaseModel):
     """系列分 P → workspace_id 查找响应"""
 
-    workspace_id: str | None = None
+    # 响应总是 present（命中返回 id，未命中返回 null），故标 required
+    workspace_id: str | None
 
 
 # ===== 流式生成相关 =====

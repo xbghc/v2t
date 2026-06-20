@@ -1,31 +1,70 @@
 /**
- * 后端通信 schema（与 backend WorkspaceStatus / API 响应 1:1 对应）
- * web 与 mobile 共享此定义
+ * 后端通信 schema —— 适配层（web 与 mobile 共享）
+ *
+ * 绝大多数类型从 ./generated.ts 重导出，该文件由后端 OpenAPI 自动生成
+ * （仓库根 `make generate`），请勿手改。本文件只做两件事：
+ *   1. 把生成的 components['schemas'][...] 映射成前端惯用的扁平名
+ *      （含若干历史命名，如 WorkspaceResourceResponse → WorkspaceResource）
+ *   2. 补充 OpenAPI 覆盖不到的类型：SSE envelope、前端 camelCase 概念
+ *
+ * 改后端接口的正确姿势：改 Pydantic 模型 → `make generate` → 类型自动同步。
+ * 枚举（status / content_type / error_kind 等）的唯一权威来源在后端 enums.py。
  */
 
-// 工作区状态（与后端 WorkspaceStatus 枚举对应）
-// 流式管道下 downloading / transcribing 已合并为 processing
-export type WorkspaceStatus =
-    | 'pending'
-    | 'processing'
-    | 'ready'
-    | 'failed'
+import type { components } from './generated'
 
-// 资源类型
-export type ResourceType = 'video' | 'audio' | 'text'
+type Schemas = components['schemas']
 
-// 工作区资源
-export interface WorkspaceResource {
-    resource_id: string
-    name: string  // video, audio, transcript, outline, article, podcast
-    resource_type: ResourceType
-    download_url: string | null
-    content: string | null
-    ready: boolean  // 资源是否已完成产出
-    created_at: number
+// ===== 枚举（后端 Enum → 精确 union）=====
+export type WorkspaceStatus = Schemas['WorkspaceStatus']
+export type ResourceType = Schemas['ResourceType']
+export type GenerationContentType = Schemas['GenerationContentType']
+export type GenerationStatus = Schemas['GenerationStatus']
+export type WorkspaceErrorKind = Schemas['WorkspaceErrorKind']
+
+// ===== Workspace =====
+export type WorkspaceResponse = Schemas['WorkspaceResponse']
+export type WorkspaceResource = Schemas['WorkspaceResourceResponse']
+export type GenerationTaskResponse = Schemas['GenerationTaskResponse']
+export type CreateWorkspaceRequest = Schemas['CreateWorkspaceRequest']
+export type WorkspaceLookupResponse = Schemas['WorkspaceLookupResponse']
+
+// ===== 提示词 =====
+export type PromptsResponse = Schemas['PromptsResponse']
+
+// ===== B 站分 P 探测 =====
+export type BilibiliPage = Schemas['BilibiliPageResponse']
+export type BilibiliVideoMetaResponse = Schemas['BilibiliVideoMetaResponse']
+
+// ===== 后台管理（运营统计）=====
+// 注：daily / items / timings / error_kind 后端用 default_factory，响应里总是
+// present（Pydantic 序列化输出空 []/{}），但 OpenAPI 的 required 未含它们，
+// codegen 误标 optional。这些字段经 `**dict` 解包构造，去后端默认有缺键风险，
+// 故在适配层按 wire 实际标 required（不谎报：序列化保证它们存在）。
+export type PageviewRequest = Schemas['PageviewRequest']
+export type AdminDailyPoint = Schemas['DailyPoint']
+
+export type AdminHistoryItem = Omit<Schemas['HistoryItem'], 'timings'> & {
+    timings: Record<string, number>
+}
+export type AdminHistoryResponse = Omit<Schemas['HistoryListResponse'], 'items'> & {
+    items: AdminHistoryItem[]
+}
+export type AdminStatsResponse = Omit<
+    Schemas['AdminStatsResponse'],
+    'daily' | 'error_kind'
+> & {
+    daily: AdminDailyPoint[]
+    error_kind: Record<string, number>
 }
 
-// SSE 推送的单段转录（envelope: type=transcript.append）
+// ===== OpenAPI 覆盖不到，手写保留 =====
+
+/**
+ * SSE 推送的单段转录增量。
+ * 只在 GET /status-stream 里手动 yield，不是任何端点的 request/response model，
+ * 故不进 OpenAPI。形状须与后端 TranscriptSegmentMessage(schemas.py) 保持一致。
+ */
 export interface TranscriptSegmentMessage {
     start: number
     end: number
@@ -33,155 +72,19 @@ export interface TranscriptSegmentMessage {
     chunk_index: number
 }
 
-// SSE envelope 联合类型
+/**
+ * status-stream 的 SSE envelope（两类事件的联合）。
+ */
 export type StatusStreamEvent =
     | { type: 'workspace'; data: WorkspaceResponse }
     | { type: 'transcript.append'; data: TranscriptSegmentMessage }
 
-// 失败原因分类（决定 UI 行为：是否给重试按钮等）
-//   video_too_long    — 视频时长超限（重试无意义，应改链接）
-//   download_failed   — 下载失败（建议重试）
-//   transcribe_failed — 转录失败（建议重试）
-//   unknown           — 未分类
-export type WorkspaceErrorKind =
-    | ''
-    | 'video_too_long'
-    | 'download_failed'
-    | 'transcribe_failed'
-    | 'unknown'
-
-// 生成任务状态（后端 GenerationTask.status）
-export type GenerationStatus = 'pending' | 'running' | 'done' | 'failed'
-
-// 内容类型（与后端 generation_task 模块对齐）
-export type GenerationContentType = 'outline' | 'article' | 'podcast'
-
-// 生成任务响应：随 WorkspaceResponse 一起回来，前端用它恢复 SSE 续传
-export interface GenerationTaskResponse {
-    task_id: string
-    workspace_id: string
-    content_type: GenerationContentType
-    status: GenerationStatus
-    resource_id: string
-    audio_resource_id: string
-    audio_error: string
-    error: string
-    stream_url: string  // 消费端点，前端直接连 SSE
-}
-
-// GET /api/workspaces/{id} 响应
-export interface WorkspaceResponse {
-    workspace_id: string
-    url: string
-    title: string
-    status: WorkspaceStatus
-    progress: string
-    error: string  // 用户可读的友好消息（直接展示）
-    error_kind: WorkspaceErrorKind  // 机器可读分类
-    resources: WorkspaceResource[]
-    generations: GenerationTaskResponse[]  // 各内容类型当前活跃 task
-    created_at: number
-    last_accessed_at: number
-    // B 站分 P 系列元数据（非分 P 视频时为空字符串 + 0）
-    series_bvid: string
-    series_index: number
-    // 阶段耗时（秒）。已知 key：download / vad_first_cut / stt_first_segment /
-    // stt_total / total / audio_duration（视频本身时长，非阶段耗时）。
-    // 处理过程中按阶段完成增量出现，未完成的 key 不存在。
-    timings: Record<string, number>
-}
-
-// POST /api/workspaces 请求
-export interface CreateWorkspaceRequest {
-    url: string
-    series_bvid?: string
-    series_index?: number
-}
-
-// GET /api/workspaces/lookup 响应
-export interface WorkspaceLookupResponse {
-    workspace_id: string | null
-}
-
-// === B 站分 P 探测 ===
-
-// 单个分 P
-export interface BilibiliPage {
-    page: number      // 1-based 序号
-    cid: number
-    title: string
-    duration: number  // 秒
-    url: string
-}
-
-// GET /api/bilibili/pages 响应
-export interface BilibiliVideoMetaResponse {
-    bvid: string
-    title: string
-    owner: string
-    cover_url: string
-    pages: BilibiliPage[]
-}
-
-// GET /api/prompts 响应
-export interface PromptsResponse {
-    outline_system: string
-    outline_user: string
-    article_system: string
-    article_user: string
-    podcast_system: string
-    podcast_user: string
-}
-
-// POST /api/workspaces/{id}/stream/{type} 请求参数
+/**
+ * 前端内部使用的 camelCase 提示词对。
+ * 注意：≠ 后端的 StreamRequest（snake_case 的 system_prompt / user_prompt）；
+ * 在 api 层发请求前转换。保留手写以免与 StreamRequest 混淆。
+ */
 export interface StreamPrompts {
     systemPrompt: string
     userPrompt: string
-}
-
-// === 后台管理（运营统计） ===
-
-// POST /api/metrics/pageview 请求
-export interface PageviewRequest {
-    path: string
-    visitor_id: string
-}
-
-// 单日 PV/UV 数据点
-export interface AdminDailyPoint {
-    date: string  // YYYY-MM-DD
-    pv: number
-    uv: number
-}
-
-// GET /api/admin/stats 响应
-export interface AdminStatsResponse {
-    pv_total: number          // 累计总 PV
-    uv_total: number          // 全期独立访客
-    transcribe_total: number  // 转录总数（ready + failed）
-    ready_count: number
-    failed_count: number
-    success_rate: number      // 0~1
-    error_kind: Record<string, number>  // 失败原因分类计数
-    daily: AdminDailyPoint[]  // 最近 N 天趋势（旧 → 新）
-}
-
-// 一条转录历史快照
-export interface AdminHistoryItem {
-    workspace_id: string
-    url: string
-    title: string
-    status: WorkspaceStatus
-    error_kind: WorkspaceErrorKind
-    created_at: number
-    finished_at: number
-    timings: Record<string, number>  // 各阶段耗时（download / stt_total / total 等）
-}
-
-// GET /api/admin/history 响应
-export interface AdminHistoryResponse {
-    items: AdminHistoryItem[]
-    total: number
-    offset: number
-    limit: number
 }
