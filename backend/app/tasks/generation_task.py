@@ -9,7 +9,7 @@ import uuid
 
 from app.config import get_settings
 from app.models.entities import Workspace, WorkspaceResource
-from app.models.enums import ResourceType
+from app.models.enums import ResourceName, ResourceType
 from app.services.llm import (
     LLMError,
     generate_article,
@@ -35,11 +35,12 @@ from app.storage.gen_stream import (
 logger = logging.getLogger(__name__)
 
 
-# 内容类型 → resource name 映射（与前端 getResourceContent 调用对齐）
+# 内容类型 → resource name 映射。注意 podcast 的脚本落成 PODCAST_SCRIPT，
+# 音频另存为 PODCAST_AUDIO（见 _save_podcast_audio）——历史错位，用 Enum 显式化。
 _RESOURCE_NAME = {
-    "outline": "outline",
-    "article": "article",
-    "podcast": "podcast_script",
+    "outline": ResourceName.OUTLINE,
+    "article": ResourceName.ARTICLE,
+    "podcast": ResourceName.PODCAST_SCRIPT,
 }
 
 
@@ -82,7 +83,7 @@ async def _save_podcast_audio(
 
     resource = WorkspaceResource(
         resource_id=audio_resource_id,
-        name="podcast",
+        name=ResourceName.PODCAST_AUDIO,
         resource_type=ResourceType.AUDIO,
         storage_key=audio_key,
         ready=True,
@@ -137,7 +138,7 @@ async def run_generate_content(ctx: dict, task_id: str) -> None:
         await xadd_error_and_finalize(redis, task_id, msg)
         return
 
-    transcript_resource = workspace.get_resource("transcript")
+    transcript_resource = workspace.get_resource(ResourceName.TRANSCRIPT)
     if not transcript_resource or not transcript_resource.storage_key:
         msg = "转录内容不存在"
         await update_gen_task(task_id, status="failed", error=msg)

@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from app.config import get_settings
 from app.models.entities import Workspace, WorkspaceResource
-from app.models.enums import ResourceType, WorkspaceStatus
+from app.models.enums import ResourceName, ResourceType, WorkspaceStatus
 from app.services.downloader import DownloadError, download_video
 from app.services.streaming_pipeline import (
     SegmentationState,
@@ -217,7 +217,7 @@ async def process_workspace(workspace_id: str, url: str) -> None:
 
             video_key = f"{url_hash}/video.mp4"
             await storage.save_file(video_key, video.path)
-            await _emit_resource(workspace, "video", ResourceType.VIDEO, video_key)
+            await _emit_resource(workspace, ResourceName.VIDEO, ResourceType.VIDEO, video_key)
 
             # ===== Stage 2: 流式转录（VAD + 切片 + STT 并行） =====
             # 抽取音频是转录链路的内部细节（stream_audio_chunks 内部按需 ffmpeg 抽 audio.mp3），
@@ -277,7 +277,7 @@ async def process_workspace(workspace_id: str, url: str) -> None:
             transcript_key = f"{url_hash}/transcript.txt"
             await storage.save_bytes(transcript_key, transcript_text.encode("utf-8"))
             await _emit_resource(
-                workspace, "transcript", ResourceType.TEXT, transcript_key,
+                workspace, ResourceName.TRANSCRIPT, ResourceType.TEXT, transcript_key,
             )
 
             await update_workspace_status(

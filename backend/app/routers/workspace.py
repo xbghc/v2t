@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.models.entities import Workspace, WorkspaceResource
-from app.models.enums import ResourceType, WorkspaceStatus
+from app.models.enums import ResourceName, ResourceType, WorkspaceStatus
 from app.models.schemas import (
     CreateFromTranscriptRequest,
     CreateWorkspaceRequest,
@@ -91,7 +91,7 @@ async def create_workspace_from_transcript(
 
     transcript_resource = WorkspaceResource(
         resource_id=str(uuid.uuid4())[:8],
-        name="transcript",
+        name=ResourceName.TRANSCRIPT,
         resource_type=ResourceType.TEXT,
         storage_key=transcript_key,
         ready=True,

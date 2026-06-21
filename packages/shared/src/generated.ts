@@ -799,6 +799,20 @@ export interface components {
             podcast_user: string;
         };
         /**
+         * ResourceName
+         * @description 工作区资源的名称（WorkspaceResource.name 的取值）。
+         *
+         *     区别于 ResourceType（video/audio/text 的"类型"）——这是资源的"身份"。
+         *     历史错位：播客脚本的 name 是 podcast_script、音频的 name 是 podcast，
+         *     用 PODCAST_SCRIPT / PODCAST_AUDIO 两个成员把它显式化。值已入 redis，不可改。
+         *
+         *     用 StrEnum（而非其他 Enum 的 (str, Enum)）是有意的：资源名会进 storage_key
+         *     的 f-string，StrEnum 的 __str__/__format__ 返回值本身，(str, Enum) 在 py3.12
+         *     会返回 "ResourceName.X" 污染文件名。
+         * @enum {string}
+         */
+        ResourceName: "video" | "transcript" | "outline" | "article" | "podcast_script" | "podcast";
+        /**
          * ResourceType
          * @description 资源类型
          * @enum {string}
@@ -872,8 +886,7 @@ export interface components {
             created_at: number;
             /** Download Url */
             download_url: string | null;
-            /** Name */
-            name: string;
+            name: components["schemas"]["ResourceName"];
             /**
              * Ready
              * @default false

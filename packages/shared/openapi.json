@@ -712,6 +712,19 @@
         "title": "PromptsResponse",
         "type": "object"
       },
+      "ResourceName": {
+        "description": "工作区资源的名称（WorkspaceResource.name 的取值）。\n\n区别于 ResourceType（video/audio/text 的\"类型\"）——这是资源的\"身份\"。\n历史错位：播客脚本的 name 是 podcast_script、音频的 name 是 podcast，\n用 PODCAST_SCRIPT / PODCAST_AUDIO 两个成员把它显式化。值已入 redis，不可改。\n\n用 StrEnum（而非其他 Enum 的 (str, Enum)）是有意的：资源名会进 storage_key\n的 f-string，StrEnum 的 __str__/__format__ 返回值本身，(str, Enum) 在 py3.12\n会返回 \"ResourceName.X\" 污染文件名。",
+        "enum": [
+          "video",
+          "transcript",
+          "outline",
+          "article",
+          "podcast_script",
+          "podcast"
+        ],
+        "title": "ResourceName",
+        "type": "string"
+      },
       "ResourceType": {
         "description": "资源类型",
         "enum": [
@@ -888,8 +901,7 @@
             "title": "Download Url"
           },
           "name": {
-            "title": "Name",
-            "type": "string"
+            "$ref": "#/components/schemas/ResourceName"
           },
           "ready": {
             "default": false,

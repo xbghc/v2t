@@ -18,6 +18,7 @@ type Schemas = components['schemas']
 // ===== 枚举（后端 Enum → 精确 union）=====
 export type WorkspaceStatus = Schemas['WorkspaceStatus']
 export type ResourceType = Schemas['ResourceType']
+export type ResourceName = Schemas['ResourceName']
 export type GenerationContentType = Schemas['GenerationContentType']
 export type GenerationStatus = Schemas['GenerationStatus']
 export type WorkspaceErrorKind = Schemas['WorkspaceErrorKind']

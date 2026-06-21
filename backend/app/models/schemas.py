@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from .enums import (
     GenerationContentType,
     GenerationStatus,
+    ResourceName,
     ResourceType,
     WorkspaceErrorKind,
     WorkspaceStatus,
@@ -34,7 +35,7 @@ class WorkspaceResourceResponse(BaseModel):
     """资源响应"""
 
     resource_id: str
-    name: str  # video, audio, transcript, outline, article, podcast
+    name: ResourceName  # 取值见 enums.ResourceName
     resource_type: ResourceType
     # 响应里总是 present（build_resource_response 必传），故标 required；值可为 null
     download_url: str | None

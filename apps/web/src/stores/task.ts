@@ -22,6 +22,7 @@ import type {
     WorkspaceStatus,
     WorkspaceResponse,
     WorkspaceResource,
+    ResourceName,
     GenerationTaskResponse,
     ContentType,
     CurrentTab,
@@ -199,12 +200,12 @@ export const useTaskStore = defineStore('task', () => {
 
     // ==================== 辅助函数 ====================
 
-    const getResourceContent = (resources: WorkspaceResource[], name: string): string => {
+    const getResourceContent = (resources: WorkspaceResource[], name: ResourceName): string => {
         const resource = [...resources].reverse().find(r => r.name === name)
         return resource?.content || ''
     }
 
-    const getResourceUrl = (resources: WorkspaceResource[], name: string): string | null => {
+    const getResourceUrl = (resources: WorkspaceResource[], name: ResourceName): string | null => {
         const resource = [...resources].reverse().find(r => r.name === name)
         return resource?.download_url || null
     }

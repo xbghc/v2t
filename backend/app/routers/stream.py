@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.models.entities import GenerationTask
-from app.models.enums import GenerationContentType
+from app.models.enums import GenerationContentType, ResourceName
 from app.models.schemas import GenerationTaskResponse, StreamRequest
 from app.storage import (
     get_active_gen_task,
@@ -56,7 +56,7 @@ async def start_generation(
     if not workspace:
         raise HTTPException(status_code=404, detail="工作区不存在或已过期")
 
-    transcript_resource = workspace.get_resource("transcript")
+    transcript_resource = workspace.get_resource(ResourceName.TRANSCRIPT)
     if not transcript_resource or not transcript_resource.storage_key:
         raise HTTPException(status_code=400, detail="转录内容不存在")
 
