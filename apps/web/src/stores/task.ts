@@ -8,6 +8,7 @@ import {
     startGeneration,
     consumeGenerationStream,
     streamWorkspaceStatus,
+    API_BASE,
 } from '@/api/workspace'
 import { useToastStore } from '@/stores/toast'
 import {
@@ -257,7 +258,7 @@ export const useTaskStore = defineStore('task', () => {
                 sendContent(type, {
                     type: 'COMPLETE',
                     audioUrl: payload.hasAudio && payload.audioResourceId
-                        ? `/api/workspaces/${task.workspace_id}/resources/${payload.audioResourceId}`
+                        ? `${API_BASE}/workspaces/${task.workspace_id}/resources/${payload.audioResourceId}`
                         : undefined,
                     audioError: payload.audioError,
                 })

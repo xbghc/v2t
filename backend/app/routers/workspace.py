@@ -29,7 +29,7 @@ from app.utils.sse import sse_heartbeat, sse_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/workspaces", tags=["workspace"])
+router = APIRouter(prefix="/workspaces", tags=["workspace"])
 
 
 @router.post("", response_model=WorkspaceResponse)

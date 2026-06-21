@@ -34,7 +34,7 @@ from app.utils.sse import sse_response
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/workspaces/{workspace_id}", tags=["stream"])
+router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["stream"])
 
 # 内容类型白名单从 Enum 派生——GenerationContentType 是唯一权威来源
 _VALID_CONTENT_TYPES = {e.value for e in GenerationContentType}

@@ -1,5 +1,6 @@
 """共享响应构建器"""
 
+from app.constants import API_V1_PREFIX
 from app.models.entities import GenerationTask, Workspace, WorkspaceResource
 from app.models.enums import ResourceType
 from app.models.schemas import (
@@ -13,7 +14,7 @@ from app.storage import get_file_storage, list_gen_tasks_for_workspace
 def build_gen_task_response(task: GenerationTask) -> GenerationTaskResponse:
     """生成任务 → 响应，stream_url 直接由后端拼好。"""
     stream_url = (
-        f"/api/workspaces/{task.workspace_id}/generations/{task.task_id}/stream"
+        f"{API_V1_PREFIX}/workspaces/{task.workspace_id}/generations/{task.task_id}/stream"
     )
     return GenerationTaskResponse(
         task_id=task.task_id,
@@ -36,7 +37,7 @@ async def build_resource_response(
     content = None
 
     if resource.resource_type in (ResourceType.VIDEO, ResourceType.AUDIO):
-        download_url = f"/api/workspaces/{workspace_id}/resources/{resource.resource_id}"
+        download_url = f"{API_V1_PREFIX}/workspaces/{workspace_id}/resources/{resource.resource_id}"
     elif resource.resource_type == ResourceType.TEXT and resource.storage_key:
         try:
             storage = get_file_storage()

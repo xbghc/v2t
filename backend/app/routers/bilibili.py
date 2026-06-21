@@ -12,7 +12,7 @@ from app.services.bilibili_meta import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/bilibili", tags=["bilibili"])
+router = APIRouter(prefix="/bilibili", tags=["bilibili"])
 
 
 class BilibiliPageResponse(BaseModel):

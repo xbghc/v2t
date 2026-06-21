@@ -20,7 +20,7 @@ from app.services.xiazaitool import XiazaitoolError, parse_video_url
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/desktop", tags=["desktop"])
+router = APIRouter(tags=["media"])
 
 DASHSCOPE_BASE = "https://dashscope.aliyuncs.com"
 
@@ -95,7 +95,7 @@ class TranscribeResponse(BaseModel):
     text: str
 
 
-@router.post("/transcribe", response_model=TranscribeResponse)
+@router.post("/transcriptions", response_model=TranscribeResponse)
 async def transcribe(
     file: UploadFile = File(...),
     language: str | None = Form(None),
@@ -124,7 +124,7 @@ async def transcribe(
         tmp_path.unlink(missing_ok=True)
 
 
-@router.post("/dashscope/{path:path}")
+@router.post("/tts/{path:path}")
 async def dashscope_proxy(path: str, request: Request) -> Response:
     """透传任意 path 到 DashScope（阿里云百炼）。"""
     settings = get_settings()
@@ -146,7 +146,7 @@ class ParseVideoResponse(BaseModel):
     thumbnail: str | None = None
 
 
-@router.post("/parse-video", response_model=ParseVideoResponse)
+@router.post("/video-sources", response_model=ParseVideoResponse)
 async def parse_video(body: ParseVideoRequest) -> ParseVideoResponse:
     """解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。"""
     try:

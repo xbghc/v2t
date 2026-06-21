@@ -11,8 +11,10 @@ import type {
     TranscriptSegmentMessage,
 } from '@/types'
 
-// API 基础路径，使用 Vite 的 base 配置
-const API_BASE = `${import.meta.env.BASE_URL}api`
+// API 基础路径，使用 Vite 的 base 配置。
+// 对外接口统一走 /api/v1（与后端 constants.API_V1_PREFIX 对应）；
+// 内部端点 /api/admin、/api/metrics 由各自模块保留 /api，不加 v1。
+export const API_BASE = `${import.meta.env.BASE_URL}api/v1`
 
 /**
  * 获取默认提示词

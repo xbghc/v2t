@@ -17,6 +17,7 @@ import asyncio
 from fastapi import FastAPI
 from loguru import logger
 
+from app.constants import API_V1_PREFIX
 from app.routers import (
     admin_router,
     bilibili_router,
@@ -33,18 +34,18 @@ app = FastAPI(
     description="输入视频链接，获取视频、音频、大纲和详细文字",
 )
 
-# 注册路由
-app.include_router(workspace_router)
-app.include_router(stream_router)
-app.include_router(prompts_router)
-app.include_router(desktop_router)
-app.include_router(bilibili_router)
-# 页面访问埋点：公开端点，供前端 PV/UV 上报，不被 nginx 屏蔽
+# 对外 API：统一挂在 /api/v1，版本号集中此处控制（开 v2 时复制此块改前缀）。
+# 这些是会被不可控客户端（桌面/移动端）调用的版本化契约。
+app.include_router(workspace_router, prefix=API_V1_PREFIX)
+app.include_router(stream_router, prefix=API_V1_PREFIX)
+app.include_router(prompts_router, prefix=API_V1_PREFIX)
+app.include_router(desktop_router, prefix=API_V1_PREFIX)
+app.include_router(bilibili_router, prefix=API_V1_PREFIX)
+# 内部端点：不版本化，路径保持 /api/...。metrics 公开（前端 PV/UV 上报）；
+# diag/admin 靠 nginx-docker.conf 按 /api/diag、/api/admin 路径对公网 404 隔离，
+# 故这三者前缀必须保持不变，不能并入 /api/v1。
 app.include_router(metrics_router)
-# 诊断路由：仅供内部使用，nginx-docker.conf 会把 /api/diag/* 对外 404，
-# host 内通过 docker-compose 暴露的 127.0.0.1:8101 直连访问
 app.include_router(diagnostics_router)
-# 后台管理路由：同样仅供内部使用，nginx-docker.conf 把 /api/admin/* 对外 404
 app.include_router(admin_router)
 
 

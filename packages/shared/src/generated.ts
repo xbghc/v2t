@@ -44,91 +44,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bilibili/pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Pages
-         * @description 获取 B 站视频的分 P 列表。
-         *
-         *     入参可以是完整页面 URL（含或不含查询串）或 BV 号字符串。
-         *     返回：视频系列标题、UP 主、封面、每个分 P 的 page/cid/标题/时长/URL。
-         */
-        get: operations["get_pages_api_bilibili_pages_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/desktop/dashscope/{path}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Dashscope Proxy
-         * @description 透传任意 path 到 DashScope（阿里云百炼）。
-         */
-        post: operations["dashscope_proxy_api_desktop_dashscope__path__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/desktop/parse-video": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Parse Video
-         * @description 解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。
-         */
-        post: operations["parse_video_api_desktop_parse_video_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/desktop/transcribe": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Transcribe
-         * @description 统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。
-         *
-         *     桌面端不感知具体提供商，只需 multipart 上传音频文件。
-         */
-        post: operations["transcribe_api_desktop_transcribe_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/diag/": {
         parameters: {
             query?: never;
@@ -240,7 +155,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/prompts": {
+    "/api/v1/bilibili/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Pages
+         * @description 获取 B 站视频的分 P 列表。
+         *
+         *     入参可以是完整页面 URL（含或不含查询串）或 BV 号字符串。
+         *     返回：视频系列标题、UP 主、封面、每个分 P 的 page/cid/标题/时长/URL。
+         */
+        get: operations["get_pages_api_v1_bilibili_pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/prompts": {
         parameters: {
             query?: never;
             header?: never;
@@ -251,7 +189,7 @@ export interface paths {
          * Get Prompts
          * @description 获取默认提示词
          */
-        get: operations["get_prompts_api_prompts_get"];
+        get: operations["get_prompts_api_v1_prompts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -260,7 +198,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces": {
+    "/api/v1/transcriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transcribe
+         * @description 统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。
+         *
+         *     桌面端不感知具体提供商，只需 multipart 上传音频文件。
+         */
+        post: operations["transcribe_api_v1_transcriptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tts/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dashscope Proxy
+         * @description 透传任意 path 到 DashScope（阿里云百炼）。
+         */
+        post: operations["dashscope_proxy_api_v1_tts__path__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/video-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Parse Video
+         * @description 解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。
+         */
+        post: operations["parse_video_api_v1_video_sources_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces": {
         parameters: {
             query?: never;
             header?: never;
@@ -273,14 +273,14 @@ export interface paths {
          * Create Workspace
          * @description 创建工作区并启动视频处理
          */
-        post: operations["create_workspace_api_workspaces_post"];
+        post: operations["create_workspace_api_v1_workspaces_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/from-transcript": {
+    "/api/v1/workspaces/from-transcript": {
         parameters: {
             query?: never;
             header?: never;
@@ -293,14 +293,14 @@ export interface paths {
          * Create Workspace From Transcript
          * @description 从已有转录文本直接创建工作区，跳过下载/转录流程，状态直接置 ready。
          */
-        post: operations["create_workspace_from_transcript_api_workspaces_from_transcript_post"];
+        post: operations["create_workspace_from_transcript_api_v1_workspaces_from_transcript_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/lookup": {
+    "/api/v1/workspaces/lookup": {
         parameters: {
             query?: never;
             header?: never;
@@ -311,7 +311,7 @@ export interface paths {
          * Lookup Workspace
          * @description 通过 BV 号 + 分 P 序号查找已存在的 workspace。
          */
-        get: operations["lookup_workspace_api_workspaces_lookup_get"];
+        get: operations["lookup_workspace_api_v1_workspaces_lookup_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -320,7 +320,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}": {
+    "/api/v1/workspaces/{workspace_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -331,7 +331,7 @@ export interface paths {
          * Get Workspace Info
          * @description 获取工作区信息
          */
-        get: operations["get_workspace_info_api_workspaces__workspace_id__get"];
+        get: operations["get_workspace_info_api_v1_workspaces__workspace_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -340,7 +340,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/generations/{task_id}/stream": {
+    "/api/v1/workspaces/{workspace_id}/generations/{task_id}/stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -358,7 +358,7 @@ export interface paths {
          *     显式 done/error sentinel 用于判定结束，不依赖"连接关闭"——重连场景
          *     下无法区分"刚结束"和"早就结束很久了"。
          */
-        get: operations["consume_generation_api_workspaces__workspace_id__generations__task_id__stream_get"];
+        get: operations["consume_generation_api_v1_workspaces__workspace_id__generations__task_id__stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -367,7 +367,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/resources/{resource_id}": {
+    "/api/v1/workspaces/{workspace_id}/resources/{resource_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -378,7 +378,7 @@ export interface paths {
          * Download Resource
          * @description 下载资源文件
          */
-        get: operations["download_resource_api_workspaces__workspace_id__resources__resource_id__get"];
+        get: operations["download_resource_api_v1_workspaces__workspace_id__resources__resource_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -387,7 +387,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/status-stream": {
+    "/api/v1/workspaces/{workspace_id}/status-stream": {
         parameters: {
             query?: never;
             header?: never;
@@ -398,7 +398,7 @@ export interface paths {
          * Stream Workspace Status
          * @description SSE 推送工作区状态变化（通过 Redis Pub/Sub）
          */
-        get: operations["stream_workspace_status_api_workspaces__workspace_id__status_stream_get"];
+        get: operations["stream_workspace_status_api_v1_workspaces__workspace_id__status_stream_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -407,7 +407,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/workspaces/{workspace_id}/stream/{content_type}": {
+    "/api/v1/workspaces/{workspace_id}/stream/{content_type}": {
         parameters: {
             query?: never;
             header?: never;
@@ -423,7 +423,7 @@ export interface paths {
          *     pending/running 状态的活跃 task 直接复用——避免用户重复点按钮或刷新
          *     时重复 enqueue。done/failed 视为"上一轮已结束"，创建新 task 覆盖索引。
          */
-        post: operations["start_generation_api_workspaces__workspace_id__stream__content_type__post"];
+        post: operations["start_generation_api_v1_workspaces__workspace_id__stream__content_type__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -510,8 +510,8 @@ export interface components {
              */
             audio: string;
         };
-        /** Body_transcribe_api_desktop_transcribe_post */
-        Body_transcribe_api_desktop_transcribe_post: {
+        /** Body_transcribe_api_v1_transcriptions_post */
+        Body_transcribe_api_v1_transcriptions_post: {
             /**
              * File
              * Format: binary
@@ -1008,134 +1008,6 @@ export interface operations {
             };
         };
     };
-    get_pages_api_bilibili_pages_get: {
-        parameters: {
-            query: {
-                url: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BilibiliVideoMetaResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    dashscope_proxy_api_desktop_dashscope__path__post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                path: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    parse_video_api_desktop_parse_video_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ParseVideoRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParseVideoResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    transcribe_api_desktop_transcribe_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_transcribe_api_desktop_transcribe_post"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TranscribeResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     page_api_diag__get: {
         parameters: {
             query?: never;
@@ -1306,7 +1178,38 @@ export interface operations {
             };
         };
     };
-    get_prompts_api_prompts_get: {
+    get_pages_api_v1_bilibili_pages_get: {
+        parameters: {
+            query: {
+                url: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BilibiliVideoMetaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_prompts_api_v1_prompts_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1326,7 +1229,104 @@ export interface operations {
             };
         };
     };
-    create_workspace_api_workspaces_post: {
+    transcribe_api_v1_transcriptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_transcribe_api_v1_transcriptions_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscribeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashscope_proxy_api_v1_tts__path__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    parse_video_api_v1_video_sources_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParseVideoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParseVideoResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_workspace_api_v1_workspaces_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1359,7 +1359,7 @@ export interface operations {
             };
         };
     };
-    create_workspace_from_transcript_api_workspaces_from_transcript_post: {
+    create_workspace_from_transcript_api_v1_workspaces_from_transcript_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1392,7 +1392,7 @@ export interface operations {
             };
         };
     };
-    lookup_workspace_api_workspaces_lookup_get: {
+    lookup_workspace_api_v1_workspaces_lookup_get: {
         parameters: {
             query: {
                 series_bvid: string;
@@ -1424,7 +1424,7 @@ export interface operations {
             };
         };
     };
-    get_workspace_info_api_workspaces__workspace_id__get: {
+    get_workspace_info_api_v1_workspaces__workspace_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1455,7 +1455,7 @@ export interface operations {
             };
         };
     };
-    consume_generation_api_workspaces__workspace_id__generations__task_id__stream_get: {
+    consume_generation_api_v1_workspaces__workspace_id__generations__task_id__stream_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1487,7 +1487,7 @@ export interface operations {
             };
         };
     };
-    download_resource_api_workspaces__workspace_id__resources__resource_id__get: {
+    download_resource_api_v1_workspaces__workspace_id__resources__resource_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1519,7 +1519,7 @@ export interface operations {
             };
         };
     };
-    stream_workspace_status_api_workspaces__workspace_id__status_stream_get: {
+    stream_workspace_status_api_v1_workspaces__workspace_id__status_stream_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1550,7 +1550,7 @@ export interface operations {
             };
         };
     };
-    start_generation_api_workspaces__workspace_id__stream__content_type__post: {
+    start_generation_api_v1_workspaces__workspace_id__stream__content_type__post: {
         parameters: {
             query?: never;
             header?: never;

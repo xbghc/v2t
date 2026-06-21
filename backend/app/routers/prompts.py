@@ -12,7 +12,7 @@ from app.services.llm import (
     DEFAULT_PODCAST_USER_PROMPT,
 )
 
-router = APIRouter(prefix="/api", tags=["prompts"])
+router = APIRouter(tags=["prompts"])
 
 
 @router.get("/prompts", response_model=PromptsResponse)

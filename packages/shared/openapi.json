@@ -135,7 +135,7 @@
         "title": "Body_stt_api_diag_stt_post",
         "type": "object"
       },
-      "Body_transcribe_api_desktop_transcribe_post": {
+      "Body_transcribe_api_v1_transcriptions_post": {
         "properties": {
           "file": {
             "format": "binary",
@@ -157,7 +157,7 @@
         "required": [
           "file"
         ],
-        "title": "Body_transcribe_api_desktop_transcribe_post",
+        "title": "Body_transcribe_api_v1_transcriptions_post",
         "type": "object"
       },
       "CreateFromTranscriptRequest": {
@@ -1124,174 +1124,6 @@
         ]
       }
     },
-    "/api/bilibili/pages": {
-      "get": {
-        "description": "获取 B 站视频的分 P 列表。\n\n入参可以是完整页面 URL（含或不含查询串）或 BV 号字符串。\n返回：视频系列标题、UP 主、封面、每个分 P 的 page/cid/标题/时长/URL。",
-        "operationId": "get_pages_api_bilibili_pages_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "url",
-            "required": true,
-            "schema": {
-              "title": "Url",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BilibiliVideoMetaResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Pages",
-        "tags": [
-          "bilibili"
-        ]
-      }
-    },
-    "/api/desktop/dashscope/{path}": {
-      "post": {
-        "description": "透传任意 path 到 DashScope（阿里云百炼）。",
-        "operationId": "dashscope_proxy_api_desktop_dashscope__path__post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "path",
-            "required": true,
-            "schema": {
-              "title": "Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Dashscope Proxy",
-        "tags": [
-          "desktop"
-        ]
-      }
-    },
-    "/api/desktop/parse-video": {
-      "post": {
-        "description": "解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。",
-        "operationId": "parse_video_api_desktop_parse_video_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ParseVideoRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ParseVideoResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Parse Video",
-        "tags": [
-          "desktop"
-        ]
-      }
-    },
-    "/api/desktop/transcribe": {
-      "post": {
-        "description": "统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。\n\n桌面端不感知具体提供商，只需 multipart 上传音频文件。",
-        "operationId": "transcribe_api_desktop_transcribe_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_transcribe_api_desktop_transcribe_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TranscribeResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Transcribe",
-        "tags": [
-          "desktop"
-        ]
-      }
-    },
     "/api/diag/": {
       "get": {
         "operationId": "page_api_diag__get",
@@ -1494,10 +1326,53 @@
         ]
       }
     },
-    "/api/prompts": {
+    "/api/v1/bilibili/pages": {
+      "get": {
+        "description": "获取 B 站视频的分 P 列表。\n\n入参可以是完整页面 URL（含或不含查询串）或 BV 号字符串。\n返回：视频系列标题、UP 主、封面、每个分 P 的 page/cid/标题/时长/URL。",
+        "operationId": "get_pages_api_v1_bilibili_pages_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "url",
+            "required": true,
+            "schema": {
+              "title": "Url",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BilibiliVideoMetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pages",
+        "tags": [
+          "bilibili"
+        ]
+      }
+    },
+    "/api/v1/prompts": {
       "get": {
         "description": "获取默认提示词",
-        "operationId": "get_prompts_api_prompts_get",
+        "operationId": "get_prompts_api_v1_prompts_get",
         "responses": {
           "200": {
             "content": {
@@ -1516,10 +1391,135 @@
         ]
       }
     },
-    "/api/workspaces": {
+    "/api/v1/transcriptions": {
+      "post": {
+        "description": "统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。\n\n桌面端不感知具体提供商，只需 multipart 上传音频文件。",
+        "operationId": "transcribe_api_v1_transcriptions_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcribe_api_v1_transcriptions_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscribeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transcribe",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/tts/{path}": {
+      "post": {
+        "description": "透传任意 path 到 DashScope（阿里云百炼）。",
+        "operationId": "dashscope_proxy_api_v1_tts__path__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashscope Proxy",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/video-sources": {
+      "post": {
+        "description": "解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。",
+        "operationId": "parse_video_api_v1_video_sources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ParseVideoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseVideoResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Video",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/workspaces": {
       "post": {
         "description": "创建工作区并启动视频处理",
-        "operationId": "create_workspace_api_workspaces_post",
+        "operationId": "create_workspace_api_v1_workspaces_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1558,10 +1558,10 @@
         ]
       }
     },
-    "/api/workspaces/from-transcript": {
+    "/api/v1/workspaces/from-transcript": {
       "post": {
         "description": "从已有转录文本直接创建工作区，跳过下载/转录流程，状态直接置 ready。",
-        "operationId": "create_workspace_from_transcript_api_workspaces_from_transcript_post",
+        "operationId": "create_workspace_from_transcript_api_v1_workspaces_from_transcript_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1600,10 +1600,10 @@
         ]
       }
     },
-    "/api/workspaces/lookup": {
+    "/api/v1/workspaces/lookup": {
       "get": {
         "description": "通过 BV 号 + 分 P 序号查找已存在的 workspace。",
-        "operationId": "lookup_workspace_api_workspaces_lookup_get",
+        "operationId": "lookup_workspace_api_v1_workspaces_lookup_get",
         "parameters": [
           {
             "in": "query",
@@ -1652,10 +1652,10 @@
         ]
       }
     },
-    "/api/workspaces/{workspace_id}": {
+    "/api/v1/workspaces/{workspace_id}": {
       "get": {
         "description": "获取工作区信息",
-        "operationId": "get_workspace_info_api_workspaces__workspace_id__get",
+        "operationId": "get_workspace_info_api_v1_workspaces__workspace_id__get",
         "parameters": [
           {
             "in": "path",
@@ -1695,10 +1695,10 @@
         ]
       }
     },
-    "/api/workspaces/{workspace_id}/generations/{task_id}/stream": {
+    "/api/v1/workspaces/{workspace_id}/generations/{task_id}/stream": {
       "get": {
         "description": "SSE 消费端点：按 Last-Event-ID 续读 Redis Stream。\n\nXREAD 不区分 entry 是\"历史\"还是\"新\"——同一个循环既能 replay 之前的\nchunk，也能阻塞等新 chunk。前端浏览器 EventSource 重连时自动带\nLast-Event-ID，server 从该 id 之后续推。\n\n显式 done/error sentinel 用于判定结束，不依赖\"连接关闭\"——重连场景\n下无法区分\"刚结束\"和\"早就结束很久了\"。",
-        "operationId": "consume_generation_api_workspaces__workspace_id__generations__task_id__stream_get",
+        "operationId": "consume_generation_api_v1_workspaces__workspace_id__generations__task_id__stream_get",
         "parameters": [
           {
             "in": "path",
@@ -1745,10 +1745,10 @@
         ]
       }
     },
-    "/api/workspaces/{workspace_id}/resources/{resource_id}": {
+    "/api/v1/workspaces/{workspace_id}/resources/{resource_id}": {
       "get": {
         "description": "下载资源文件",
-        "operationId": "download_resource_api_workspaces__workspace_id__resources__resource_id__get",
+        "operationId": "download_resource_api_v1_workspaces__workspace_id__resources__resource_id__get",
         "parameters": [
           {
             "in": "path",
@@ -1795,10 +1795,10 @@
         ]
       }
     },
-    "/api/workspaces/{workspace_id}/status-stream": {
+    "/api/v1/workspaces/{workspace_id}/status-stream": {
       "get": {
         "description": "SSE 推送工作区状态变化（通过 Redis Pub/Sub）",
-        "operationId": "stream_workspace_status_api_workspaces__workspace_id__status_stream_get",
+        "operationId": "stream_workspace_status_api_v1_workspaces__workspace_id__status_stream_get",
         "parameters": [
           {
             "in": "path",
@@ -1836,10 +1836,10 @@
         ]
       }
     },
-    "/api/workspaces/{workspace_id}/stream/{content_type}": {
+    "/api/v1/workspaces/{workspace_id}/stream/{content_type}": {
       "post": {
         "description": "启动一次内容生成（幂等）。\n\npending/running 状态的活跃 task 直接复用——避免用户重复点按钮或刷新\n时重复 enqueue。done/failed 视为\"上一轮已结束\"，创建新 task 覆盖索引。",
-        "operationId": "start_generation_api_workspaces__workspace_id__stream__content_type__post",
+        "operationId": "start_generation_api_v1_workspaces__workspace_id__stream__content_type__post",
         "parameters": [
           {
             "in": "path",
