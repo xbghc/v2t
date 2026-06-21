@@ -21,8 +21,8 @@ from app.constants import API_V1_PREFIX
 from app.routers import (
     admin_router,
     bilibili_router,
-    desktop_router,
     diagnostics_router,
+    media_router,
     metrics_router,
     prompts_router,
     stream_router,
@@ -39,7 +39,7 @@ app = FastAPI(
 app.include_router(workspace_router, prefix=API_V1_PREFIX)
 app.include_router(stream_router, prefix=API_V1_PREFIX)
 app.include_router(prompts_router, prefix=API_V1_PREFIX)
-app.include_router(desktop_router, prefix=API_V1_PREFIX)
+app.include_router(media_router, prefix=API_V1_PREFIX)
 app.include_router(bilibili_router, prefix=API_V1_PREFIX)
 # 内部端点：不版本化，路径保持 /api/...。metrics 公开（前端 PV/UV 上报）；
 # diag/admin 靠 nginx-docker.conf 按 /api/diag、/api/admin 路径对公网 404 隔离，
