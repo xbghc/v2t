@@ -59,6 +59,10 @@ export type AdminStatsResponse = Omit<
     error_kind: Record<string, number>
 }
 
+// ===== 认证（邮箱 OTP 登录）=====
+export type UserResponse = Schemas['UserResponse']
+export type AuthResponse = Schemas['AuthResponse']
+
 // ===== OpenAPI 覆盖不到，手写保留 =====
 
 /**

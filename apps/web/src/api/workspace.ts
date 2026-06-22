@@ -10,17 +10,29 @@ import type {
     StatusStreamEvent,
     TranscriptSegmentMessage,
 } from '@/types'
+import { API_BASE, authHeaders, onUnauthorized } from './http'
 
-// API 基础路径，使用 Vite 的 base 配置。
-// 对外接口统一走 /api/v1（与后端 constants.API_V1_PREFIX 对应）；
-// 内部端点 /api/admin、/api/metrics 由各自模块保留 /api，不加 v1。
-export const API_BASE = `${import.meta.env.BASE_URL}api/v1`
+/**
+ * 统一业务请求：自动带 token，遇 401 清登录态并跳登录页。
+ * path 相对 API_BASE（/api/v1）。
+ */
+async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+    const response = await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: { ...(init.headers || {}), ...authHeaders() },
+    })
+    if (response.status === 401) {
+        onUnauthorized()
+        throw new Error('登录已过期，请重新登录')
+    }
+    return response
+}
 
 /**
  * 获取默认提示词
  */
 export async function getDefaultPrompts(): Promise<PromptsResponse> {
-    const response = await fetch(`${API_BASE}/prompts`)
+    const response = await apiFetch('/prompts')
     if (!response.ok) {
         throw new Error('获取默认提示词失败')
     }
@@ -39,7 +51,7 @@ export async function createWorkspace(
         body.series_bvid = options.seriesBvid
         body.series_index = options.seriesIndex
     }
-    const response = await fetch(`${API_BASE}/workspaces`, {
+    const response = await apiFetch('/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -61,8 +73,8 @@ export async function fetchBilibiliPages(
     url: string
 ): Promise<BilibiliVideoMetaResponse | null> {
     try {
-        const response = await fetch(
-            `${API_BASE}/bilibili/pages?url=${encodeURIComponent(url)}`
+        const response = await apiFetch(
+            `/bilibili/pages?url=${encodeURIComponent(url)}`
         )
         if (!response.ok) return null
         return await response.json() as BilibiliVideoMetaResponse
@@ -79,8 +91,8 @@ export async function lookupWorkspaceBySeries(
     seriesIndex: number
 ): Promise<string | null> {
     try {
-        const response = await fetch(
-            `${API_BASE}/workspaces/lookup?series_bvid=${encodeURIComponent(seriesBvid)}&series_index=${seriesIndex}`
+        const response = await apiFetch(
+            `/workspaces/lookup?series_bvid=${encodeURIComponent(seriesBvid)}&series_index=${seriesIndex}`
         )
         if (!response.ok) return null
         const data = await response.json() as WorkspaceLookupResponse
@@ -94,7 +106,7 @@ export async function lookupWorkspaceBySeries(
  * 获取工作区信息
  */
 export async function getWorkspace(workspaceId: string): Promise<WorkspaceResponse> {
-    const response = await fetch(`${API_BASE}/workspaces/${workspaceId}`)
+    const response = await apiFetch(`/workspaces/${workspaceId}`)
     if (!response.ok) {
         const data = await response.json() as { detail?: string }
         throw new Error(data.detail || '获取工作区失败')
@@ -123,9 +135,14 @@ export function streamWorkspaceStatus(
     fetchEventSource(`${API_BASE}/workspaces/${workspaceId}/status-stream`, {
         signal: ctrl.signal,
         openWhenHidden: true,
+        headers: authHeaders(),
         async onopen(response) {
             if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
                 return
+            }
+            if (response.status === 401) {
+                onUnauthorized()
+                throw new Error('登录已过期，请重新登录')
             }
             const contentType = response.headers.get('content-type')
             if (contentType?.includes('application/json')) {
@@ -166,8 +183,8 @@ export async function startGeneration(
     contentType: GenerationContentType,
     prompts: StreamPrompts
 ): Promise<GenerationTaskResponse> {
-    const response = await fetch(
-        `${API_BASE}/workspaces/${workspaceId}/stream/${contentType}`,
+    const response = await apiFetch(
+        `/workspaces/${workspaceId}/stream/${contentType}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -228,9 +245,16 @@ export function consumeGenerationStream(
     fetchEventSource(streamUrl, {
         signal: ctrl.signal,
         openWhenHidden: true,
+        headers: authHeaders(),
         async onopen(response) {
             if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
                 return
+            }
+            if (response.status === 401) {
+                onUnauthorized()
+                closedByBusiness = true
+                ctrl.abort()
+                throw new Error('登录已过期，请重新登录')
             }
             // 4xx → 永久错误，停止重连（任务不存在、workspace 过期等）
             if (response.status >= 400 && response.status < 500) {

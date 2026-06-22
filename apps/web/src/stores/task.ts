@@ -8,8 +8,8 @@ import {
     startGeneration,
     consumeGenerationStream,
     streamWorkspaceStatus,
-    API_BASE,
 } from '@/api/workspace'
+import { API_BASE } from '@/api/http'
 import { useToastStore } from '@/stores/toast'
 import {
     createWorkspaceMachine,

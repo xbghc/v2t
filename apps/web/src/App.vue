@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTaskStore } from '@/stores/task'
+import { useAuthStore } from '@/stores/auth'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
 import GlobalToast from '@/components/GlobalToast.vue'
@@ -9,6 +10,10 @@ import GlobalToast from '@/components/GlobalToast.vue'
 const route = useRoute()
 const router = useRouter()
 const taskStore = useTaskStore()
+const auth = useAuthStore()
+
+// 启动时用已存 token 拉用户；失效则 loadMe 内部清除（后续请求 401 会跳登录）
+onMounted(() => { void auth.loadMe() })
 
 // 判断是否为结果页
 const isResultPage = computed(() => route.name === 'workspace')

@@ -1,7 +1,9 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import InitialPage from '@/pages/InitialPage.vue'
 import ResultPage from '@/pages/ResultPage.vue'
+import LoginPage from '@/pages/LoginPage.vue'
 import { reportPageview } from '@/api/metrics'
+import { getToken } from '@/api/http'
 
 const routes: RouteRecordRaw[] = [
     {
@@ -22,6 +24,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/AdminDashboard.vue'),
     },
     {
+        path: '/login',
+        name: 'login',
+        component: LoginPage,
+    },
+    {
         path: '/:pathMatch(.*)*',
         redirect: '/',
     },
@@ -30,6 +37,18 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
     history: createWebHistory('/'),
     routes,
+})
+
+// 登录守卫：未登录一律跳 /login。admin 靠 nginx 公网隔离、login 本身豁免。
+const OTP_EXEMPT = new Set(['login', 'admin'])
+router.beforeEach((to) => {
+    const loggedIn = !!getToken()
+    if (!loggedIn && !OTP_EXEMPT.has(to.name as string)) {
+        return { name: 'login', query: { redirect: to.fullPath } }
+    }
+    if (loggedIn && to.name === 'login') {
+        return { name: 'home' }
+    }
 })
 
 // 全站 PV/UV 埋点：每次路由切换上报，admin 自身访问不计入统计

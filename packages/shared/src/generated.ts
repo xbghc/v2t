@@ -155,6 +155,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description 吊销当前 token。
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Me
+         * @description 返回当前登录用户。
+         */
+        get: operations["me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/request-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Code
+         * @description 发送登录验证码到邮箱。
+         */
+        post: operations["request_code_api_v1_auth_request_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify
+         * @description 校验验证码，成功则登录（查/建用户 + 签发 token）。
+         */
+        post: operations["verify_api_v1_auth_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bilibili/pages": {
         parameters: {
             query?: never;
@@ -475,6 +555,15 @@ export interface components {
              * @default 0
              */
             uv_total: number;
+        };
+        /**
+         * AuthResponse
+         * @description 登录成功响应：token + 用户信息
+         */
+        AuthResponse: {
+            /** Token */
+            token: string;
+            user: components["schemas"]["UserResponse"];
         };
         /** BilibiliPageResponse */
         BilibiliPageResponse: {
@@ -799,6 +888,14 @@ export interface components {
             podcast_user: string;
         };
         /**
+         * RequestCodeRequest
+         * @description 请求发送验证码
+         */
+        RequestCodeRequest: {
+            /** Email */
+            email: string;
+        };
+        /**
          * ResourceName
          * @description 工作区资源的名称（WorkspaceResource.name 的取值）。
          *
@@ -850,6 +947,20 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * UserResponse
+         * @description 用户信息
+         */
+        UserResponse: {
+            /** Created At */
+            created_at: number;
+            /** Email */
+            email: string;
+            /** Last Login At */
+            last_login_at: number;
+            /** User Id */
+            user_id: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -858,6 +969,16 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * VerifyCodeRequest
+         * @description 提交验证码登录
+         */
+        VerifyCodeRequest: {
+            /** Code */
+            code: string;
+            /** Email */
+            email: string;
         };
         /**
          * WorkspaceErrorKind
@@ -1179,6 +1300,138 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_code_api_v1_auth_request_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_api_v1_auth_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyCodeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
