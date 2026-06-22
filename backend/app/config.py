@@ -24,6 +24,16 @@ ENV_MAPPING = {
     "dashscope_api_key": "DASHSCOPE_API_KEY",
     # Redis
     "redis_url": "REDIS_URL",
+    # MongoDB（用户系统）
+    "mongo_uri": "MONGO_URI",
+    "mongo_db": "MONGO_DB",
+    # SMTP（邮箱 OTP 登录）
+    "smtp_host": "SMTP_HOST",
+    "smtp_port": "SMTP_PORT",
+    "smtp_secure": "SMTP_SECURE",
+    "smtp_user": "SMTP_USER",
+    "smtp_pass": "SMTP_PASS",
+    "smtp_from": "SMTP_FROM",
     # 存储
     "data_dir": "DATA_DIR",
     # 代理（主要给 yt-dlp 走 YouTube 等境外站点用）
@@ -55,6 +65,18 @@ class Settings:
 
     # Redis
     redis_url: str = "redis://localhost:6379"
+
+    # MongoDB（用户系统：email→user、登录记录）
+    mongo_uri: str = "mongodb://localhost:27017"
+    mongo_db: str = "v2t"
+
+    # SMTP（邮箱 OTP 登录）。port/secure 用字符串存（与 env 一致），mailer 内转类型
+    smtp_host: str = ""
+    smtp_port: str = "465"
+    smtp_secure: str = "true"
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    smtp_from: str = ""
 
     # 文件存储
     data_dir: str = "/data/v2t"

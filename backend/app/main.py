@@ -12,6 +12,7 @@ setup_logging()
 
 # 标准库
 import asyncio
+from contextlib import asynccontextmanager
 
 # 第三方库
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ from loguru import logger
 from app.constants import API_V1_PREFIX
 from app.routers import (
     admin_router,
+    auth_router,
     bilibili_router,
     diagnostics_router,
     media_router,
@@ -29,13 +31,29 @@ from app.routers import (
     workspace_router,
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动：建 Mongo 索引（失败不阻止启动——mongo 可能尚未就绪）
+    try:
+        from app.storage.user_store import ensure_indexes
+
+        await ensure_indexes()
+        logger.info("Mongo 索引已就绪")
+    except Exception as e:
+        logger.warning("建立 Mongo 索引失败（mongo 未就绪？）: {}", e)
+    yield
+
+
 app = FastAPI(
     title="v2t - 视频转文字",
     description="输入视频链接，获取视频、音频、大纲和详细文字",
+    lifespan=lifespan,
 )
 
 # 对外 API：统一挂在 /api/v1，版本号集中此处控制（开 v2 时复制此块改前缀）。
 # 这些是会被不可控客户端（桌面/移动端）调用的版本化契约。
+app.include_router(auth_router, prefix=API_V1_PREFIX)  # 登录端点本身不鉴权
 app.include_router(workspace_router, prefix=API_V1_PREFIX)
 app.include_router(stream_router, prefix=API_V1_PREFIX)
 app.include_router(prompts_router, prefix=API_V1_PREFIX)

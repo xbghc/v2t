@@ -171,3 +171,35 @@ class HistoryListResponse(BaseModel):
     total: int = 0
     offset: int = 0
     limit: int = 0
+
+
+# ===== 认证（邮箱 OTP 登录）相关 =====
+
+
+class RequestCodeRequest(BaseModel):
+    """请求发送验证码"""
+
+    email: str
+
+
+class VerifyCodeRequest(BaseModel):
+    """提交验证码登录"""
+
+    email: str
+    code: str
+
+
+class UserResponse(BaseModel):
+    """用户信息"""
+
+    user_id: str
+    email: str
+    created_at: float
+    last_login_at: float
+
+
+class AuthResponse(BaseModel):
+    """登录成功响应：token + 用户信息"""
+
+    token: str
+    user: UserResponse
