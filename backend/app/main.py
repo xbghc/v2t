@@ -15,10 +15,11 @@ import asyncio
 from contextlib import asynccontextmanager
 
 # 第三方库
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from loguru import logger
 
 from app.constants import API_V1_PREFIX
+from app.dependencies import require_user
 from app.routers import (
     admin_router,
     auth_router,
@@ -54,11 +55,13 @@ app = FastAPI(
 # 对外 API：统一挂在 /api/v1，版本号集中此处控制（开 v2 时复制此块改前缀）。
 # 这些是会被不可控客户端（桌面/移动端）调用的版本化契约。
 app.include_router(auth_router, prefix=API_V1_PREFIX)  # 登录端点本身不鉴权
-app.include_router(workspace_router, prefix=API_V1_PREFIX)
-app.include_router(stream_router, prefix=API_V1_PREFIX)
-app.include_router(prompts_router, prefix=API_V1_PREFIX)
-app.include_router(media_router, prefix=API_V1_PREFIX)
-app.include_router(bilibili_router, prefix=API_V1_PREFIX)
+# 其余对外端点全部要求登录（require_user）——未登录返回 401，前端据此跳登录
+_AUTH = [Depends(require_user)]
+app.include_router(workspace_router, prefix=API_V1_PREFIX, dependencies=_AUTH)
+app.include_router(stream_router, prefix=API_V1_PREFIX, dependencies=_AUTH)
+app.include_router(prompts_router, prefix=API_V1_PREFIX, dependencies=_AUTH)
+app.include_router(media_router, prefix=API_V1_PREFIX, dependencies=_AUTH)
+app.include_router(bilibili_router, prefix=API_V1_PREFIX, dependencies=_AUTH)
 # 内部端点：不版本化，路径保持 /api/...。metrics 公开（前端 PV/UV 上报）；
 # diag/admin 靠 nginx-docker.conf 按 /api/diag、/api/admin 路径对公网 404 隔离，
 # 故这三者前缀必须保持不变，不能并入 /api/v1。
