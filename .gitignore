@@ -54,3 +54,4 @@ Makefile.local
 
 # Claude Code 本地配置
 .claude/
+CLAUDE.local.md
