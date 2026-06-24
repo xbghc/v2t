@@ -1607,6 +1607,16 @@
               "title": "Url",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1641,6 +1651,18 @@
       "get": {
         "description": "获取默认提示词",
         "operationId": "get_prompts_api_v1_prompts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1651,6 +1673,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Prompts",
@@ -1663,6 +1695,18 @@
       "post": {
         "description": "统一转录端点。后端按已配置的 STT 引擎选择（Whisper 优先，否则 DashScope）。\n\n桌面端不感知具体提供商，只需 multipart 上传音频文件。",
         "operationId": "transcribe_api_v1_transcriptions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -1714,6 +1758,16 @@
               "title": "Path",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1746,6 +1800,18 @@
       "post": {
         "description": "解析视频链接拿到直链。仅返回标准化字段，不创建 workspace。",
         "operationId": "parse_video_api_v1_video_sources_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1788,6 +1854,18 @@
       "post": {
         "description": "创建工作区并启动视频处理",
         "operationId": "create_workspace_api_v1_workspaces_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1830,6 +1908,18 @@
       "post": {
         "description": "从已有转录文本直接创建工作区，跳过下载/转录流程，状态直接置 ready。",
         "operationId": "create_workspace_from_transcript_api_v1_workspaces_from_transcript_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1890,6 +1980,16 @@
               "title": "Series Index",
               "type": "integer"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1931,6 +2031,16 @@
             "required": true,
             "schema": {
               "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
               "type": "string"
             }
           }
@@ -1985,6 +2095,16 @@
               "title": "Task Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2035,6 +2155,16 @@
               "title": "Resource Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2074,6 +2204,16 @@
             "required": true,
             "schema": {
               "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
               "type": "string"
             }
           }
@@ -2124,6 +2264,16 @@
             "required": true,
             "schema": {
               "title": "Content Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
               "type": "string"
             }
           }

@@ -53,7 +53,7 @@ async def test_stream_audio_chunks_yields_30s_segments(synthetic_video, tmp_path
     assert len(chunks) == 4
     assert [c.index for c in chunks] == [0, 1, 2, 3]
     assert chunks[0].start == 0.0
-    for prev, cur in zip(chunks, chunks[1:]):
+    for prev, cur in zip(chunks, chunks[1:], strict=False):
         gap = cur.start - prev.start
         assert 25.0 <= gap <= 35.0, f"切片间距 {gap} 超出容差"
     assert [c.is_last for c in chunks] == [False, False, False, True]

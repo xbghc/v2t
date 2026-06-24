@@ -1449,7 +1449,9 @@ export interface operations {
             query: {
                 url: string;
             };
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1478,7 +1480,9 @@ export interface operations {
     get_prompts_api_v1_prompts_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1493,12 +1497,23 @@ export interface operations {
                     "application/json": components["schemas"]["PromptsResponse"];
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     transcribe_api_v1_transcriptions_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1531,7 +1546,9 @@ export interface operations {
     dashscope_proxy_api_v1_tts__path__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 path: string;
             };
@@ -1562,7 +1579,9 @@ export interface operations {
     parse_video_api_v1_video_sources_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1595,7 +1614,9 @@ export interface operations {
     create_workspace_api_v1_workspaces_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1628,7 +1649,9 @@ export interface operations {
     create_workspace_from_transcript_api_v1_workspaces_from_transcript_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1664,7 +1687,9 @@ export interface operations {
                 series_bvid: string;
                 series_index: number;
             };
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1693,7 +1718,9 @@ export interface operations {
     get_workspace_info_api_v1_workspaces__workspace_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 workspace_id: string;
             };
@@ -1724,7 +1751,9 @@ export interface operations {
     consume_generation_api_v1_workspaces__workspace_id__generations__task_id__stream_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 workspace_id: string;
                 task_id: string;
@@ -1756,7 +1785,9 @@ export interface operations {
     download_resource_api_v1_workspaces__workspace_id__resources__resource_id__get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 workspace_id: string;
                 resource_id: string;
@@ -1788,7 +1819,9 @@ export interface operations {
     stream_workspace_status_api_v1_workspaces__workspace_id__status_stream_get: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 workspace_id: string;
             };
@@ -1819,7 +1852,9 @@ export interface operations {
     start_generation_api_v1_workspaces__workspace_id__stream__content_type__post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                authorization?: string;
+            };
             path: {
                 workspace_id: string;
                 content_type: string;
