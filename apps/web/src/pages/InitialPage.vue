@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
+import { useAuthStore } from '@/stores/auth'
 import { fetchBilibiliPages, lookupWorkspaceBySeries } from '@/api/workspace'
 import BilibiliPagesPicker from '@/components/BilibiliPagesPicker.vue'
 import type { BilibiliPage, BilibiliVideoMetaResponse } from '@/types'
@@ -11,12 +12,30 @@ import IconChevronRight from '~icons/material-symbols/chevron-right'
 
 const router = useRouter()
 const taskStore = useTaskStore()
+const auth = useAuthStore()
 const { url, generateOptions, isDownloadOnly, prompts, promptsLoaded } = storeToRefs(taskStore)
 
 const showAdvanced = ref(false)
 const bilibiliMeta = ref<BilibiliVideoMetaResponse | null>(null)
 
-// 解析 B 站 URL 的 ?p=N，缺省为 1
+const genOpts = [
+    { key: 'outline', label: '大纲' },
+    { key: 'article', label: '文章' },
+    { key: 'podcast', label: '播客' },
+] as const
+
+const promptCards = [
+    { title: '大纲', sys: 'outlineSystem', user: 'outlineUser', reset: () => taskStore.resetOutlinePrompts() },
+    { title: '文章', sys: 'articleSystem', user: 'articleUser', reset: () => taskStore.resetArticlePrompts() },
+    { title: '播客脚本', sys: 'podcastSystem', user: 'podcastUser', reset: () => taskStore.resetPodcastPrompts() },
+] as const
+
+// 「解调」可视化：左侧密集波形（45min 视频信号）→ 右侧稀疏要点（提炼结果）
+const waveform = [
+    28, 42, 35, 58, 48, 70, 52, 86, 64, 54, 74, 40, 92, 60,
+    46, 68, 50, 80, 44, 66, 36, 56, 48, 72, 42, 62, 34, 50,
+]
+
 function parseBilibiliPageIndex(rawUrl: string): number {
     try {
         const p = new URL(rawUrl).searchParams.get('p')
@@ -27,27 +46,20 @@ function parseBilibiliPageIndex(rawUrl: string): number {
     }
 }
 
-// 若 URL 是 B 站合集，返回分 P 元数据；否则 undefined
 async function detectSeriesOptions(
     rawUrl: string,
 ): Promise<{ seriesBvid?: string; seriesIndex?: number } | undefined> {
     const bvMatch = rawUrl.match(/BV[0-9A-Za-z]{10}/)
     if (!bvMatch) return undefined
-    // BilibiliPagesPicker 已经探测过同一 BV → 复用，避免重复请求
     const meta = bilibiliMeta.value?.bvid === bvMatch[0]
         ? bilibiliMeta.value
         : await fetchBilibiliPages(rawUrl)
     if (!meta || meta.pages.length < 2) return undefined
-    return {
-        seriesBvid: meta.bvid,
-        seriesIndex: parseBilibiliPageIndex(rawUrl),
-    }
+    return { seriesBvid: meta.bvid, seriesIndex: parseBilibiliPageIndex(rawUrl) }
 }
 
-// 提交 URL 并导航（普通流程，单视频或当前页 URL）
 const handleSubmitUrl = async () => {
     const seriesOpts = await detectSeriesOptions(url.value.trim())
-    // 已存在的 workspace 直接跳转
     if (seriesOpts?.seriesBvid && seriesOpts.seriesIndex) {
         const existingId = await lookupWorkspaceBySeries(seriesOpts.seriesBvid, seriesOpts.seriesIndex)
         if (existingId) {
@@ -63,7 +75,6 @@ const handleSubmitUrl = async () => {
     }
 }
 
-// 选了某一集分 P：先 lookup 命中跳转，未命中则创建
 const handleSelectPage = async (page: BilibiliPage, bvid: string) => {
     const existingId = await lookupWorkspaceBySeries(bvid, page.page)
     if (existingId) {
@@ -71,9 +82,7 @@ const handleSelectPage = async (page: BilibiliPage, bvid: string) => {
         return
     }
     const workspaceId = await taskStore.submitUrl({
-        overrideUrl: page.url,
-        seriesBvid: bvid,
-        seriesIndex: page.page,
+        overrideUrl: page.url, seriesBvid: bvid, seriesIndex: page.page,
     })
     if (workspaceId) {
         router.push({ name: 'workspace', params: { id: workspaceId } })
@@ -82,239 +91,198 @@ const handleSelectPage = async (page: BilibiliPage, bvid: string) => {
     }
 }
 
+const handleLogout = async () => {
+    await auth.logout()
+    router.push({ name: 'login' })
+}
+
 onMounted(() => {
     taskStore.loadPrompts()
 })
 </script>
 
 <template>
-    <main class="flex-grow">
-        <!-- HeroSection -->
-        <div class="@container pt-16 sm:pt-24 pb-12 sm:pb-16">
-            <div class="flex min-h-hero flex-col gap-6 items-center justify-center p-4 text-center">
-                <div class="flex flex-col gap-2">
-                    <h1 class="text-4xl font-black leading-tight tracking-tight-lg text-gray-900 dark:text-white @[480px]:text-5xl">
-                        一键提取视频精华
-                    </h1>
-                    <h2 class="text-sm font-normal leading-normal text-gray-600 dark:text-gray-300 @[480px]:text-base">
-                        粘贴视频链接，自动生成文字版内容、大纲和原始转录
-                    </h2>
+    <main class="flex min-h-screen flex-col bg-canvas text-ink">
+        <!-- 顶栏 -->
+        <header class="flex items-center justify-between px-6 py-4 sm:px-8">
+            <div class="flex items-center gap-2.5">
+                <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
+                    <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+                        <rect x="2" y="6" width="2" height="4" rx="1" fill="#de8c2e" />
+                        <rect x="6" y="2.5" width="2" height="11" rx="1" fill="#fff" />
+                        <rect x="10" y="5" width="2" height="6" rx="1" fill="#fff" />
+                    </svg>
+                </span>
+                <span class="font-title text-lg font-bold tracking-tight">Gist</span>
+            </div>
+            <button
+                class="text-sm text-ink-soft transition-colors hover:text-ink"
+                @click="handleLogout"
+            >
+                退出登录
+            </button>
+        </header>
+
+        <!-- Hero -->
+        <section class="flex flex-1 flex-col items-center justify-center px-5 py-10">
+            <div class="w-full max-w-xl">
+                <!-- eyebrow -->
+                <div class="mb-6 flex items-center justify-center gap-3">
+                    <span class="h-px w-6 bg-signal/60"></span>
+                    <span class="font-mono text-[11px] font-medium uppercase tracking-[0.25em] text-signal">AI 视频预审</span>
+                    <span class="h-px w-6 bg-signal/60"></span>
                 </div>
 
-                <!-- 视频链接输入 -->
-                <label class="flex flex-col min-w-40 h-14 w-full max-w-input @[480px]:h-16">
-                    <div class="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm">
-                        <div class="text-gray-400 dark:text-dark-text-muted flex border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card items-center justify-center pl-4 rounded-l-lg border-r-0">
+                <!-- 主标题：时间套利 -->
+                <h1 class="text-center font-title text-[2.6rem] font-bold leading-[1.06] tracking-tight sm:text-[3.4rem]">
+                    <span class="font-mono text-signal">45</span> 分钟的视频，<br>
+                    <span class="font-mono text-signal">2</span> 分钟看完要点
+                </h1>
+                <p class="mx-auto mt-4 max-w-md text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
+                    粘贴链接，Gist 帮你下载、转录、提炼成要点。值不值得看，你说了算。
+                </p>
+
+                <!-- signature：解调可视化（波形 → 要点） -->
+                <div class="mx-auto mt-8 flex max-w-md items-center gap-3">
+                    <span class="font-mono text-[11px] text-ink-faint">45:00</span>
+                    <div class="flex h-8 flex-1 items-center gap-[2px]">
+                        <span
+                            v-for="(h, i) in waveform"
+                            :key="i"
+                            class="w-[3px] shrink-0 rounded-full bg-ink/20"
+                            :style="{ height: h + '%' }"
+                        ></span>
+                    </div>
+                    <span class="text-ink-faint">→</span>
+                    <div class="flex items-center gap-1.5">
+                        <span class="h-2 w-2 rounded-full bg-signal"></span>
+                        <span class="h-2 w-2 rounded-full bg-signal"></span>
+                        <span class="h-2 w-2 rounded-full bg-signal"></span>
+                    </div>
+                    <span class="font-mono text-[11px] text-signal">2:00</span>
+                </div>
+
+                <!-- 输入框 -->
+                <div class="mt-7">
+                    <div class="flex items-stretch overflow-hidden rounded-2xl border border-line bg-surface shadow-[0_1px_2px_rgba(20,23,28,0.04),0_10px_30px_-14px_rgba(20,23,28,0.14)] transition focus-within:border-signal focus-within:shadow-[0_0_0_4px_var(--color-signal-soft)]">
+                        <div class="flex items-center pl-4 text-ink-faint">
                             <IconLink class="text-xl" />
                         </div>
                         <input
                             v-model="url"
-                            class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden text-gray-900 dark:text-white focus:outline-none focus:ring-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card h-full placeholder:text-gray-400 dark:placeholder:text-dark-text-muted px-3_75 border-r-0 border-l-0 text-sm font-normal leading-normal @[480px]:text-base"
-                            placeholder="https://www.bilibili.com/video/..."
+                            class="min-w-0 flex-1 bg-transparent px-3 py-4 text-[15px] text-ink placeholder:text-ink-faint focus:outline-none"
+                            placeholder="粘贴 B站 / 抖音 / 小红书 / YouTube 链接"
                             @keypress.enter="handleSubmitUrl"
                         >
-                        <div class="flex items-center justify-center rounded-r-lg border-l-0 border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card pr-2">
-                            <button
-                                class="flex min-w-btn max-w-input cursor-pointer items-center justify-center overflow-hidden rounded-md h-10 px-4 @[480px]:h-12 @[480px]:px-5 bg-primary text-white text-sm font-bold leading-normal tracking-tight-sm hover:bg-primary/90 focus:ring-0 focus:outline-none @[480px]:text-base"
-                                @click="handleSubmitUrl"
-                            >
-                                <span class="truncate">开始转换</span>
-                            </button>
-                        </div>
+                        <button
+                            class="m-1.5 shrink-0 rounded-xl bg-ink px-5 text-[15px] font-semibold text-surface transition-colors hover:bg-signal hover:text-signal-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-signal focus-visible:ring-offset-2 focus-visible:ring-offset-canvas"
+                            @click="handleSubmitUrl"
+                        >
+                            抓大意
+                        </button>
                     </div>
-                </label>
 
-                <!-- 分 P 探测（仅 B 站合集时显示） -->
-                <BilibiliPagesPicker
-                    v-model:meta="bilibiliMeta"
-                    :url="url"
-                    @select="handleSelectPage"
-                />
+                    <BilibiliPagesPicker
+                        v-model:meta="bilibiliMeta"
+                        :url="url"
+                        class="mt-3"
+                        @select="handleSelectPage"
+                    />
+                </div>
 
-                <!-- 生成选项多选组 -->
-                <div class="flex flex-col items-center gap-2">
-                    <div class="flex items-center gap-4">
-                        <span class="text-sm text-gray-600 dark:text-gray-400">生成内容：</span>
-                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                                v-model="generateOptions.outline"
-                                type="checkbox"
-                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
-                            >
-                            <span class="text-sm text-gray-700 dark:text-gray-300">大纲</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                                v-model="generateOptions.article"
-                                type="checkbox"
-                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
-                            >
-                            <span class="text-sm text-gray-700 dark:text-gray-300">文章</span>
-                        </label>
-                        <label class="flex items-center gap-1.5 cursor-pointer select-none">
-                            <input
-                                v-model="generateOptions.podcast"
-                                type="checkbox"
-                                class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-white dark:bg-dark-card"
-                            >
-                            <span class="text-sm text-gray-700 dark:text-gray-300">播客</span>
+                <!-- 生成选项 chips -->
+                <div class="mt-6 flex flex-col items-center gap-2.5">
+                    <div class="flex flex-wrap items-center justify-center gap-2">
+                        <span class="mr-1 text-sm text-ink-soft">生成</span>
+                        <label
+                            v-for="opt in genOpts"
+                            :key="opt.key"
+                            class="flex cursor-pointer select-none items-center rounded-full border px-4 py-1.5 text-sm font-medium transition-colors"
+                            :class="generateOptions[opt.key]
+                                ? 'border-signal bg-signal-soft text-signal-ink'
+                                : 'border-line bg-surface text-ink-soft hover:border-ink-faint'"
+                        >
+                            <input v-model="generateOptions[opt.key]" type="checkbox" class="sr-only">
+                            {{ opt.label }}
                         </label>
                     </div>
-                    <p
-                        v-if="isDownloadOnly"
-                        class="text-xs text-gray-500 dark:text-gray-400"
-                    >
-                        未选择任何生成选项，将仅下载音视频
+                    <p v-if="isDownloadOnly" class="font-mono text-xs text-ink-faint">
+                        未选生成项 · 仅下载音视频
                     </p>
                 </div>
 
-                <!-- 高级选项 -->
-                <button
-                    type="button"
-                    class="text-sm text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary flex items-center gap-1 cursor-pointer transition-colors duration-200"
-                    @click="showAdvanced = !showAdvanced"
-                >
-                    <IconChevronRight
-                        class="text-base transition-transform duration-200"
-                        :class="{ 'rotate-90': showAdvanced }"
-                    />
-                    <span>高级选项 - 自定义提示词</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- 高级选项面板 -->
-        <div
-            v-if="showAdvanced && promptsLoaded"
-            class="px-4 pb-8"
-        >
-            <div class="max-w-2xl mx-auto space-y-6">
-                <!-- 大纲提示词 -->
-                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            大纲生成提示词
-                        </h4>
-                        <button
-                            type="button"
-                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
-                            @click="taskStore.resetOutlinePrompts()"
-                        >
-                            重置为默认
-                        </button>
-                    </div>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
-                            <textarea
-                                v-model="prompts.outlineSystem"
-                                rows="8"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
-                            <textarea
-                                v-model="prompts.outlineUser"
-                                rows="3"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 文章提示词 -->
-                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            文章生成提示词
-                        </h4>
-                        <button
-                            type="button"
-                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
-                            @click="taskStore.resetArticlePrompts()"
-                        >
-                            重置为默认
-                        </button>
-                    </div>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
-                            <textarea
-                                v-model="prompts.articleSystem"
-                                rows="8"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
-                            <textarea
-                                v-model="prompts.articleUser"
-                                rows="3"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 播客提示词 -->
-                <div class="bg-white dark:bg-dark-card rounded-lg border border-gray-200 dark:border-dark-border-light p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            播客脚本生成提示词
-                        </h4>
-                        <button
-                            type="button"
-                            class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary cursor-pointer transition-colors"
-                            @click="taskStore.resetPodcastPrompts()"
-                        >
-                            重置为默认
-                        </button>
-                    </div>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
-                            <textarea
-                                v-model="prompts.podcastSystem"
-                                rows="8"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">用户提示词 <span class="text-gray-400 dark:text-dark-text-muted">(使用 {content} 表示转录内容)</span></label>
-                            <textarea
-                                v-model="prompts.podcastUser"
-                                rows="3"
-                                class="w-full text-sm rounded-lg border border-gray-300 dark:border-dark-border-light bg-white dark:bg-dark-card text-gray-900 dark:text-white p-3 placeholder:text-gray-400 dark:placeholder:text-dark-text-muted focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary resize-none transition-colors"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 重置所有 -->
-                <div class="text-center">
+                <!-- 高级 -->
+                <div class="mt-5 text-center">
                     <button
                         type="button"
-                        class="text-xs text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 cursor-pointer transition-colors"
-                        @click="taskStore.resetPrompts()"
+                        class="inline-flex items-center gap-1 text-sm text-ink-faint transition-colors hover:text-signal"
+                        @click="showAdvanced = !showAdvanced"
                     >
-                        重置所有提示词为默认值
+                        <IconChevronRight class="text-base transition-transform duration-200" :class="{ 'rotate-90': showAdvanced }" />
+                        自定义提示词
                     </button>
                 </div>
+
+                <!-- 高级面板 -->
+                <div v-if="showAdvanced && promptsLoaded" class="mt-5 space-y-4">
+                    <div
+                        v-for="card in promptCards"
+                        :key="card.sys"
+                        class="rounded-2xl border border-line bg-surface p-5"
+                    >
+                        <div class="mb-3 flex items-center justify-between">
+                            <h4 class="font-title text-sm font-semibold text-ink">{{ card.title }}提示词</h4>
+                            <button
+                                type="button"
+                                class="text-xs text-ink-faint transition-colors hover:text-signal"
+                                @click="card.reset()"
+                            >
+                                重置
+                            </button>
+                        </div>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-faint">System</label>
+                                <textarea
+                                    v-model="prompts[card.sys]"
+                                    rows="6"
+                                    class="w-full resize-none rounded-xl border border-line bg-surface-sunk p-3 text-sm leading-relaxed text-ink focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal-soft"
+                                />
+                            </div>
+                            <div>
+                                <label class="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+                                    User <span class="text-ink-faint/70">· {content} = 转录内容</span>
+                                </label>
+                                <textarea
+                                    v-model="prompts[card.user]"
+                                    rows="3"
+                                    class="w-full resize-none rounded-xl border border-line bg-surface-sunk p-3 text-sm leading-relaxed text-ink focus:border-signal focus:outline-none focus:ring-2 focus:ring-signal-soft"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <button
+                            type="button"
+                            class="text-xs text-ink-faint transition-colors hover:text-signal"
+                            @click="taskStore.resetPrompts()"
+                        >
+                            全部重置为默认值
+                        </button>
+                    </div>
+                </div>
             </div>
-        </div>
-        <!-- SectionHeader -->
-        <div class="py-8">
-            <h4 class="text-sm font-bold leading-normal tracking-tight-sm px-4 py-2 text-center text-gray-500 dark:text-dark-text-muted">
-                支持主流视频平台
-            </h4>
-        </div>
-        <!-- Platform Icons -->
-        <div class="flex flex-wrap gap-8 px-4 items-center justify-center opacity-60">
-            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">哔哩哔哩</span>
-            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">抖音</span>
-            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">小红书</span>
-            <span class="text-gray-600 dark:text-gray-400 text-sm font-medium">YouTube</span>
-        </div>
+        </section>
+
+        <!-- 平台 footer -->
+        <footer class="border-t border-line/70 px-5 py-7">
+            <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-ink-soft">
+                <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">支持</span>
+                <span>哔哩哔哩</span>
+                <span>抖音</span>
+                <span>小红书</span>
+                <span>YouTube</span>
+            </div>
+        </footer>
     </main>
 </template>

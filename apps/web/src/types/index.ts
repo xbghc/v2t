@@ -46,11 +46,6 @@ export interface CustomPrompts {
 // ============ 组件 Props 类型 ============
 
 /**
- * AppHeader variant 类型
- */
-export type HeaderVariant = 'default' | 'result'
-
-/**
  * Tab 定义
  */
 export interface TabDefinition {

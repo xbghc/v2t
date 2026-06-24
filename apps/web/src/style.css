@@ -2,7 +2,7 @@
 
 @theme {
   /* Colors */
-  --color-primary: #135bec;
+  --color-primary: #de8c2e;
   --color-background-light: #f6f6f8;
   --color-background-dark: #101622;
   --color-dark-bg: #111318;
@@ -12,8 +12,22 @@
   --color-dark-text: #c4c9d4;
   --color-dark-text-muted: #9da6b9;
 
+  /* ── Signal Desk 设计语言（新，渐进迁移；旧 token 暂保留）── */
+  --color-canvas: #eceef2;        /* 冷灰工作台背景 */
+  --color-surface: #ffffff;       /* 卡片 / 输入面 */
+  --color-surface-sunk: #f5f6f9;  /* 次级凹陷面 */
+  --color-ink: #15171c;           /* 主文字 / 结构 */
+  --color-ink-soft: #565b66;      /* 次要文字 */
+  --color-ink-faint: #8b919e;     /* 占位 / 弱标签 */
+  --color-line: #dde0e7;          /* 边框 / 分隔 */
+  --color-signal: #de8c2e;        /* 信号琥珀：强调点缀 / 高光 */
+  --color-signal-ink: #8a4d12;    /* 琥珀上的深字 */
+  --color-signal-soft: #fbf0df;   /* 琥珀浅底 */
+
   /* Font family */
   --font-display: "Inter Variable", sans-serif;
+  --font-title: "Space Grotesk Variable", "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
 
   /* Border radius */
   --radius: 0.25rem;

@@ -8,6 +8,7 @@ const LIMIT = 20
 const loading = ref(true)
 const error = ref('')
 const stats = ref<AdminStatsResponse | null>(null)
+const lastUpdated = ref('')
 
 const history = ref<AdminHistoryItem[]>([])
 const historyTotal = ref(0)
@@ -30,11 +31,18 @@ async function loadHistory(newOffset: number) {
     }
 }
 
+function stampNow() {
+    const d = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    lastUpdated.value = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 async function loadAll() {
     loading.value = true
     error.value = ''
     try {
         await Promise.all([loadStats(), loadHistory(offset.value)])
+        stampNow()
     } catch (e) {
         error.value = (e as Error).message || '加载失败'
     } finally {
@@ -48,14 +56,47 @@ onMounted(loadAll)
 const maxPv = computed(() =>
     Math.max(1, ...(stats.value?.daily.map((d) => d.pv) ?? [0])),
 )
-
 function barPct(v: number): number {
     return Math.min(100, (v / maxPv.value) * 100)
 }
-
 function shortDate(date: string): string {
     return date.slice(5) // YYYY-MM-DD → MM-DD
 }
+
+// ---- 概览卡片 ----
+const successRatePct = computed(() =>
+    stats.value ? (stats.value.success_rate * 100).toFixed(1) : '0.0',
+)
+// 成功率用颜色编码健康度：≥90% 健康 / ≥70% 关注 / 更低告警
+const successTone = computed(() => {
+    const r = stats.value?.success_rate ?? 0
+    if (r >= 0.9) return 'text-emerald-600'
+    if (r >= 0.7) return 'text-signal'
+    return 'text-red-600'
+})
+
+interface StatCard {
+    eyebrow: string
+    unit: string
+    value: string
+    sub?: string
+    tone?: string
+}
+const cards = computed<StatCard[]>(() => {
+    const s = stats.value
+    if (!s) return []
+    return [
+        { eyebrow: '总浏览量', unit: 'PV', value: s.pv_total.toLocaleString() },
+        { eyebrow: '独立访客', unit: 'UV', value: s.uv_total.toLocaleString() },
+        {
+            eyebrow: '转录总数',
+            unit: 'JOBS',
+            value: s.transcribe_total.toLocaleString(),
+            sub: `成功 ${s.ready_count} · 失败 ${s.failed_count}`,
+        },
+        { eyebrow: '处理成功率', unit: '', value: `${successRatePct.value}%`, tone: successTone.value },
+    ]
+})
 
 // ---- 失败原因分布 ----
 const errorKindList = computed(() => {
@@ -105,11 +146,9 @@ function statusLabel(s: string): string {
     return STATUS_LABELS[s] ?? s
 }
 function statusBadgeClass(s: string): string {
-    if (s === 'ready')
-        return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-    if (s === 'failed')
-        return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    return 'bg-gray-100 text-gray-600 dark:bg-dark-border dark:text-gray-300'
+    if (s === 'ready') return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20'
+    if (s === 'failed') return 'bg-red-50 text-red-700 ring-red-600/20'
+    return 'bg-surface-sunk text-ink-soft ring-line'
 }
 
 function formatSeconds(s: number | undefined): string {
@@ -133,217 +172,210 @@ function sourceHost(url: string): string {
         return ''
     }
 }
-
-const successRatePct = computed(() =>
-    stats.value ? (stats.value.success_rate * 100).toFixed(1) : '0.0',
-)
 </script>
 
 <template>
-    <div class="min-h-screen bg-gray-50 dark:bg-dark-bg text-gray-900 dark:text-white">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-            <!-- 头部 -->
-            <header class="flex items-center justify-between mb-6">
+    <div class="min-h-screen bg-canvas font-body text-ink">
+        <!-- 顶栏：品牌 + 控制台标识（内网运维页，无登录态/退出） -->
+        <header class="border-b border-line bg-surface">
+            <div class="mx-auto flex h-14 max-w-6xl items-center gap-2.5 px-4 sm:px-6">
+                <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-ink">
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                        <rect x="2" y="6" width="2" height="4" rx="1" fill="#de8c2e" />
+                        <rect x="6" y="2.5" width="2" height="11" rx="1" fill="#fff" />
+                        <rect x="10" y="5" width="2" height="6" rx="1" fill="#fff" />
+                    </svg>
+                </span>
+                <span class="font-title text-base font-bold tracking-tight">Gist</span>
+                <span class="ml-0.5 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-faint">
+                    控制台
+                </span>
+            </div>
+        </header>
+
+        <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+            <!-- 页面标题 + 刷新 -->
+            <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 class="text-2xl font-bold">后台管理</h1>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        浏览量 · 转录历史 · 处理质量
-                    </p>
+                    <h1 class="font-title text-2xl font-bold tracking-tight">运行概览</h1>
+                    <p class="mt-1 text-sm text-ink-soft">浏览量 · 转录质量 · 处理耗时</p>
                 </div>
-                <button
-                    class="flex items-center gap-2 h-10 px-4 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-                    :disabled="loading"
-                    @click="loadAll"
-                >
-                    {{ loading ? '加载中…' : '刷新' }}
-                </button>
-            </header>
+                <div class="flex items-center gap-3">
+                    <span v-if="lastUpdated" class="font-mono text-xs text-ink-faint">更新于 {{ lastUpdated }}</span>
+                    <button
+                        class="h-9 rounded-lg border border-line bg-surface px-4 text-sm font-medium text-ink-soft transition-colors hover:border-ink-faint hover:text-ink disabled:opacity-50"
+                        :disabled="loading"
+                        @click="loadAll"
+                    >
+                        {{ loading ? '加载中…' : '刷新' }}
+                    </button>
+                </div>
+            </div>
 
             <!-- 错误条 -->
             <div
                 v-if="error"
-                class="mb-6 px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-sm"
+                class="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             >
                 {{ error }}
             </div>
 
-            <!-- 初次加载 -->
+            <!-- 首屏加载（刷新时保留旧数据，不整屏闪烁） -->
             <div
-                v-if="loading"
-                class="py-20 text-center text-gray-400 dark:text-gray-500"
+                v-if="loading && !stats"
+                class="py-24 text-center font-mono text-sm text-ink-faint"
             >
                 加载中…
             </div>
 
             <template v-else>
-                <!-- 统计卡片 -->
-                <section
-                    v-if="stats"
-                    class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
-                >
-                    <div class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border p-5">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">总浏览量 PV</p>
-                        <p class="text-3xl font-bold mt-2">{{ stats.pv_total.toLocaleString() }}</p>
-                    </div>
-                    <div class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border p-5">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">独立访客 UV</p>
-                        <p class="text-3xl font-bold mt-2">{{ stats.uv_total.toLocaleString() }}</p>
-                    </div>
-                    <div class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border p-5">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">转录总数</p>
-                        <p class="text-3xl font-bold mt-2">{{ stats.transcribe_total.toLocaleString() }}</p>
-                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                            成功 {{ stats.ready_count }} · 失败 {{ stats.failed_count }}
+                <!-- 概览卡片：mono 大数字是主角 -->
+                <section v-if="stats" class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+                    <div
+                        v-for="c in cards"
+                        :key="c.eyebrow"
+                        class="rounded-xl border border-line bg-surface p-5"
+                    >
+                        <div class="flex items-baseline justify-between">
+                            <p class="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+                                {{ c.eyebrow }}
+                            </p>
+                            <span v-if="c.unit" class="font-mono text-[10px] tracking-wider text-ink-faint">
+                                {{ c.unit }}
+                            </span>
+                        </div>
+                        <p
+                            class="mt-3 font-mono text-[2rem] font-semibold leading-none tracking-tight"
+                            :class="c.tone ?? 'text-ink'"
+                        >
+                            {{ c.value }}
                         </p>
-                    </div>
-                    <div class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border p-5">
-                        <p class="text-sm text-gray-500 dark:text-gray-400">处理成功率</p>
-                        <p class="text-3xl font-bold mt-2">{{ successRatePct }}%</p>
+                        <p v-if="c.sub" class="mt-2 font-mono text-xs text-ink-faint">{{ c.sub }}</p>
                     </div>
                 </section>
 
                 <!-- 趋势 + 失败分布 -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                <div class="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
                     <!-- PV/UV 趋势 -->
-                    <section class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border overflow-hidden">
-                        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg">
-                            <h3 class="text-base font-semibold">近 14 天访问趋势</h3>
-                            <div class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                    <section class="overflow-hidden rounded-xl border border-line bg-surface">
+                        <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
+                            <h3 class="font-title text-sm font-semibold tracking-tight">近 14 天访问趋势</h3>
+                            <div class="flex items-center gap-3 font-mono text-[11px] text-ink-faint">
                                 <span class="flex items-center gap-1">
-                                    <span class="inline-block w-2.5 h-2.5 rounded-sm bg-primary" />PV
+                                    <span class="inline-block h-2.5 w-2.5 rounded-sm bg-signal" />PV
                                 </span>
                                 <span class="flex items-center gap-1">
-                                    <span class="inline-block w-2.5 h-2.5 rounded-sm bg-primary/40" />UV
+                                    <span class="inline-block h-2.5 w-2.5 rounded-sm bg-signal/35" />UV
                                 </span>
                             </div>
                         </div>
-                        <div class="p-6">
-                            <div
-                                v-if="stats && stats.daily.length"
-                                class="flex items-end gap-1 h-40"
-                            >
+                        <div class="p-5">
+                            <div v-if="stats && stats.daily.length" class="flex h-40 items-end gap-1">
                                 <div
                                     v-for="d in stats.daily"
                                     :key="d.date"
-                                    class="flex-1 flex flex-col items-center justify-end h-full"
-                                    :title="`${d.date} PV ${d.pv} / UV ${d.uv}`"
+                                    class="flex h-full flex-1 flex-col items-center justify-end"
+                                    :title="`${d.date} · PV ${d.pv} / UV ${d.uv}`"
                                 >
-                                    <div class="flex items-end justify-center gap-0.5 w-full flex-1">
+                                    <div class="flex w-full flex-1 items-end justify-center gap-0.5">
                                         <div
-                                            class="w-1.5 sm:w-2 bg-primary rounded-t transition-all"
+                                            class="w-1.5 rounded-t bg-signal transition-all sm:w-2"
                                             :style="{ height: `${barPct(d.pv)}%` }"
                                         />
                                         <div
-                                            class="w-1.5 sm:w-2 bg-primary/40 rounded-t transition-all"
+                                            class="w-1.5 rounded-t bg-signal/35 transition-all sm:w-2"
                                             :style="{ height: `${barPct(d.uv)}%` }"
                                         />
                                     </div>
-                                    <span class="mt-1 text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                                        {{ shortDate(d.date) }}
-                                    </span>
+                                    <span class="mt-1.5 font-mono text-[10px] text-ink-faint">{{ shortDate(d.date) }}</span>
                                 </div>
                             </div>
-                            <p v-else class="text-sm text-gray-400 py-8 text-center">暂无数据</p>
+                            <p v-else class="py-8 text-center text-sm text-ink-faint">暂无数据</p>
                         </div>
                     </section>
 
                     <!-- 失败原因分布 -->
-                    <section class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border overflow-hidden">
-                        <div class="px-6 py-4 border-b border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg">
-                            <h3 class="text-base font-semibold">失败原因分布</h3>
+                    <section class="overflow-hidden rounded-xl border border-line bg-surface">
+                        <div class="border-b border-line px-5 py-3.5">
+                            <h3 class="font-title text-sm font-semibold tracking-tight">失败原因分布</h3>
                         </div>
-                        <div class="p-6">
-                            <ul v-if="errorKindList.length" class="space-y-3">
+                        <div class="p-5">
+                            <ul v-if="errorKindList.length" class="space-y-3.5">
                                 <li
                                     v-for="item in errorKindList"
                                     :key="item.kind"
                                     class="grid grid-cols-[6rem_1fr_2.5rem] items-center gap-3 text-sm"
                                 >
-                                    <span class="text-gray-600 dark:text-gray-400 truncate">
-                                        {{ errorKindLabel(item.kind) }}
-                                    </span>
-                                    <div class="h-2 bg-gray-100 dark:bg-dark-border rounded-full overflow-hidden">
-                                        <div
-                                            class="h-full bg-red-500/80"
-                                            :style="{ width: `${item.pct}%` }"
-                                        />
+                                    <span class="truncate text-ink-soft">{{ errorKindLabel(item.kind) }}</span>
+                                    <div class="h-2 overflow-hidden rounded-full bg-surface-sunk">
+                                        <div class="h-full rounded-full bg-red-400" :style="{ width: `${item.pct}%` }" />
                                     </div>
-                                    <span class="text-right font-mono">{{ item.count }}</span>
+                                    <span class="text-right font-mono text-ink">{{ item.count }}</span>
                                 </li>
                             </ul>
-                            <p v-else class="text-sm text-gray-400 py-8 text-center">暂无失败记录 🎉</p>
+                            <p v-else class="py-8 text-center text-sm text-ink-faint">近期没有失败任务</p>
                         </div>
                     </section>
                 </div>
 
                 <!-- 转录历史 -->
-                <section class="bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border overflow-hidden">
-                    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg">
-                        <h3 class="text-base font-semibold">转录历史</h3>
-                        <span class="text-sm text-gray-500 dark:text-gray-400">共 {{ historyTotal }} 条</span>
+                <section class="overflow-hidden rounded-xl border border-line bg-surface">
+                    <div class="flex items-center justify-between border-b border-line px-5 py-3.5">
+                        <h3 class="font-title text-sm font-semibold tracking-tight">转录历史</h3>
+                        <span class="font-mono text-xs text-ink-faint">{{ historyTotal }} 条</span>
                     </div>
 
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm">
                             <thead>
-                                <tr class="border-b border-gray-200 dark:border-dark-border text-left text-gray-500 dark:text-gray-400">
-                                    <th class="px-6 py-3 font-medium">视频</th>
-                                    <th class="px-4 py-3 font-medium">状态</th>
-                                    <th class="px-4 py-3 font-medium whitespace-nowrap">完成时间</th>
-                                    <th class="px-4 py-3 font-medium text-right whitespace-nowrap">下载</th>
-                                    <th class="px-4 py-3 font-medium text-right whitespace-nowrap">转录</th>
-                                    <th class="px-4 py-3 font-medium text-right whitespace-nowrap">总耗时</th>
+                                <tr class="border-b border-line text-left font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+                                    <th class="px-5 py-2.5 font-medium">视频</th>
+                                    <th class="px-4 py-2.5 font-medium">状态</th>
+                                    <th class="whitespace-nowrap px-4 py-2.5 font-medium">完成时间</th>
+                                    <th class="px-4 py-2.5 text-right font-medium">下载</th>
+                                    <th class="px-4 py-2.5 text-right font-medium">转录</th>
+                                    <th class="px-4 py-2.5 text-right font-medium">总耗时</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr
                                     v-for="item in history"
                                     :key="item.workspace_id"
-                                    class="border-b border-gray-100 dark:border-dark-border/60 hover:bg-gray-50 dark:hover:bg-dark-bg/50"
+                                    class="border-b border-line/60 transition-colors last:border-0 hover:bg-surface-sunk"
                                 >
-                                    <td class="px-6 py-3 max-w-xs">
+                                    <td class="max-w-xs px-5 py-3">
                                         <a
                                             :href="`/w/${item.workspace_id}`"
-                                            class="font-medium text-gray-900 dark:text-white hover:text-primary truncate block"
+                                            class="block truncate font-medium text-ink transition-colors hover:text-signal"
                                             :title="item.title || item.url"
                                         >
                                             {{ item.title || '(无标题)' }}
                                         </a>
-                                        <span class="text-xs text-gray-400 dark:text-gray-500">
-                                            {{ sourceHost(item.url) }}
-                                        </span>
+                                        <span class="font-mono text-xs text-ink-faint">{{ sourceHost(item.url) }}</span>
                                     </td>
                                     <td class="px-4 py-3">
                                         <span
-                                            class="inline-block px-2 py-0.5 rounded text-xs font-medium"
+                                            class="inline-block rounded px-2 py-0.5 text-xs font-medium ring-1 ring-inset"
                                             :class="statusBadgeClass(item.status)"
                                         >
                                             {{ statusLabel(item.status) }}
                                         </span>
                                         <span
                                             v-if="item.status === 'failed' && item.error_kind"
-                                            class="block text-xs text-gray-400 mt-1"
+                                            class="mt-1 block text-xs text-ink-faint"
                                         >
                                             {{ errorKindLabel(item.error_kind) }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                    <td class="whitespace-nowrap px-4 py-3 font-mono text-xs text-ink-soft">
                                         {{ formatDate(item.finished_at) }}
                                     </td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-600 dark:text-gray-300">
-                                        {{ formatSeconds(item.timings.download) }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-600 dark:text-gray-300">
-                                        {{ formatSeconds(item.timings.stt_total) }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right font-mono text-gray-700 dark:text-gray-200">
-                                        {{ formatSeconds(item.timings.total) }}
-                                    </td>
+                                    <td class="px-4 py-3 text-right font-mono text-ink-soft">{{ formatSeconds(item.timings.download) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono text-ink-soft">{{ formatSeconds(item.timings.stt_total) }}</td>
+                                    <td class="px-4 py-3 text-right font-mono text-ink">{{ formatSeconds(item.timings.total) }}</td>
                                 </tr>
                                 <tr v-if="!history.length">
-                                    <td colspan="6" class="px-6 py-12 text-center text-gray-400">
-                                        暂无转录记录
-                                    </td>
+                                    <td colspan="6" class="px-5 py-12 text-center text-sm text-ink-faint">暂无转录记录</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -352,21 +384,19 @@ const successRatePct = computed(() =>
                     <!-- 分页 -->
                     <div
                         v-if="historyTotal > 0"
-                        class="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-dark-border"
+                        class="flex items-center justify-between border-t border-line px-5 py-3.5"
                     >
-                        <span class="text-sm text-gray-500 dark:text-gray-400">
-                            第 {{ page }} / {{ totalPages }} 页
-                        </span>
+                        <span class="font-mono text-xs text-ink-faint">第 {{ page }} / {{ totalPages }} 页</span>
                         <div class="flex items-center gap-2">
                             <button
-                                class="h-9 px-3 rounded-lg border border-gray-200 dark:border-dark-border text-sm hover:bg-gray-50 dark:hover:bg-dark-bg disabled:opacity-40 disabled:cursor-not-allowed"
+                                class="h-8 rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:border-ink-faint hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="!canPrev || historyLoading"
                                 @click="prevPage"
                             >
                                 上一页
                             </button>
                             <button
-                                class="h-9 px-3 rounded-lg border border-gray-200 dark:border-dark-border text-sm hover:bg-gray-50 dark:hover:bg-dark-bg disabled:opacity-40 disabled:cursor-not-allowed"
+                                class="h-8 rounded-lg border border-line px-3 text-sm text-ink-soft transition-colors hover:border-ink-faint hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
                                 :disabled="!canNext || historyLoading"
                                 @click="nextPage"
                             >
@@ -376,6 +406,6 @@ const successRatePct = computed(() =>
                     </div>
                 </section>
             </template>
-        </div>
+        </main>
     </div>
 </template>

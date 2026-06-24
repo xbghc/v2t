@@ -13,7 +13,7 @@ interface Props {
 withDefaults(defineProps<Props>(), {
     isVisible: true,
     isLoading: false,
-    loadingText: '加载中...'
+    loadingText: '加载中...',
 })
 </script>
 
@@ -21,45 +21,34 @@ withDefaults(defineProps<Props>(), {
     <section
         v-show="isVisible"
         :id="`section-${id}`"
-        class="scroll-mt-20 bg-white dark:bg-dark-card rounded-xl border border-gray-200 dark:border-dark-border overflow-hidden transition-all duration-300"
+        class="scroll-mt-20 overflow-hidden rounded-2xl border border-line bg-surface transition-all duration-300"
     >
         <!-- 标题栏 -->
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-bg">
+        <div class="flex items-center justify-between border-b border-line bg-surface-sunk px-6 py-4">
             <div class="flex items-center gap-3">
-                <component
-                    :is="icon"
-                    class="text-xl text-primary"
-                />
-                <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+                <component :is="icon" class="text-xl text-signal" />
+                <h3 class="font-title text-base font-semibold text-ink">
                     {{ title }}
                 </h3>
-                <!-- 加载指示器 -->
                 <span
                     v-if="isLoading"
-                    class="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"
+                    class="h-4 w-4 animate-spin rounded-full border-2 border-signal border-t-transparent"
                 />
             </div>
-
-            <!-- 操作按钮插槽 -->
             <div class="flex items-center gap-2">
                 <slot name="actions" />
             </div>
         </div>
 
         <!-- 内容区域 -->
-        <div class="p-6 text-gray-800 dark:text-gray-200">
-            <!-- 加载状态 -->
+        <div class="p-6 text-ink">
             <div
                 v-if="isLoading"
-                class="flex flex-col items-center justify-center py-12 gap-4"
+                class="flex flex-col items-center justify-center gap-4 py-12"
             >
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <p class="text-gray-500 dark:text-gray-400 text-sm">
-                    {{ loadingText }}
-                </p>
+                <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-signal" />
+                <p class="text-sm text-ink-soft">{{ loadingText }}</p>
             </div>
-
-            <!-- 实际内容 -->
             <div v-else>
                 <slot />
             </div>
