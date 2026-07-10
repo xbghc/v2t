@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/task'
@@ -9,6 +9,7 @@ import BilibiliPagesPicker from '@/components/BilibiliPagesPicker.vue'
 import type { BilibiliPage, BilibiliVideoMetaResponse } from '@/types'
 import IconLink from '~icons/material-symbols/link'
 import IconChevronRight from '~icons/material-symbols/chevron-right'
+import IconHelp from '~icons/material-symbols/help-outline'
 
 const router = useRouter()
 const taskStore = useTaskStore()
@@ -16,6 +17,7 @@ const auth = useAuthStore()
 const { url, generateOptions, isDownloadOnly, prompts, promptsLoaded } = storeToRefs(taskStore)
 
 const showAdvanced = ref(false)
+const showInfo = ref(false)
 const bilibiliMeta = ref<BilibiliVideoMetaResponse | null>(null)
 
 const genOpts = [
@@ -30,11 +32,19 @@ const promptCards = [
     { title: '播客脚本', sys: 'podcastSystem', user: 'podcastUser', reset: () => taskStore.resetPodcastPrompts() },
 ] as const
 
-// 「解调」可视化：左侧密集波形（45min 视频信号）→ 右侧稀疏要点（提炼结果）
+// 「解调」可视化：左侧密集波形（原始视频信号）→ 右侧稀疏要点（提炼结果）
 const waveform = [
     28, 42, 35, 58, 48, 70, 52, 86, 64, 54, 74, 40, 92, 60,
     46, 68, 50, 80, 44, 66, 36, 56, 48, 72, 42, 62, 34, 50,
 ]
+
+// 波形从左到右由「噪声」逐渐解调成「信号」，无缝过渡到右侧三个要点点
+function barClass(i: number): string {
+    const r = i / (waveform.length - 1)
+    if (r > 0.88) return 'bg-signal'
+    if (r > 0.74) return 'bg-signal/55'
+    return 'bg-ink/20'
+}
 
 function parseBilibiliPageIndex(rawUrl: string): number {
     try {
@@ -96,8 +106,17 @@ const handleLogout = async () => {
     router.push({ name: 'login' })
 }
 
+function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') showInfo.value = false
+}
+
 onMounted(() => {
     taskStore.loadPrompts()
+    window.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
@@ -115,51 +134,68 @@ onMounted(() => {
                 </span>
                 <span class="font-title text-lg font-bold tracking-tight">Gist</span>
             </div>
-            <button
-                class="text-sm text-ink-soft transition-colors hover:text-ink"
-                @click="handleLogout"
-            >
-                退出登录
-            </button>
+            <div class="flex items-center gap-1">
+                <!-- 「这是什么」问号图标 + popover -->
+                <div class="relative z-40">
+                    <button
+                        class="flex h-8 w-8 items-center justify-center rounded-lg text-ink-soft transition-colors hover:bg-surface hover:text-ink"
+                        :class="{ 'bg-surface text-ink': showInfo }"
+                        aria-label="Gist 是什么"
+                        :aria-expanded="showInfo"
+                        @click="showInfo = !showInfo"
+                    >
+                        <IconHelp class="text-xl" />
+                    </button>
+                    <transition
+                        enter-active-class="transition duration-150 ease-out"
+                        enter-from-class="-translate-y-1 opacity-0"
+                        enter-to-class="translate-y-0 opacity-100"
+                        leave-active-class="transition duration-100 ease-in"
+                        leave-from-class="opacity-100"
+                        leave-to-class="opacity-0"
+                    >
+                        <div
+                            v-if="showInfo"
+                            class="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-line bg-surface p-4 text-left shadow-[0_12px_40px_-12px_rgba(20,23,28,0.28)]"
+                        >
+                            <p class="text-[13px] leading-relaxed text-ink-soft">
+                                贴上视频链接，Gist 把整段内容提炼成几条要点，帮你在点开之前判断它值不值得看。
+                            </p>
+                        </div>
+                    </transition>
+                </div>
+                <button
+                    class="text-sm text-ink-soft transition-colors hover:text-ink"
+                    @click="handleLogout"
+                >
+                    退出登录
+                </button>
+            </div>
         </header>
+
+        <!-- popover 背景遮罩：点击空白处关闭 -->
+        <div v-if="showInfo" class="fixed inset-0 z-30" @click="showInfo = false"></div>
 
         <!-- Hero -->
         <section class="flex flex-1 flex-col items-center justify-center px-5 py-10">
             <div class="w-full max-w-xl">
-                <!-- eyebrow -->
-                <div class="mb-6 flex items-center justify-center gap-3">
-                    <span class="h-px w-6 bg-signal/60"></span>
-                    <span class="font-mono text-[11px] font-medium uppercase tracking-[0.25em] text-signal">AI 视频预审</span>
-                    <span class="h-px w-6 bg-signal/60"></span>
-                </div>
-
-                <!-- 主标题：时间套利 -->
-                <h1 class="text-center font-title text-[2.6rem] font-bold leading-[1.06] tracking-tight sm:text-[3.4rem]">
-                    <span class="font-mono text-signal">45</span> 分钟的视频，<br>
-                    <span class="font-mono text-signal">2</span> 分钟看完要点
-                </h1>
-                <p class="mx-auto mt-4 max-w-md text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
-                    粘贴链接，Gist 帮你下载、转录、提炼成要点。值不值得看，你说了算。
-                </p>
-
-                <!-- signature：解调可视化（波形 → 要点） -->
-                <div class="mx-auto mt-8 flex max-w-md items-center gap-3">
-                    <span class="font-mono text-[11px] text-ink-faint">45:00</span>
-                    <div class="flex h-8 flex-1 items-center gap-[2px]">
+                <!-- signature：解调可视化（噪声波形 → 提纯信号），纯视觉、无文字 -->
+                <div class="flex items-center justify-center gap-5">
+                    <div class="flex h-11 items-center gap-[3px]">
                         <span
                             v-for="(h, i) in waveform"
                             :key="i"
-                            class="w-[3px] shrink-0 rounded-full bg-ink/20"
+                            class="w-[3px] shrink-0 rounded-full transition-colors"
+                            :class="barClass(i)"
                             :style="{ height: h + '%' }"
                         ></span>
                     </div>
-                    <span class="text-ink-faint">→</span>
-                    <div class="flex items-center gap-1.5">
-                        <span class="h-2 w-2 rounded-full bg-signal"></span>
-                        <span class="h-2 w-2 rounded-full bg-signal"></span>
-                        <span class="h-2 w-2 rounded-full bg-signal"></span>
+                    <span class="text-xl text-ink-faint">→</span>
+                    <div class="flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 rounded-full bg-signal"></span>
+                        <span class="h-2.5 w-2.5 rounded-full bg-signal"></span>
+                        <span class="h-2.5 w-2.5 rounded-full bg-signal"></span>
                     </div>
-                    <span class="font-mono text-[11px] text-signal">2:00</span>
                 </div>
 
                 <!-- 输入框 -->
