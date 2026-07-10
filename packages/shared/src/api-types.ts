@@ -1,5 +1,5 @@
 /**
- * 后端通信 schema —— 适配层（web 与 mobile 共享）
+ * 后端通信 schema —— 前端适配层
  *
  * 绝大多数类型从 ./generated.ts 重导出，该文件由后端 OpenAPI 自动生成
  * （仓库根 `make generate`），请勿手改。本文件只做两件事：

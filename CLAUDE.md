@@ -24,15 +24,14 @@ v2t/
 │   ├── tests/
 │   └── pyproject.toml
 ├── apps/
-│   ├── web/                    # Vue 前端（@v2t/web）
-│   │   ├── src/
-│   │   │   ├── router/        # Vue Router 路由
-│   │   │   ├── stores/        # Pinia 状态管理
-│   │   │   ├── machines/      # 状态机
-│   │   │   └── pages/         # 页面组件
-│   │   ├── package.json
-│   │   └── vite.config.ts
-│   └── mobile/                 # React Native（@v2t/mobile，规划中）
+│   └── web/                    # Vue 前端（@v2t/web）
+│       ├── src/
+│       │   ├── router/        # Vue Router 路由
+│       │   ├── stores/        # Pinia 状态管理
+│       │   ├── machines/      # 状态机
+│       │   └── pages/         # 页面组件
+│       ├── package.json
+│       └── vite.config.ts
 ├── packages/
 │   └── shared/                 # 共享 TS 类型（@v2t/shared）
 │       └── src/api-types.ts   # 后端通信 schema
@@ -96,7 +95,7 @@ pnpm --filter @v2t/web type-check         # 类型检查
 
 - 后端响应 schema（`WorkspaceResponse`、`WorkspaceStatus` 等）统一定义在 `packages/shared/src/api-types.ts`
 - 通过 `import { ... } from '@v2t/shared'` 使用
-- 新增后端接口时改这里，web 和 mobile 会自动同步
+- 新增后端接口时改这里，web 会自动同步
 
 ## 架构概览
 

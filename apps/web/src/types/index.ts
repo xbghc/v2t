@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 
-// 后端通信 schema 从 @v2t/shared 统一导出（web 与 mobile 共享）
+// 后端通信 schema 从 @v2t/shared 统一导出
 export * from '@v2t/shared'
 
 /**
